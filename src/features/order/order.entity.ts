@@ -33,7 +33,7 @@ export type OrderStatus =
  * **`canceled` stays reachable from `confirmed`**, unlike `grn`, where confirming already moved
  * stock and cancelling has to post reversals. Confirming an order moves nothing: stock leaves on
  * the shipping transition, not here (see `order-shipping.entity.ts`, `warehouse_id`), so an order
- * cancelled before it ships has nothing to undo. A shipment already under way is `order_shipping`'s
+ * canceled before it ships has nothing to undo. A shipment already under way is `order_shipping`'s
  * own status machine to resolve.
  *
  * **`completed` is terminal.** An order that goes wrong afterwards is corrected on the money, not

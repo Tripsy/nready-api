@@ -55,6 +55,14 @@ const categoryData: readonly CategorySeedRow[] = [
 		parent_slug: null,
 		description: 'Tools, lighting and household equipment.',
 	},
+	{
+		slug: 'apparel',
+		label: 'Apparel',
+		type: CategoryTypeEnum.PRODUCT,
+		parent_slug: null,
+		description:
+			"Clothing, sized and colored - the catalog's two-axis family.",
+	},
 	/*
 	 * Food sits beside the hardware tree because it is the catalog's only family where a
 	 * product is configured at order time - crust, toppings, a drink chosen inside a menu -
@@ -138,6 +146,17 @@ const categoryData: readonly CategorySeedRow[] = [
 		type: CategoryTypeEnum.PRODUCT,
 		parent_slug: 'home-and-garden',
 		description: 'Indoor and outdoor lighting fixtures.',
+	},
+	/*
+	 * The only category whose products vary on two axes at once, which is what makes it the
+	 * place a size x color variant grid is demonstrated.
+	 */
+	{
+		slug: 't-shirts',
+		label: 'T-Shirts',
+		type: CategoryTypeEnum.PRODUCT,
+		parent_slug: 'apparel',
+		description: 'Printed and plain tees, in every size and color.',
 	},
 	{
 		slug: 'pizza',

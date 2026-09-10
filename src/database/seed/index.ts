@@ -21,6 +21,7 @@ import { reviewSeed } from '@/features/review/database/review.seed';
 import { termSeed } from '@/features/term/database/term.seed';
 import { userSeed } from '@/features/user/database/user.seed';
 import { vendorSeed } from '@/features/vendor/database/vendor.seed';
+import { warehouseSeed } from '@/features/warehouse/database/warehouse.seed';
 
 /**
  * Declaration order is the foreign-key order and is not arbitrary: `place → address`, and
@@ -38,6 +39,8 @@ const seeds: readonly SeedDefinition[] = [
 	addressSeed,
 	brandSeed,
 	carrierSeed,
+	// Reads address ids
+	warehouseSeed,
 	categorySeed,
 	clientSeed,
 	vendorSeed,

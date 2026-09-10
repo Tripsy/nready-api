@@ -68,6 +68,14 @@ const TERMS: readonly TermRow[] = [
 	{ type: TermTypeEnum.ATTRIBUTE_VALUE, en: 'Small', ro: 'Mic' },
 	{ type: TermTypeEnum.ATTRIBUTE_VALUE, en: 'Medium', ro: 'Mediu' },
 	{ type: TermTypeEnum.ATTRIBUTE_VALUE, en: 'Large', ro: 'Mare' },
+	/*
+	 * Garment sizes stand beside the generic small / medium / large: an apparel category asks
+	 * the same *Size* label, but the value it admits is the letter printed on the label.
+	 */
+	{ type: TermTypeEnum.ATTRIBUTE_VALUE, en: 'S' },
+	{ type: TermTypeEnum.ATTRIBUTE_VALUE, en: 'M' },
+	{ type: TermTypeEnum.ATTRIBUTE_VALUE, en: 'L' },
+	{ type: TermTypeEnum.ATTRIBUTE_VALUE, en: 'XL' },
 	{ type: TermTypeEnum.ATTRIBUTE_VALUE, en: 'Cotton', ro: 'Bumbac' },
 	{ type: TermTypeEnum.ATTRIBUTE_VALUE, en: 'Leather', ro: 'Piele' },
 	{ type: TermTypeEnum.ATTRIBUTE_VALUE, en: '500 ml' },
@@ -104,6 +112,13 @@ const TERMS: readonly TermRow[] = [
 	{ type: TermTypeEnum.TEXT, en: 'Pepperoni', ro: 'Salam picant' },
 	{ type: TermTypeEnum.TEXT, en: 'Mushrooms', ro: 'Ciuperci' },
 	{ type: TermTypeEnum.TEXT, en: 'Olives', ro: 'Masline' },
+	{ type: TermTypeEnum.TEXT, en: 'Finishing touches', ro: 'Optiuni finale' },
+	{ type: TermTypeEnum.TEXT, en: 'Gift wrap', ro: 'Ambalaj cadou' },
+	{
+		type: TermTypeEnum.TEXT,
+		en: 'Custom back print',
+		ro: 'Imprimeu personalizat pe spate',
+	},
 	{
 		type: TermTypeEnum.TEXT,
 		en: 'Extended warranty',

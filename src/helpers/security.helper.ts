@@ -76,6 +76,12 @@ export async function comparePassword(
  * Every entry is compared even after a match, so the time taken does not reveal which key
  * of the list matched.
  *
+ * The `codeql` marker below silences `js/insufficient-password-hash`, which reads any digest of
+ * a caller-supplied credential as password storage. Nothing is stored here - the digests live
+ * for the length of one comparison - and the secret is a machine-generated deployment key, so a
+ * KDF's work factor would only add cost to a check that runs on every request, ahead of the body
+ * parsers.
+ *
  * @param {string} provided - The value supplied by the caller
  * @param {readonly string[]} accepted - The keys this deployment honors
  * @returns {boolean} - True when one of them matches
@@ -86,7 +92,7 @@ export function matchesAnySecret(
 ): boolean {
 	const providedDigest = crypto
 		.createHash('sha256')
-		.update(provided)
+		.update(provided) // codeql[js/insufficient-password-hash]
 		.digest();
 
 	return accepted.reduce((matched, candidate) => {

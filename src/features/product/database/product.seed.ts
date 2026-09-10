@@ -158,6 +158,39 @@ const DEFINITIONS: readonly {
 		max_value: 5000,
 		sort_order: 10,
 	},
+	/*
+	 * Apparel is the two-axis case: both *Size* and *Color* are asked per variant, since a
+	 * t-shirt is sold as one size in one color and each of those combinations runs out on its
+	 * own. Contrast the same *Color* label on `electronics`, asked once for the product -
+	 * the scope is what decides which of the two tables a value lands in.
+	 */
+	{
+		category_slug: 't-shirts',
+		label: 'size',
+		scope: ProductCategoryAttributeScopeEnum.VARIANT,
+		value_type: ProductCategoryAttributeValueTypeEnum.TERM,
+		type: ProductCategoryAttributeTypeEnum.RADIO,
+		options: ['s', 'm', 'l', 'xl'],
+		sort_order: 10,
+	},
+	{
+		category_slug: 't-shirts',
+		label: 'color',
+		scope: ProductCategoryAttributeScopeEnum.VARIANT,
+		value_type: ProductCategoryAttributeValueTypeEnum.TERM,
+		type: ProductCategoryAttributeTypeEnum.SELECT,
+		options: ['white', 'black', 'green', 'red', 'blue'],
+		sort_order: 20,
+	},
+	{
+		category_slug: 't-shirts',
+		label: 'material',
+		scope: ProductCategoryAttributeScopeEnum.PRODUCT,
+		value_type: ProductCategoryAttributeValueTypeEnum.TERM,
+		type: ProductCategoryAttributeTypeEnum.SELECT,
+		options: ['cotton'],
+		sort_order: 30,
+	},
 	{
 		category_slug: 'pizza',
 		label: 'diameter',
@@ -278,6 +311,65 @@ type CuratedProduct = {
 	bundle?: CuratedBundle;
 	variants: readonly CuratedVariant[];
 };
+
+/**
+ * The two axes an apparel variant is cut on, and the code each contributes to the SKU.
+ *
+ * The order here is the order of the grid, so the first pair - `S / white` - is the variant
+ * written at position 0 and therefore the default one.
+ *
+ * Only the largest size carries a surcharge: more fabric, same garment. Sizes below it are
+ * priced alike, which is what a size axis usually looks like and keeps the arithmetic on the
+ * listing readable.
+ */
+const TSHIRT_SIZES: readonly {
+	term: string;
+	code: string;
+	surcharge: Money;
+}[] = [
+	{ term: 's', code: 'S', surcharge: { RON: 0, EUR: 0 } },
+	{ term: 'm', code: 'M', surcharge: { RON: 0, EUR: 0 } },
+	{ term: 'l', code: 'L', surcharge: { RON: 0, EUR: 0 } },
+	{ term: 'xl', code: 'XL', surcharge: { RON: 10, EUR: 2 } },
+];
+
+const TSHIRT_COLORS: readonly { term: string; code: string }[] = [
+	{ term: 'white', code: 'WHT' },
+	{ term: 'black', code: 'BLK' },
+	{ term: 'green', code: 'GRN' },
+	{ term: 'red', code: 'RED' },
+	{ term: 'blue', code: 'BLU' },
+];
+
+const TSHIRT_BASE: Money = { RON: 89, EUR: 18 };
+
+/**
+ * The full size x color grid - 20 sellable units, each with its own SKU and its own stock.
+ *
+ * Written out by the loop rather than by hand because the grid is the point: twenty literals
+ * would say the same thing while hiding the one rule that governs them, and a missing pair in
+ * such a list is invisible. This is the only curated entry generated this way; the rest are
+ * literals, because nothing about them repeats.
+ */
+const tshirtVariants = (): readonly CuratedVariant[] =>
+	TSHIRT_SIZES.flatMap((size) =>
+		TSHIRT_COLORS.map((color) => ({
+			sku: `TSH-SOL-${size.code}-${color.code}`,
+			prices: {
+				RON: TSHIRT_BASE.RON + size.surcharge.RON,
+				EUR: TSHIRT_BASE.EUR + size.surcharge.EUR,
+			},
+			reference: {
+				RON: TSHIRT_BASE.RON + size.surcharge.RON + 20,
+				EUR: TSHIRT_BASE.EUR + size.surcharge.EUR + 4,
+			},
+			attributes: [
+				{ label: 'size', term: size.term },
+				{ label: 'color', term: color.term },
+			],
+			track_stock: true,
+		})),
+	);
 
 /**
  * The catalog worth reading.
@@ -436,6 +528,42 @@ const CURATED: readonly CuratedProduct[] = [
 				track_stock: true,
 			},
 		],
+	},
+	/*
+	 * The variant grid. Size and color are both variant axes - each pair has its own SKU, its
+	 * own price row and its own count on the shelf - while gift wrap and the back print are
+	 * asked at order time and change nothing that runs out.
+	 */
+	{
+		slug: 'solstice-cotton-t-shirt',
+		label: 'Solstice Cotton T-Shirt',
+		description:
+			'A heavyweight combed-cotton tee with a ribbed collar, in four sizes and five colors.',
+		ro: {
+			slug: 'tricou-din-bumbac-solstice',
+			label: 'Tricou din bumbac Solstice',
+			description:
+				'Tricou din bumbac pieptanat, cu guler reiat, in patru marimi si cinci culori.',
+		},
+		category_slug: 't-shirts',
+		tags: ['Summer', 'New Arrival'],
+		workflow: ProductWorkflowEnum.READY,
+		attributes: [{ label: 'material', term: 'cotton' }],
+		option_groups: [
+			{
+				prompt: 'Finishing touches',
+				min_select: 0,
+				max_select: null,
+				options: [
+					{ label: 'Gift wrap', delta: { RON: 15, EUR: 3 } },
+					{
+						label: 'Custom back print',
+						delta: { RON: 40, EUR: 8 },
+					},
+				],
+			},
+		],
+		variants: tshirtVariants(),
 	},
 	{
 		slug: 'margherita-pizza',
