@@ -19,7 +19,7 @@ paths:
 **See also:** `product.md` - the `product` / `product_variant` / `product_option` split. The rules
 here describe how to write an entity; that file describes which of those three tables a piece of
 information belongs to, which the columns alone do not reveal. Read it before adding a column to any
-`product*` entity or to `order_product`.
+`product*` entity or to `order_line`.
 
 ## 1. Core Philosophy
 

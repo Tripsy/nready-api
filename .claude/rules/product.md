@@ -1,7 +1,7 @@
 ---
 paths:
   - "src/features/product/**"
-  - "src/features/order/order-product.entity.ts"
+  - "src/features/order/order-line.entity.ts"
   - "src/features/order-shipping/**"
 ---
 
@@ -53,7 +53,7 @@ something that is not a product.
   against `sale_price` but the dashboard's own warning. `product_variant.cost_price` is a single
   base-currency figure - the books are kept in one currency, a foreign purchase is converted once
   at the receiving day's rate and frozen, and margin settles in base on both sides via
-  `order_product.exchange_rate`. Converting cost at read time would make last month's margin move
+  `order_line.exchange_rate`. Converting cost at read time would make last month's margin move
   with today's rate.
 - **Cost never influences the sale price.** `min_price` is the only floor a discount is clamped to
   (`discount-resolution.service.ts` → `resolveFloor`); `cost_price` feeds reporting and nothing
@@ -168,7 +168,7 @@ Each links to `product_variant_attribute`: label term *Size*, values *25 cm* / *
 ## 5. How an order line resolves
 
 Customer orders **one 32 cm Margherita, stuffed crust, extra mozzarella and prosciutto**. The
-`order_product` row holds:
+`order_line` row holds:
 
 - `variant_id` → `PIZZA-MARG-32`, `product_id` → `PIZZA-MARG`
 - `quantity` = 1
@@ -208,7 +208,7 @@ product, and the line has to keep saying what it was.
 | Information | Home | Why not options |
 |---|---|---|
 | Allergens, calories, ingredients | `product_attribute` | Descriptive, not selectable, no price effect |
-| "No onions, extra napkins" | `order_product.notes` | Free text, unbounded, no price effect |
+| "No onions, extra napkins" | `order_line.notes` | Free text, unbounded, no price effect |
 | Happy hour, coupons, loyalty | `discount` + `product_discount` | Conditional on customer or date, applied *on top of* the resolved price |
 | Size, colour, capacity | `product_variant_attribute` | Own SKU, own price, own stock |
 
@@ -349,9 +349,9 @@ A **fixed kit** (gift set) is the same table with more rows.
 
 ### 8.3. Why the order line explodes
 
-A bundle's 55.00 covers food at 11% and a drink at 21%. A single `order_product.vat_rate` cannot
+A bundle's 55.00 covers food at 11% and a drink at 21%. A single `order_line.vat_rate` cannot
 represent that, and getting it wrong is a tax error rather than a display bug. So a bundle becomes
-**one header line plus one child line per component**, linked by `order_product.parent_id`:
+**one header line plus one child line per component**, linked by `order_line.parent_id`:
 
 - **Header** - the bundle variant, quantity, `price = 0`.
 - **Children** - each component's apportioned share of the bundle price, at its *own* `vat_rate`.
@@ -450,11 +450,11 @@ These need the service layer. None of them can be pushed into a constraint.
 7. **No nested bundles**, and no bundle that contains one of its own variants.
 8. **Bundle apportionment reconciles to the charged total**, remainder to the largest share (§8.3).
 9. **Shipment allocation must not exceed what was ordered.** The sum of
-   `order_shipping_product.quantity` across every shipment of one `order_product` has to stay
+   `order_shipping_line.quantity` across every shipment of one `order_line` has to stay
    within that line's `quantity`. Nothing stops shipping 15 of an ordered 14 - and with stock
    tracking on, the surplus consumes real lots.
-10. **A bundle is shipped by its children, never its header.** `order_shipping_product` points at
-   `order_product`, and for a bundle the header line carries no variant worth picking - the
+10. **A bundle is shipped by its children, never its header.** `order_shipping_line` points at
+   `order_line`, and for a bundle the header line carries no variant worth picking - the
    component lines hold the real, stockable variants. Allocating the header would leave the stock
    movement with nothing to consume.
 
@@ -467,7 +467,7 @@ These need the service layer. None of them can be pushed into a constraint.
     value already recorded under it, or the stored base figures describe a quantity the form no
     longer shows.
 
-`order_product.variant_id` and `product_id` used to belong on this list. They no longer do: the
+`order_line.variant_id` and `product_id` used to belong on this list. They no longer do: the
 `variant` relation is a composite foreign key over both columns against
 `product_variant (id, product_id)`, so the database rejects the mismatch.
 
@@ -483,8 +483,8 @@ full design is in the README TODO. Two things settled here because they touch th
 
 - **Stock leaves on shipment, not on order confirmation.** `order_shipping` carries the
   `warehouse_id`, so one order can ship from two warehouses, and a lot cannot be picked before the
-  warehouse holding it is known. The movement's source is an `order_shipping_product`;
-  `order_product` carries no lot reference at all, because one line routinely spans several lots.
+  warehouse holding it is known. The movement's source is an `order_shipping_line`;
+  `order_line` carries no lot reference at all, because one line routinely spans several lots.
 - **A damaged return must not go back into its lot.** A customer return normally re-enters the lot
   it was picked from, at the cost it left with - the movement records its source, so the lot is
   known. Damaged goods are the exception: returning them to stock means they get picked and sold
@@ -677,7 +677,7 @@ which the backend would refuse.
 
 - **Named menus** - `product_availability` says *when*, but nothing groups windows into a
   customer-facing "lunch menu", and two products sharing a schedule repeat it row for row.
-- **Order-level currency and totals.** `order_product` and `order_shipping` each carry their own
+- **Order-level currency and totals.** `order_line` and `order_shipping` each carry their own
   `currency` and `exchange_rate`, and nothing asserts they agree - an order with a RON line and a
   EUR line is representable today. `invoice` has `base_currency`; `order` has nothing equivalent.
   A stored order total is worth considering at the same time, since the bundle work made a line

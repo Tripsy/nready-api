@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { Configuration } from '@/config/settings.config';
-import { CartStatusEnum } from '@/features/cart/cart.entity';
 import { hasAtLeastOneValue } from '@/helpers/objects.helper';
 import { CURRENCY_CODE_CHARS, normalizeCurrency } from '@/helpers/shop.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
@@ -14,7 +13,6 @@ export const OrderByEnum = {
 	CREATED_AT: 'created_at',
 	UPDATED_AT: 'updated_at',
 	EXPIRES_AT: 'expires_at',
-	STATUS: 'status',
 } as const;
 
 /**
@@ -25,6 +23,9 @@ export const OrderByEnum = {
 export const CART_QUANTITY_MAX = 999;
 export const CART_OPTIONS_MAX = 20;
 export const CART_NOTES_MAX = 500;
+
+/** The most components one bundle line may cite. A bound on the payload, not a catalog rule. */
+export const CART_COMPONENTS_MAX = 50;
 
 /** What may be changed on an existing line. Options are absent - see `CartService.updateItem`. */
 export const paramsItemUpdateList: string[] = ['quantity', 'notes'];
@@ -38,6 +39,8 @@ const validatorMessages = [
 	'invalid_currency',
 	'invalid_client_id',
 	'invalid_token',
+	'invalid_components',
+	'invalid_component_units',
 ] as const;
 
 export class CartValidator extends BaseValidator<typeof validatorMessages> {
@@ -120,15 +123,60 @@ export class CartValidator extends BaseValidator<typeof validatorMessages> {
 	}
 
 	/**
+	 * What the shopper chose inside a bundle: the `product_bundle_item` rows they ticked or picked,
+	 * and for a tick box how many units of it.
+	 *
+	 * **Only the decisions.** Components that always come with the kit are not listed - they are
+	 * catalog data, resolved when the line is written, and naming one is refused by
+	 * `ProductBundleSelectionService`. `units` is absent on a group candidate, whose own `quantity`
+	 * says what the bundle contains once it is the one chosen.
+	 *
+	 * Whether the set answers the bundle - every group answered exactly once, every tick box
+	 * within its ceiling - is not a shape question and is settled by that service.
+	 */
+	private componentsSchema() {
+		const message = this.getMessage('invalid_components');
+
+		return z
+			.array(
+				z.object({
+					item_id: this.validateId(message),
+					units: this.validateNumber(
+						{
+							invalid: this.getMessage('invalid_component_units'),
+							only_positive: this.getMessage(
+								'invalid_component_units',
+							),
+							no_decimals: this.getMessage(
+								'invalid_component_units',
+							),
+						},
+						{
+							required: false,
+							onlyPositive: true,
+							allowDecimals: 2,
+						},
+					).optional(),
+				}),
+			)
+			.max(CART_COMPONENTS_MAX, { message: message })
+			.optional();
+	}
+
+	/**
 	 * `product_id` travels with `variant_id` because the row holds both, under a composite foreign
 	 * key. Sending a mismatched pair is rejected by the database rather than here - the point of
 	 * that key is that no service has to remember the check.
+	 *
+	 * `components` is accepted only on a bundle, and a bundle with choices to make is refused
+	 * without them - both answered by `CartService.addItem` against the live composition.
 	 */
 	readonly addItem = z.object({
 		variant_id: this.validateId(this.getMessage('invalid_variant_id')),
 		product_id: this.validateId(this.getMessage('invalid_product_id')),
 		quantity: this.quantitySchema(),
 		options: this.optionsSchema(),
+		components: this.componentsSchema(),
 		notes: this.notesSchema(),
 	});
 
@@ -154,9 +202,9 @@ export class CartValidator extends BaseValidator<typeof validatorMessages> {
 	});
 
 	/**
-	 * Checkout. The client is named by the caller rather than derived: `client` is a billing
-	 * counterparty with no link to a user account, so who to invoice is a decision the checkout
-	 * flow makes and this endpoint records.
+	 * Checkout. The client is named by the caller because an account may hold several - billing
+	 * privately or through a company is the shopper's choice. Whether the named client is one the
+	 * caller holds is not a shape question and is answered by `CartService.toOrder`.
 	 */
 	readonly checkout = z.object({
 		client_id: this.validateId(this.getMessage('invalid_client_id')),
@@ -171,13 +219,12 @@ export class CartValidator extends BaseValidator<typeof validatorMessages> {
 		id: this.validateId(this.getMessage('invalid_id', { name: 'id' })),
 	});
 
-	readonly restore = z.object({
-		id: this.validateId(this.getMessage('invalid_id', { name: 'id' })),
-	});
-
 	/**
 	 * The dashboard listing. `token` is not a filter: it is the guest's credential, and a
 	 * back-office search by it would turn a support screen into a way to open any cart.
+	 *
+	 * There is no status and no `is_deleted` either - a cart is a live basket or it does not
+	 * exist, so every row here is one somebody is carrying right now.
 	 */
 	readonly find = this.validateFind({
 		orderByEnum: OrderByEnum,
@@ -190,32 +237,11 @@ export class CartValidator extends BaseValidator<typeof validatorMessages> {
 		defaultPage: 1,
 
 		filterSchema: {
-			status: this.validateEnum(
-				CartStatusEnum,
-				this.getMessage('invalid_status'),
-				{ required: false },
-			),
 			user_id: this.validateId(
 				this.getMessage('invalid_id', { name: 'user_id' }),
 				{ required: false },
 			),
-			// "Which cart did this order come from" - the audit direction, and the reason the
-			// column exists.
-			order_id: this.validateId(
-				this.getMessage('invalid_id', { name: 'order_id' }),
-				{ required: false },
-			),
 			currency: this.currencySchema(false),
-			/*
-			 * Whether soft-deleted carts join the listing, and it defaults to off - a removed
-			 * cart is off every page, and the dashboard asks for it only when looking for
-			 * something to restore. A caller whose role does not allow deleted rows gets none
-			 * whatever this says.
-			 */
-			is_deleted: this.validateBoolean(
-				this.getMessage('invalid_boolean'),
-				{ required: false },
-			).default(false),
 		},
 	});
 }

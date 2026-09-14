@@ -6,10 +6,8 @@ NReady is a Node.js / Express 5 / TypeScript boilerplate for building complex, s
 It is fully modular and feature-based, with an emphasis on SOLID/DRY/KISS, strong validation,
 policy-based authorization and layered logging. PostgreSQL is the database, via TypeORM.
 
-It is the **base project**: other backends (e.g. `../star-api`) are started from it, so core and
-shared code here is expected to be ported outward. Changes to `src/shared/**`, `src/config/**`,
-`src/middleware/**`, `src/providers/**`, `src/helpers/**` or a core feature should be flagged as
-"needs porting" when relevant.
+It is the **base project**: other backends are started from it, then evolve independently - see
+"Context - sibling projects".
 
 ## Role
 
@@ -34,7 +32,7 @@ context yet. Read the relevant one *before* proposing an approach in that area, 
 | `database.md` | Entities, repository/query layer, transactions, migrations, seeds | `*.entity.ts`, `*.repository.ts`, `*.service.ts`, `*.subscriber.ts`, migrations |
 | `error-handling.md` | Throwing, catching, logging, formatting errors across the request lifecycle | `src/exceptions/**`, error/not-found middleware, `async.handler.ts` |
 | `feature-installer.md` | Feature packaging, the `manifest.json` contract, `depends_on`/`required_by` version ranges, install/remove/upgrade checks | `cli/feature.ts`, `cli/helpers/version.ts`, `**/manifest.json` |
-| `product.md` | The product / variant / option / bundle split, availability windows, order-line arithmetic | `src/features/product/**`, `order-product.entity.ts`, `order-shipping/**` |
+| `product.md` | The product / variant / option / bundle split, availability windows, order-line arithmetic | `src/features/product/**`, `order-line.entity.ts`, `order-shipping/**` |
 | `validation.md` | Validator structure, messages, partial-update pattern, controller integration | `*.validator.ts`, feature/shared `locales/*.json` |
 | `testing.md` | Test layout, reusable builders, mocking conventions | `src/tests/**`, `features/**/tests/*.test.ts`, `*.mock.ts` |
 | `typescript.md` | TS conventions, linting rules, code organization | every `.ts` |
@@ -300,12 +298,9 @@ stack.
 
 ## Context - sibling projects
 
-`../star-api` (available via `permissions.additionalDirectories`) is a fleet/drivers management API
-started from this boilerplate. It has diverged in its feature set (cmr, work-session, vehicle,
-driver-session, stats) but shares `src/shared/**`, `src/config/**`, `src/middleware/**`,
-`src/providers/**`, `src/helpers/**` and the core features. When core or shared code changes here,
-say so and offer to port it; when reviewing a fix that originated there, check it applies before
-copying it over.
+`../star-api` was started from this boilerplate and has since gone its own way. **The two are not
+kept in sync**: do not flag changes as "needs porting" or offer to port anything to or from it
+unless explicitly asked.
 
 `../nready-ui` (available via `permissions.additionalDirectories`) is this project's frontend - a
 Next.js 16 app.
@@ -333,8 +328,7 @@ The two connect purely over HTTP, so the API contract is the whole coupling:
 - Do not run biome after applying changes. Run it only on demand or before git commit commands.
 - **Never commit onto `main`.** GitHub refuses a direct push to it, so a commit made there has to be
   moved off before it can go anywhere. If the current branch is `main` when a commit is requested,
-  create the branch first (`git switch -c <type>/<short-name>`) and commit on that. The same applies
-  in `../star-api`.
+  create the branch first (`git switch -c <type>/<short-name>`) and commit on that.
 - When subagents are available and appropriate for the task, prefer delegating noisy operations
   (full test suites, broad searches, large log files, build output) to one so the verbose output
   stays contained there and only a summary comes back - this is a preference for keeping the main

@@ -1,5 +1,6 @@
 import {
 	isDirectRun,
+	loadIds,
 	randomInt,
 	randomPick,
 	type SeedDefinition,
@@ -12,6 +13,7 @@ import ClientEntity, {
 	ClientStatusEnum,
 	ClientTypeEnum,
 } from '@/features/client/client.entity';
+import UserEntity from '@/features/user/user.entity';
 
 const TARGET = 25;
 
@@ -64,8 +66,10 @@ const BANK_NAMES = [
 
 export const clientSeed: SeedDefinition = {
 	name: 'client',
-	run: async ({ manager, random }): Promise<SeedSummary> =>
-		topUp({
+	run: async ({ manager, random }): Promise<SeedSummary> => {
+		const userIds = await loadIds(manager, UserEntity);
+
+		return topUp({
 			entity: 'client',
 			target: TARGET,
 			manager,
@@ -96,6 +100,17 @@ export const clientSeed: SeedDefinition = {
 
 				const iban = `RO${randomInt(random, 10, 99)}BTRL${label}${randomInt(random, 100000, 999999)}`;
 
+				/*
+				 * Two in three clients belong to an account, cycling through the users so some
+				 * accounts hold more than one - a person billing privately and through a company.
+				 * The rest stay unlinked, the shape of a client typed in from the back office.
+				 * Only rows inserted by this run get the link; `topUp` never rewrites a stored one.
+				 */
+				const userId =
+					userIds.length > 0 && index % 3 !== 2
+						? userIds[index % userIds.length]
+						: null;
+
 				if (isPerson) {
 					const personName = `${randomPick(random, FIRST_NAMES)} ${randomPick(random, LAST_NAMES)}`;
 
@@ -114,6 +129,7 @@ export const clientSeed: SeedDefinition = {
 						contact_name: personName,
 						contact_email: contactEmail,
 						contact_phone: `+407${randomInt(random, 10000000, 99999999)}`,
+						user_id: userId,
 						notes: null,
 					};
 				}
@@ -135,10 +151,12 @@ export const clientSeed: SeedDefinition = {
 					contact_name: `${randomPick(random, FIRST_NAMES)} ${randomPick(random, LAST_NAMES)}`,
 					contact_email: contactEmail,
 					contact_phone: `+407${randomInt(random, 10000000, 99999999)}`,
+					user_id: userId,
 					notes: null,
 				};
 			},
-		}),
+		});
+	},
 };
 
 if (isDirectRun(import.meta.url)) {

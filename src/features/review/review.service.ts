@@ -1,5 +1,9 @@
 import { lang } from '@/config/message.setup';
 import { BadRequestError, CustomError } from '@/exceptions';
+import {
+	type OrderService,
+	orderService,
+} from '@/features/order/order.service';
 import { productService } from '@/features/product/product.service';
 import { ProductVariantRepository } from '@/features/product/product-variant.repository';
 import ReviewEntity, {
@@ -72,7 +76,10 @@ type ReviewDistributionRow = {
 };
 
 export class ReviewService {
-	constructor(private repository: ReturnType<typeof getReviewRepository>) {}
+	constructor(
+		private repository: ReturnType<typeof getReviewRepository>,
+		private orderService: OrderService,
+	) {}
 
 	/**
 	 * The scores that were given, summed and divided by how many were given - never by how many
@@ -143,18 +150,27 @@ export class ReviewService {
 		await this.assertTarget(data.product_id, data.variant_id);
 
 		/*
-		 * TODO set `order_id` and derive `is_verified` here from the buyer's own order lines,
-		 * instead of leaving the badge to a moderator's checkbox and the order unnamed. Blocked on
-		 * the buyer identity rather than on effort: a review names a `user`, an order names a
-		 * `client` (`order.client_id`), and neither table carries a `user_id` to join them by. See
-		 * TODO.md item 8 for the two ways out and what each costs.
+		 * The purchase is settled here, in the same write, rather than by a later sweep - the flag
+		 * is part of what the row says about itself. `order_id` is derived, never taken from the
+		 * payload: a caller naming an order would be claiming somebody else's purchase.
+		 *
+		 * Finding no purchase leaves `is_verified` false, not refused: a phone order or a
+		 * marketplace sale is invisible to this lookup, and the dashboard checkbox is what covers
+		 * it. Nothing here ever clears a flag a moderator set.
 		 */
+		const orderId = await this.orderService.findLatestPurchase(
+			userId,
+			data.product_id,
+			data.variant_id,
+		);
 
 		try {
 			const entry = await this.repository.save(
 				this.repository.create({
 					product_id: data.product_id,
 					variant_id: data.variant_id ?? null,
+					order_id: orderId,
+					is_verified: orderId !== null,
 					rating: data.rating,
 					rating_avg: ReviewService.computeRatingAvg(data.rating),
 					content: data.content,
@@ -619,4 +635,7 @@ export class ReviewService {
 	}
 }
 
-export const reviewService = new ReviewService(getReviewRepository());
+export const reviewService = new ReviewService(
+	getReviewRepository(),
+	orderService,
+);

@@ -54,7 +54,7 @@ const ENTITY_TABLE_NAME = 'exchange_rate';
  *
  * **`base_currency` is the deployment's own currency, not the priced one.** That matches how the
  * word is already used across this codebase - `invoice.base_currency`, and the "rate to the base
- * currency" that `grn`, `cash_flow` and `order_product` freeze onto a document - and it is
+ * currency" that `grn`, `cash_flow` and `order_line` freeze onto a document - and it is
  * deliberately the opposite of the FX-market reading of a pair, where the EUR/RON quote calls EUR
  * the base. Rows are stored in the direction a document converts in: multiply an amount in
  * `currency` by `rate` to reach the books.
@@ -104,7 +104,7 @@ export default class ExchangeRateEntity {
 	@UpdateDateColumn({ type: 'timestamp', nullable: true })
 	updated_at!: Date | null;
 
-	// `char(3)` rather than an enum, matching `product_price` / `grn` / `order_product`: an import
+	// `char(3)` rather than an enum, matching `product_price` / `grn` / `order_line`: an import
 	// carries whatever ISO 4217 codes its provider publishes, and a new currency must not need a
 	// migration before it can be stored
 	@Column('char', {

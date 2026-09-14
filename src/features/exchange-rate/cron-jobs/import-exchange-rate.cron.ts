@@ -40,13 +40,7 @@ export const IMPORTED_CURRENCIES: readonly string[] = ['EUR', 'USD'];
  *
  * Direction follows the bulletin, and it is the one the consumers need: BNR quotes everything
  * *into* RON (`OrigCurrency`), so a row reads "one EUR is worth 5.2575 RON" - `currency` the
- * foreign one, `base_currency` what the bulletin quotes into. That is what an entry priced in EUR
- * multiplies by to reach a RON-denominated set of books, the same direction `cash_flow`, `grn`
- * and `order_product` freeze onto a document.
- *
- * `base_currency` comes from the bulletin rather than from `app.currency`: the feed says what it
- * quotes into, and a deployment configured for something else would otherwise store rows claiming
- * a conversion BNR never published.
+ * foreign one, `base_currency` what the bulletin quotes into.
  *
  * The run is idempotent: re-reading a bulletin already stored changes nothing, and a rate a
  * person corrected by hand is never written over.

@@ -12,10 +12,6 @@ import { BaseController } from '@/shared/abstracts/controller.abstract';
  * No `create` and no `update`. A cart is the shopper's own working state, and a back office able
  * to edit one would be changing the record of what they chose - the order is where the business
  * takes over, and that is a separate document.
- *
- * Nothing here is cached, unlike the read paths on most features: the response includes the priced
- * lines, which are resolved against the catalog at read time and go stale the moment a price or a
- * discount window moves. `CartEntity.HAS_CACHE` is false for the same reason.
  */
 class CartController extends BaseController {
 	constructor(
@@ -31,10 +27,7 @@ class CartController extends BaseController {
 
 		const data = this.validate(this.validator.read, req.params, res);
 
-		const entry = await this.cartService.getEntryData({
-			id: data.id,
-			withDeleted: this.policy.allowDeleted(res.locals.auth),
-		});
+		const entry = await this.cartService.getEntryData({ id: data.id });
 
 		res.locals.output.data(entry);
 
@@ -46,10 +39,7 @@ class CartController extends BaseController {
 
 		const data = this.validate(this.validator.find, req.query, res);
 
-		const [entries, total] = await this.cartService.findByFilter(
-			data,
-			this.policy.allowDeleted(res.locals.auth),
-		);
+		const [entries, total] = await this.cartService.findByFilter(data);
 
 		res.locals.output.data({
 			entries: entries,
@@ -72,18 +62,6 @@ class CartController extends BaseController {
 		await this.cartService.delete(data.id);
 
 		res.locals.output.message(lang('cart.success.delete'));
-
-		res.json(res.locals.output);
-	});
-
-	public restore = asyncHandler(async (req: Request, res: Response) => {
-		this.policy.canRestore(res.locals.auth);
-
-		const data = this.validate(this.validator.restore, req.params, res);
-
-		await this.cartService.restore(data.id);
-
-		res.locals.output.message(lang('cart.success.restore'));
 
 		res.json(res.locals.output);
 	});

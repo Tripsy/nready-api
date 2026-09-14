@@ -51,7 +51,7 @@ export const docs: Record<
 		withAuthErrors: true,
 		withErrors: [404],
 		request: {
-			notes: 'Soft-deleted reviews are returned only to a caller whose role allows it. `order_id` is the order the purchase was made on and is null on every review today - nothing writes it yet',
+			notes: 'Soft-deleted reviews are returned only to a caller whose role allows it. `order_id` is the order the purchase was made on: derived when the review is written, from the most recent completed order billed to one of the author\'s clients that carries a line for the product (and the variant, when named). Null when no such order exists',
 			params: {
 				id: {
 					type: 'number',

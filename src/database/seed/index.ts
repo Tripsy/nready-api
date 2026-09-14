@@ -14,6 +14,7 @@ import { complaintSeed } from '@/features/complaint/database/complaint.seed';
 import { discountSeed } from '@/features/discount/database/discount.seed';
 import { documentSeriesSeed } from '@/features/document-series/database/document-series.seed';
 import { imageSeed } from '@/features/image/database/image.seed';
+import { orderSeed } from '@/features/order/database/order.seed';
 import { placeSeed } from '@/features/place/database/place.seed';
 import { productSeed } from '@/features/product/database/product.seed';
 import { ratingSeed } from '@/features/rating/database/rating.seed';
@@ -42,9 +43,10 @@ const seeds: readonly SeedDefinition[] = [
 	// Reads address ids
 	warehouseSeed,
 	categorySeed,
-	clientSeed,
 	vendorSeed,
 	userSeed,
+	// Reads user ids - most clients are linked to the account that holds them
+	clientSeed,
 	cashFlowSeed,
 	termSeed,
 	// Reads category, term, brand ids; seeds the category attribute definitions
@@ -59,8 +61,6 @@ const seeds: readonly SeedDefinition[] = [
 	imageSeed,
 	// Reads article and user ids
 	ratingSeed,
-	// Reads product, product variant and user ids
-	reviewSeed,
 	// Reads article and user ids; replies are inserted after the roots they hang from
 	commentSeed,
 	// Reads article, comment and user ids
@@ -68,6 +68,12 @@ const seeds: readonly SeedDefinition[] = [
 	// Reads product variant, product option and user ids; the lines cite variants, so it has to
 	// follow `productSeed`
 	cartSeed,
+	// Reads client ids and priced product variants; allocates its numbers from the `ORD` series,
+	// so it has to follow `documentSeriesSeed` as well
+	orderSeed,
+	// Reads product, product variant and user ids, and the completed orders a verified review
+	// names - so it has to follow `orderSeed`
+	reviewSeed,
 ];
 
 function resolveSeeds(

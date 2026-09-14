@@ -1,4 +1,4 @@
-import { ClientStatusEnum } from '@/features/client/client.entity';
+import { OrderStatusEnum } from '@/features/order/order.entity';
 import {
 	validateParamsWhenEnum,
 	validateParamsWhenId,
@@ -6,13 +6,13 @@ import {
 import type { FeatureRoutesModule } from '@/shared/types/routes.type';
 
 export default async () => {
-	const { clientController } = await import(
-		'@/features/client/client.controller'
+	const { orderController } = await import(
+		'@/features/order/order.controller'
 	);
 
-	const config: FeatureRoutesModule<typeof clientController> = {
-		basePath: '/clients',
-		controller: clientController,
+	const config: FeatureRoutesModule<typeof orderController> = {
+		basePath: '/orders',
+		controller: orderController,
 		routes: {
 			create: {
 				path: '',
@@ -42,18 +42,13 @@ export default async () => {
 				path: '',
 				method: 'get',
 			},
-			updateAccount: {
-				path: '/:id/account',
-				method: 'patch',
-				handlers: [validateParamsWhenId('id')],
-			},
 			statusUpdate: {
 				path: '/:id/status/:status',
 				method: 'patch',
 				handlers: [
 					validateParamsWhenId('id'),
 					validateParamsWhenEnum({
-						status: Object.values(ClientStatusEnum),
+						status: Object.values(OrderStatusEnum),
 					}),
 				],
 			},

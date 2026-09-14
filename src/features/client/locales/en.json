@@ -10,7 +10,8 @@
 		"invalid_company_cui": "Invalid company CUI",
 		"invalid_company_reg_com": "Invalid company registration number",
 		"invalid_person_name": "Invalid person name",
-		"invalid_person_identification_number": "Invalid person CNP"
+		"invalid_person_identification_number": "Invalid person CNP",
+		"invalid_user_id": "Invalid account"
 	},
 	"error": {
 		"not_found": "Client not found",
@@ -21,7 +22,9 @@
 		"update": "Client updated successfully",
 		"delete": "Client deleted successfully",
 		"restore": "Client restored successfully",
-		"status_update": "Client status updated successfully"
+		"status_update": "Client status updated successfully",
+		"link_account": "Client linked to account successfully",
+		"unlink_account": "Client unlinked from account successfully"
 	},
 	"history": {
 		"created": "Client #{{entity_id}} created by user #{{auth_id}}",

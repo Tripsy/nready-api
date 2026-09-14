@@ -12,7 +12,7 @@ const ENTITY_TABLE_NAME = 'product_price';
  * **Sales side only.** Every figure here is what a customer is quoted in one market, set rather
  * than converted. What the goods cost is a single base-currency number on
  * `product_variant.cost_price`, because the books are kept in one currency and margin is settled
- * there - `order_product.exchange_rate` brings the sale back to base to meet it.
+ * there - `order_line.exchange_rate` brings the sale back to base to meet it.
  */
 @Entity({
 	name: ENTITY_TABLE_NAME,

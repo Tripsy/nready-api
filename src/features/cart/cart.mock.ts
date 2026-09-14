@@ -1,5 +1,4 @@
 import type CartEntity from '@/features/cart/cart.entity';
-import { CartStatusEnum } from '@/features/cart/cart.entity';
 import { OrderByEnum } from '@/features/cart/cart.validator';
 import type { CartPricing } from '@/features/cart/cart-pricing.service';
 import { createFutureDate, createPastDate } from '@/helpers/date.helper';
@@ -11,13 +10,10 @@ export function getCartEntityMock(): CartEntity {
 		id: 9,
 		token: '3f1c8b5e-2a44-4f8d-9c11-8d2e6b0a7c34',
 		user_id: 7,
-		status: CartStatusEnum.ACTIVE,
-		order_id: null,
 		currency: 'RON',
 		expires_at: createFutureDate(30 * 24 * 60 * 60),
 		created_at: createPastDate(86400),
 		updated_at: createPastDate(3600),
-		deleted_at: null,
 	} as unknown as CartEntity;
 }
 
@@ -32,7 +28,6 @@ export function getCartEntityMock(): CartEntity {
 export function getCartPricingMock(): CartPricing {
 	return {
 		currency: 'RON',
-		exchange_rate: 1,
 		lines: [
 			{
 				id: 31,
@@ -107,7 +102,7 @@ export const cartInputPayloads = {
 		order_by: OrderByEnum.UPDATED_AT,
 		direction: OrderDirectionEnum.DESC,
 		filter: {
-			status: CartStatusEnum.ACTIVE,
+			user_id: 7,
 		},
 	},
 };

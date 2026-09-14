@@ -1,8 +1,8 @@
 {
 	"name": "client",
-	"version": "1.0.0",
+	"version": "1.1.0",
 	"relativePath": "/client",
 	"entities": ["client"],
-	"depends_on": [],
-	"required_by": ["order", "invoice", "cash-flow", "stats"]
+	"depends_on": ["user"],
+	"required_by": ["order", "invoice", "cash-flow", "stats", "cart"]
 }

@@ -16,6 +16,7 @@
 		"rating",
 		"review",
 		"stats",
-		"cart"
+		"cart",
+		"client"
 	]
 }

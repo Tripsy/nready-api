@@ -36,6 +36,7 @@ export function getProductEntityMock(): ProductEntity {
 		variants: [],
 		option_groups: [],
 		availabilities: [],
+		bundle_groups: [],
 		bundle_items: [],
 		tags: [],
 		categories: [],
