@@ -9,6 +9,7 @@ import { cartSeed } from '@/features/cart/database/cart.seed';
 import { cashFlowSeed } from '@/features/cash-flow/database/cash-flow.seed';
 import { categorySeed } from '@/features/category/database/category.seed';
 import { clientSeed } from '@/features/client/database/client.seed';
+import { clientAddressSeed } from '@/features/client-address/database/client-address.seed';
 import { commentSeed } from '@/features/comment/database/comment.seed';
 import { complaintSeed } from '@/features/complaint/database/complaint.seed';
 import { discountSeed } from '@/features/discount/database/discount.seed';
@@ -47,6 +48,8 @@ const seeds: readonly SeedDefinition[] = [
 	userSeed,
 	// Reads user ids - most clients are linked to the account that holds them
 	clientSeed,
+	// Reads client and address ids - a client address points at an existing address
+	clientAddressSeed,
 	cashFlowSeed,
 	termSeed,
 	// Reads category, term, brand ids; seeds the category attribute definitions

@@ -1,0 +1,8 @@
+{
+	"name": "client-address",
+	"version": "1.0.0",
+	"relativePath": "/client-address",
+	"entities": ["client-address"],
+	"depends_on": ["client", "address"],
+	"required_by": []
+}
