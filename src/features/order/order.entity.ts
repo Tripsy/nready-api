@@ -7,13 +7,13 @@ import {
 	OneToMany,
 } from 'typeorm';
 import type ClientEntity from '@/features/client/client.entity';
-import type OrderProductEntity from '@/features/order/order-product.entity';
+import type { ClientType } from '@/features/client/client.entity';
+import type OrderLineEntity from '@/features/order/order-line.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import type { StatusTransitions } from '@/shared/types/common.type';
 
 export const OrderStatusEnum = {
-	DRAFT: 'draft', // Being composed in the back office; the customer has not committed
-	PENDING: 'pending', // Placed and awaiting acceptance
+	PENDING: 'pending', // Placed - by a checkout or from the back office - and awaiting acceptance; lines may still be adjusted
 	CONFIRMED: 'confirmed', // Accepted by the business; shipping may begin
 	COMPLETED: 'completed', // Fulfilled and settled
 	CANCELLED: 'canceled', // Withdrawn before fulfilment
@@ -25,10 +25,11 @@ export type OrderStatus =
 /**
  * Allowed status transition configuration.
  *
- * The line runs one way: an order is composed, placed, accepted, fulfilled. Nothing returns to
- * `draft` - that state is defined by the customer not having committed yet, and a cart checkout
- * enters at `pending` precisely because they have. Reopening a placed order as a draft would let
- * its contents be edited out from under what they agreed to.
+ * The line runs one way: an order is placed, accepted, fulfilled. Every order enters at `pending`,
+ * whether a checkout raised it or an operator typed it up, and `pending` is the one state whose
+ * lines may still be adjusted - quantities corrected, a missing item added - before the business
+ * accepts it. Nothing returns to `pending`: confirming is what fixes the contents, and reopening a
+ * confirmed order would let them be edited out from under that acceptance.
  *
  * **`canceled` stays reachable from `confirmed`**, unlike `grn`, where confirming already moved
  * stock and cancelling has to post reversals. Confirming an order moves nothing: stock leaves on
@@ -42,10 +43,6 @@ export type OrderStatus =
  * claiming they never were.
  */
 export const STATUS_TRANSITIONS: StatusTransitions<OrderStatus> = {
-	[OrderStatusEnum.DRAFT]: [
-		OrderStatusEnum.PENDING,
-		OrderStatusEnum.CANCELLED,
-	],
 	[OrderStatusEnum.PENDING]: [
 		OrderStatusEnum.CONFIRMED,
 		OrderStatusEnum.CANCELLED,
@@ -68,6 +65,51 @@ export const OrderTypeEnum = {
 } as const;
 
 export type OrderType = (typeof OrderTypeEnum)[keyof typeof OrderTypeEnum];
+
+/**
+ * How the client said they will pay. Recorded as a choice only - nothing here charges, captures or
+ * reconciles a payment; `cash_flow` and `invoice` carry the money once it moves.
+ */
+export const OrderPaymentMethodEnum = {
+	CASH_ON_DELIVERY: 'cash_on_delivery',
+	CARD: 'card',
+	BANK_TRANSFER: 'bank_transfer',
+} as const;
+
+export type OrderPaymentMethod =
+	(typeof OrderPaymentMethodEnum)[keyof typeof OrderPaymentMethodEnum];
+
+/**
+ * Who the order is billed to and where, frozen when it was placed. The field names follow
+ * `invoice.billing_details` so an invoice raised from the order copies it across - declared here
+ * rather than imported because `invoice` depends on `order`, not the other way round.
+ *
+ * The place names are text, not ids: a city renamed or removed later must not change a document
+ * already issued against it.
+ */
+export type OrderBillingDetails = {
+	client_type: ClientType;
+
+	person_name?: string | null;
+
+	company_name?: string | null;
+	company_cui?: string | null;
+	company_reg_com?: string | null;
+
+	iban?: string | null;
+	bank_name?: string | null;
+
+	address_country: string | null;
+	address_region: string | null;
+	address_city: string | null;
+	/** Street and number, followed by the flat, floor or apartment when the client address states one. */
+	details: string | null;
+	postal_code: string | null;
+
+	contact_name?: string | null;
+	contact_email?: string | null;
+	contact_phone?: string | null;
+};
 
 const ENTITY_TABLE_NAME = 'order';
 
@@ -106,7 +148,7 @@ export default class OrderEntity extends EntityAbstract {
 	@Column({
 		type: 'enum',
 		enum: OrderStatusEnum,
-		default: OrderStatusEnum.DRAFT,
+		default: OrderStatusEnum.PENDING,
 		nullable: false,
 	})
 	@Index('IDX_order_status')
@@ -119,6 +161,24 @@ export default class OrderEntity extends EntityAbstract {
 		nullable: false,
 	})
 	type!: OrderType;
+
+	/**
+	 * Null on a back-office document: an operator composing an order by phone agrees goods and
+	 * prices, and how it is settled is not always known at that point. A checkout always states one.
+	 */
+	@Column({
+		type: 'enum',
+		enum: OrderPaymentMethodEnum,
+		nullable: true,
+	})
+	payment_method!: OrderPaymentMethod | null;
+
+	@Column('jsonb', {
+		nullable: true,
+		comment:
+			'Snapshot of the billing client and address at the moment the order was placed',
+	})
+	billing_details!: OrderBillingDetails | null;
 
 	@Column({ type: 'timestamp', nullable: false })
 	@Index('IDX_order_issued_at')
@@ -135,8 +195,8 @@ export default class OrderEntity extends EntityAbstract {
 	client!: ClientEntity;
 
 	@OneToMany(
-		'OrderProductEntity',
-		(orderProduct: OrderProductEntity) => orderProduct.order,
+		'OrderLineEntity',
+		(orderLine: OrderLineEntity) => orderLine.order,
 	)
-	order_products?: OrderProductEntity[];
+	order_lines?: OrderLineEntity[];
 }

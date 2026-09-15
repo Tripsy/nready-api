@@ -39,7 +39,6 @@ export const ProductOptionRepository = dataSource
 
 			const existing = await repository.find({
 				where: { product_id },
-				withDeleted: true,
 			});
 
 			const wanted = new Map(
@@ -48,11 +47,13 @@ export const ProductOptionRepository = dataSource
 			const known = new Map(existing.map((row) => [row.label_id, row]));
 
 			const toRemove = existing.filter(
-				(row) => row.deleted_at === null && !wanted.has(row.label_id),
+				(row) => !wanted.has(row.label_id),
 			);
 
+			// Hard: no level of this aggregate carries `deleted_at`. A group dropped from the form
+			// takes its answers and their deltas with it through the `option_group_id` cascade
 			if (toRemove.length > 0) {
-				await repository.softRemove(toRemove);
+				await repository.remove(toRemove);
 			}
 
 			for (const [label_id, group] of wanted) {
@@ -60,7 +61,6 @@ export const ProductOptionRepository = dataSource
 					known.get(label_id) ??
 					repository.create({ product_id, label_id });
 
-				row.deleted_at = null;
 				row.min_select = group.min_select ?? 0;
 				row.max_select = group.max_select ?? null;
 				row.position = group.position ?? 0;
@@ -80,7 +80,6 @@ export const ProductOptionRepository = dataSource
 
 			const existing = await repository.find({
 				where: { option_group_id },
-				withDeleted: true,
 			});
 
 			const wanted = new Map(
@@ -89,7 +88,7 @@ export const ProductOptionRepository = dataSource
 			const known = new Map(existing.map((row) => [row.label_id, row]));
 
 			const toRemove = existing.filter(
-				(row) => row.deleted_at === null && !wanted.has(row.label_id),
+				(row) => !wanted.has(row.label_id),
 			);
 
 			// Cleared ahead of the writes for the same reason as the default variant: the
@@ -102,8 +101,15 @@ export const ProductOptionRepository = dataSource
 				);
 			}
 
+			/*
+			 * Hard: no level of this aggregate carries `deleted_at`. An answer dropped from the
+			 * form is gone, so re-adding the same label mints a new row with a new id - and the
+			 * ids already written into `order_line.options[].option_id` and `cart_item.options`
+			 * carry no foreign key, so they point at nothing from here on. The delta rows follow
+			 * through the `product_option_price.option_id` cascade.
+			 */
 			if (toRemove.length > 0) {
-				await repository.softRemove(toRemove);
+				await repository.remove(toRemove);
 			}
 
 			for (const [label_id, option] of wanted) {
@@ -111,7 +117,6 @@ export const ProductOptionRepository = dataSource
 					known.get(label_id) ??
 					repository.create({ option_group_id, label_id });
 
-				row.deleted_at = null;
 				row.position = option.position ?? 0;
 				row.is_default = option.is_default ?? false;
 
@@ -131,7 +136,6 @@ export const ProductOptionRepository = dataSource
 
 			const existing = await repository.find({
 				where: { option_id },
-				withDeleted: true,
 			});
 
 			const wanted = new Map(
@@ -140,11 +144,13 @@ export const ProductOptionRepository = dataSource
 			const known = new Map(existing.map((row) => [row.currency, row]));
 
 			const toRemove = existing.filter(
-				(row) => row.deleted_at === null && !wanted.has(row.currency),
+				(row) => !wanted.has(row.currency),
 			);
 
+			// Hard, like the two levels above: a currency dropped from the form is gone, and the
+			// unconditional unique index means there is no soft-deleted row left to collide with
 			if (toRemove.length > 0) {
-				await repository.softRemove(toRemove);
+				await repository.remove(toRemove);
 			}
 
 			const toSave: ProductOptionPriceEntity[] = [];
@@ -154,7 +160,6 @@ export const ProductOptionRepository = dataSource
 					known.get(currency) ??
 					repository.create({ option_id, currency });
 
-				row.deleted_at = null;
 				row.price_delta = price.price_delta;
 
 				toSave.push(row);

@@ -31,7 +31,16 @@ const validatorMessages = [
 	'invalid_address_id',
 	'invalid_type',
 	'invalid_details',
+	'invalid_city_id',
+	'invalid_street',
+	'invalid_postal_code',
+	'address_conflict',
 ] as const;
+
+/** Bounds on what a shopper may type; the columns are `text`, so these are payload limits. */
+const STREET_MAX_CHARS = 255;
+const DETAILS_MAX_CHARS = 255;
+const NOTES_MAX_CHARS = 500;
 
 export class ClientAddressValidator extends BaseValidator<
 	typeof validatorMessages
@@ -127,4 +136,99 @@ export class ClientAddressValidator extends BaseValidator<
 			),
 		},
 	});
+
+	/** The storefront list: one client's addresses, narrowed by type. Ownership is the controller's. */
+	readonly publicFind = z.object({
+		client_id: this.validateId(
+			this.getMessage('invalid_client_id', { name: 'client_id' }),
+		),
+		type: this.validateEnum(
+			ClientAddressTypeEnum,
+			this.getMessage('invalid_type'),
+			{ required: false },
+		),
+	});
+
+	/**
+	 * A shopper filing an address under one of their clients - the storefront twin of the
+	 * dashboard's "Add client address". Either branch, never both:
+	 *
+	 * - **`address_id`**: an address picked from `GET /public/addresses`, linked as the dashboard
+	 *   links one. The row may already be filed against other clients.
+	 * - **`city_id` + `street`** (+ `postal_code`): the search found nothing, so a new `address`
+	 *   row is written and linked in one step - what the dashboard does in a second window.
+	 *
+	 * `street` is `address.details`; `details` stays the client address's own flat/floor note, so
+	 * the two layers keep the names the dashboard already reads them by.
+	 *
+	 * There is no public update: a filed address is added or removed, never rewritten - editing
+	 * the linked row would move every other client pointing at it.
+	 */
+	readonly publicCreate = z
+		.object({
+			client_id: this.validateId(
+				this.getMessage('invalid_client_id', { name: 'client_id' }),
+			),
+			type: this.validateEnum(
+				ClientAddressTypeEnum,
+				this.getMessage('invalid_type'),
+			),
+			address_id: this.validateId(
+				this.getMessage('invalid_address_id', { name: 'address_id' }),
+				{ required: false },
+			),
+			city_id: this.validateId(this.getMessage('invalid_city_id'), {
+				required: false,
+			}),
+			street: this.validateString(this.getMessage('invalid_street'), {
+				required: false,
+				maxChars: STREET_MAX_CHARS,
+			}),
+			postal_code: this.validatePostalCode(
+				this.getMessage('invalid_postal_code'),
+				{ required: false },
+			),
+			details: this.validateString(this.getMessage('invalid_details'), {
+				required: false,
+				maxChars: DETAILS_MAX_CHARS,
+			}),
+			notes: this.validateString(this.getMessage('invalid_notes'), {
+				required: false,
+				maxChars: NOTES_MAX_CHARS,
+			}),
+		})
+		.superRefine((data, ctx) => {
+			const hasNewAddress =
+				data.city_id !== undefined ||
+				!!data.street ||
+				!!data.postal_code;
+
+			if (data.address_id) {
+				if (hasNewAddress) {
+					ctx.addIssue({
+						path: ['address_id'],
+						message: this.getMessage('address_conflict'),
+						code: 'custom',
+					});
+				}
+
+				return;
+			}
+
+			if (!data.city_id) {
+				ctx.addIssue({
+					path: ['city_id'],
+					message: this.getMessage('invalid_city_id'),
+					code: 'custom',
+				});
+			}
+
+			if (!data.street) {
+				ctx.addIssue({
+					path: ['street'],
+					message: this.getMessage('invalid_street'),
+					code: 'custom',
+				});
+			}
+		});
 }

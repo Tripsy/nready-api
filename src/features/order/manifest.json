@@ -1,6 +1,6 @@
 {
 	"name": "order",
-	"version": "1.6.0",
+	"version": "1.7.0",
 	"relativePath": "/order",
 	"entities": ["order", "order-line"],
 	"depends_on": [

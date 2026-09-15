@@ -123,6 +123,44 @@ export class AddressService {
 			.firstOrFail();
 	}
 
+	/**
+	 * @description Used in `find` method from the public controller - the storefront address picker
+	 *
+	 * Searches the whole table, as the dashboard's "Add client address" does, so a shopper can
+	 * link an address somebody already filed. That is a product decision with a known cost: any
+	 * signed-in account can read street addresses filed by other clients through this search.
+	 *
+	 * The city's parent comes along so the picker can name the county beside the city.
+	 */
+	public findForPicker(
+		term: string,
+		language: string,
+		limit: number,
+	): Promise<AddressEntity[]> {
+		return this.repository
+			.createQuery()
+			.joinAndSelect('address.city', 'address_city', 'LEFT')
+			.joinAndSelect(
+				'address_city.contents',
+				'address_city_content',
+				'LEFT',
+				'address_city_content.language = :language',
+				{ language: language },
+			)
+			.joinAndSelect('address_city.parent', 'address_city_parent', 'LEFT')
+			.joinAndSelect(
+				'address_city_parent.contents',
+				'address_city_parent_content',
+				'LEFT',
+				'address_city_parent_content.language = :language',
+				{ language: language },
+			)
+			.filterByTerm(term)
+			.orderBy('id', 'DESC')
+			.pagination(1, limit)
+			.all();
+	}
+
 	public findByFilter(
 		data: ValidatorOutput<AddressValidator, 'find'>,
 		withDeleted: boolean,

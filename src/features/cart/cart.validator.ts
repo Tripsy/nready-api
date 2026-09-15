@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { Configuration } from '@/config/settings.config';
+import { OrderPaymentMethodEnum } from '@/features/order/order.entity';
+import { ShippingMethodEnum } from '@/features/order-shipping/order-shipping.entity';
 import { hasAtLeastOneValue } from '@/helpers/objects.helper';
 import { CURRENCY_CODE_CHARS, normalizeCurrency } from '@/helpers/shop.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
@@ -41,6 +43,10 @@ const validatorMessages = [
 	'invalid_token',
 	'invalid_components',
 	'invalid_component_units',
+	'invalid_delivery_method',
+	'invalid_billing_address_id',
+	'invalid_delivery_address_id',
+	'invalid_payment_method',
 ] as const;
 
 export class CartValidator extends BaseValidator<typeof validatorMessages> {
@@ -205,11 +211,44 @@ export class CartValidator extends BaseValidator<typeof validatorMessages> {
 	 * Checkout. The client is named by the caller because an account may hold several - billing
 	 * privately or through a company is the shopper's choice. Whether the named client is one the
 	 * caller holds is not a shape question and is answered by `CartService.toOrder`.
+	 *
+	 * Both addresses are `client_address` ids filed under that client - billing always, delivery
+	 * for a courier only. A pickup is collected from the warehouse, so a delivery address sent with
+	 * one is ignored. Whether an id belongs to the client, and is of the right type, is answered
+	 * by `CartService.toOrder`.
 	 */
-	readonly checkout = z.object({
-		client_id: this.validateId(this.getMessage('invalid_client_id')),
-		notes: this.notesSchema(),
-	});
+	readonly checkout = z
+		.object({
+			client_id: this.validateId(this.getMessage('invalid_client_id')),
+			billing_address_id: this.validateId(
+				this.getMessage('invalid_billing_address_id'),
+			),
+			delivery_method: this.validateEnum(
+				ShippingMethodEnum,
+				this.getMessage('invalid_delivery_method'),
+			),
+			delivery_address_id: this.validateId(
+				this.getMessage('invalid_delivery_address_id'),
+				{ required: false },
+			),
+			payment_method: this.validateEnum(
+				OrderPaymentMethodEnum,
+				this.getMessage('invalid_payment_method'),
+			),
+			notes: this.notesSchema(),
+		})
+		.superRefine((data, ctx) => {
+			if (
+				data.delivery_method === ShippingMethodEnum.COURIER &&
+				!data.delivery_address_id
+			) {
+				ctx.addIssue({
+					path: ['delivery_address_id'],
+					message: this.getMessage('invalid_delivery_address_id'),
+					code: 'custom',
+				});
+			}
+		});
 
 	readonly read = z.object({
 		id: this.validateId(this.getMessage('invalid_id', { name: 'id' })),

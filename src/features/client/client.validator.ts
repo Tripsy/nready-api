@@ -151,57 +151,77 @@ export class ClientValidator extends BaseValidator<typeof validatorMessages> {
 		id: this.validateId(this.getMessage('invalid_id', { name: 'id' })),
 	});
 
+	private readonly companyUpdateSchema = z
+		.object({
+			client_type: z.literal(ClientTypeEnum.COMPANY),
+			company_name: this.validateString(
+				this.getMessage('invalid_company_name'),
+				{ required: false },
+			),
+			company_cui: this.validateString(
+				this.getMessage('invalid_company_cui'),
+				{ required: false },
+			),
+			company_reg_com: this.validateString(
+				this.getMessage('invalid_company_reg_com'),
+				{
+					required: false,
+				},
+			),
+			person_name: z.never().optional(),
+			person_identification_number: z.never().optional(),
+		})
+		.extend(this.baseSchema);
+
+	private readonly personUpdateSchema = z
+		.object({
+			client_type: z.literal(ClientTypeEnum.PERSON),
+			company_name: z.never().optional(),
+			company_cui: z.never().optional(),
+			company_reg_com: z.never().optional(),
+			person_name: this.validateString(
+				this.getMessage('invalid_person_name'),
+				{ required: false },
+			),
+			person_identification_number:
+				this.validatePersonalIdentificationNumber(
+					this.getMessage('invalid_person_identification_number'),
+					{
+						required: false,
+					},
+				),
+		})
+		.extend(this.baseSchema);
+
 	readonly update = z
 		.discriminatedUnion('client_type', [
-			// Company schema
-			z
-				.object({
-					client_type: z.literal(ClientTypeEnum.COMPANY),
-					company_name: this.validateString(
-						this.getMessage('invalid_company_name'),
-						{ required: false },
-					),
-					company_cui: this.validateString(
-						this.getMessage('invalid_company_cui'),
-						{ required: false },
-					),
-					company_reg_com: this.validateString(
-						this.getMessage('invalid_company_reg_com'),
-						{
-							required: false,
-						},
-					),
-					person_name: z.never().optional(),
-					person_identification_number: z.never().optional(),
-				})
-				.extend(this.baseSchema),
-
-			// Person schema
-			z
-				.object({
-					client_type: z.literal(ClientTypeEnum.PERSON),
-					company_name: z.never().optional(),
-					company_cui: z.never().optional(),
-					company_reg_com: z.never().optional(),
-					person_name: this.validateString(
-						this.getMessage('invalid_person_name'),
-						{ required: false },
-					),
-					person_identification_number:
-						this.validatePersonalIdentificationNumber(
-							this.getMessage(
-								'invalid_person_identification_number',
-							),
-							{
-								required: false,
-							},
-						),
-				})
-				.extend(this.baseSchema),
+			this.companyUpdateSchema,
+			this.personUpdateSchema,
 		])
 		.refine((data) => hasAtLeastOneValue(data, paramsUpdateCheckList), {
 			message: this.getMessage('params_at_least_one', {
 				params: paramsUpdateList.join(', '),
+			}),
+			path: ['_global'],
+		});
+
+	/**
+	 * A shopper correcting one of their own bill-to entries. `person_identification_number` is
+	 * refused for the reason `publicCreate` gives: the duplicate check would answer whether any
+	 * CNP is on file.
+	 */
+	readonly publicUpdate = z
+		.discriminatedUnion('client_type', [
+			this.companyUpdateSchema,
+			this.personUpdateSchema.extend({
+				person_identification_number: z.never().optional(),
+			}),
+		])
+		.refine((data) => hasAtLeastOneValue(data, paramsUpdateCheckList), {
+			message: this.getMessage('params_at_least_one', {
+				params: paramsUpdateList
+					.filter((param) => param !== 'person_identification_number')
+					.join(', '),
 			}),
 			path: ['_global'],
 		});

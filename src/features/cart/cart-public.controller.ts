@@ -14,10 +14,11 @@ export const CART_TOKEN_HEADER = 'x-cart-token';
  * The storefront surface. No permission is checked and no account is required - a guest filling a
  * basket is the case this feature exists for.
  *
- * Authorization is the token: `CartService.findWritable` applies the handle and `status = 'active'`
- * together, so a caller reaches exactly the cart they hold the handle for and nothing else. A
- * signed-in caller is addressed by their account instead, which `UQ_cart_user_active` makes
- * singular - a stale cookie from another device cannot then be used to write past their own cart.
+ * Authorization is the token: `CartService.findWritable` addresses a cart by the handle alone, so a
+ * caller reaches exactly the cart they hold the handle for and nothing else - and a cart that has
+ * checked out is gone, so its old handle answers the same 404 a forged one does. A signed-in
+ * caller is addressed by their account instead, which `UQ_cart_user` makes singular - a stale
+ * cookie from another device cannot then be used to write past their own cart.
  *
  * Every response carries the whole priced cart rather than just the row that changed. The totals
  * move on any write - a discount conditioned on `min_order_value` can switch on when one line is
@@ -164,8 +165,10 @@ class CartPublicController extends BaseController {
 	});
 
 	/**
-	 * Checkout. Requires an account: the order names a `client` to invoice, and choosing one on
-	 * behalf of an anonymous caller is not something this endpoint can do.
+	 * Checkout. Requires an account: the order names a `client` to invoice, and it has to be one
+	 * of the caller's own (`/public/clients`) - a shopper with none creates one there first. The
+	 * delivery choice becomes the order's first `order_shipping` row and the payment choice is
+	 * recorded on the order.
 	 *
 	 * The cart is terminal afterwards, so the response is the order rather than the basket - there
 	 * is no priced cart left to return.
@@ -179,8 +182,8 @@ class CartPublicController extends BaseController {
 
 		const order = await this.cartService.toOrder(
 			cart,
-			data.client_id,
-			data.notes ?? null,
+			data,
+			this.policy.getId(res.locals.auth) ?? 0,
 			res.locals.language,
 		);
 

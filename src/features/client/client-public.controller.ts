@@ -10,6 +10,7 @@ import {
 } from '@/features/client/client.service';
 import { ClientValidator } from '@/features/client/client.validator';
 import asyncHandler from '@/helpers/async.handler';
+import { getRouteParam } from '@/helpers/request.helper';
 import { BaseController } from '@/shared/abstracts/controller.abstract';
 
 /**
@@ -60,6 +61,36 @@ class ClientPublicController extends BaseController {
 		res.locals.output.message(lang('client.success.create'));
 
 		res.status(201).json(res.locals.output);
+	});
+
+	/**
+	 * The row is resolved before validation for the same reason the dashboard update does it:
+	 * `client_type` discriminates the schema and may be absent from the body. Resolving it through
+	 * `findOwnById` also makes that read the ownership check - somebody else's id is a 404.
+	 */
+	public update = asyncHandler(async (req: Request, res: Response) => {
+		const userId = this.resolveOwner(res);
+
+		const existingEntry = await this.clientService.findOwnById(
+			parseInt(getRouteParam(req, 'id') ?? '', 10),
+			userId,
+		);
+
+		const data = this.validate(
+			this.validator.publicUpdate,
+			{
+				client_type: req.body.client_type ?? existingEntry.client_type,
+				...req.body,
+			},
+			res,
+		);
+
+		const entry = await this.clientService.updateData(existingEntry, data);
+
+		res.locals.output.message(lang('client.success.update'));
+		res.locals.output.data(entry);
+
+		res.json(res.locals.output);
 	});
 }
 

@@ -18,6 +18,19 @@ export const ShippingStatusEnum = {
 export type ShippingStatus =
 	(typeof ShippingStatusEnum)[keyof typeof ShippingStatusEnum];
 
+/**
+ * How the goods reach the client. `self_pickup` still names a warehouse - the one the client
+ * collects from - so the shipment row is written for both and stock leaves through the same
+ * transition either way.
+ */
+export const ShippingMethodEnum = {
+	SELF_PICKUP: 'self_pickup',
+	COURIER: 'courier',
+} as const;
+
+export type ShippingMethod =
+	(typeof ShippingMethodEnum)[keyof typeof ShippingMethodEnum];
+
 const ENTITY_TABLE_NAME = 'order_shipping';
 
 @Entity({
@@ -42,12 +55,13 @@ export default class OrderShippingEntity extends EntityAbstract {
 	@Index('IDX_order_shipping_status')
 	status!: ShippingStatus;
 
-	@Column('varchar', {
-		nullable: true,
-		comment: 'eg: courier, pickup, same-day, own-fleet, etc',
+	@Column({
+		type: 'enum',
+		enum: ShippingMethodEnum,
+		nullable: false,
 	})
 	@Index('IDX_order_shipping_method')
-	method!: string | null;
+	method!: ShippingMethod;
 
 	@Column('int', { nullable: true })
 	@Index('IDX_order_shipping_carrier_id')

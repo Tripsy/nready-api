@@ -3,6 +3,7 @@ paths:
   - "src/features/product/**"
   - "src/features/order/order-line.entity.ts"
   - "src/features/order-shipping/**"
+  - "src/features/cart/**"
 ---
 
 # Product Model Protocol
@@ -394,6 +395,42 @@ largest share so the parts sum to the charged total exactly.
   variant, so there are no lots to pick from.
 - **`vat_category` on a bundle product** is unused - the components carry their own.
 
+### 8.5. Not implemented: the purchase path
+
+§8.3 describes the shape an order takes. **Nothing produces it.** The catalog half is built - the
+tables, the entities, the dashboard form, `assertBundleIsComposed`, `assertBundleGroupsAreUsable` -
+and so is the room an order leaves for the result: `order_line.parent_id`, its self-referencing
+foreign key, its partial index, and the `price >= 0` check that lets a header carry no money.
+Between the two there is nothing.
+
+- **The cart holds no composition.** `cart_item` carries `variant_id` and `product_id` and no
+  bundle column, so a bundle is one flat line naming its header variant. Cases 2 and 3 of §8.1 are
+  shopper decisions with nowhere to be recorded.
+- **Nothing checks a shopper's picks.** `CartService.addItem` validates product options through
+  `ProductOptionSelectionService`; there is no bundle analogue of that service. A group's "exactly
+  one candidate" goes unenforced at purchase time, which is what §10.3 means when it says the order
+  flow enforces it "by shape" - that shape does not exist.
+- **`UQ_cart_item_line` cannot separate two configurations.** Its key is
+  `(cart_id, variant_id, options_hash)`, so two differently-composed bundles of the same variant
+  are one row whose quantities sum.
+- **Pricing reads a bundle as a simple product.** `cart-pricing.service.ts` never looks at
+  `composition` or any `product_bundle_*` table, so the line is charged at the headline
+  `product_price` and taxed with the bundle's own `vat_category` - the column §8.4 lists as unused,
+  at the single rate §8.3 exists to avoid. No `CartLineIssueEnum` member reports a bundle whose
+  composition no longer resolves.
+- **Checkout writes one order line per cart line.** `OrderLineInput` is a flat array with no
+  parent, and `OrderService.writeLines` hardcodes `parent_id: null` in a single `save` pass, which
+  could not assign a generated header id even if the input carried the tree.
+
+So which components a customer took is recorded nowhere. The intended record is structural rather
+than a snapshot - the child rows themselves, each naming a real variant at its own rate - which is
+why `order_line` carries no bundle jsonb beside `options` and `discount`.
+
+A bundle can still be sold today: its variant is sellable, priced, in the catalog, and refused at
+no step. Seeds reach it the same way - `order.seed.ts` picks variants without filtering on
+`composition`. That is the shape §8.3 calls a tax error, so treat a bundle reaching a cart line or
+an order line as a bug to design away, not as data to build on.
+
 ## 9. Availability - two different questions
 
 Do not merge these; they answer different things and only one drives status.
@@ -672,22 +709,3 @@ that category unsavable with no field to satisfy it. The form calls `resolve` fo
 answers against the result on every change - one entry per definition, empties included so a
 required one has something to fail on, and nothing for a label the categories no longer declare,
 which the backend would refuse.
-
-## 13. Deferred, with the decision already made
-
-- **Named menus** - `product_availability` says *when*, but nothing groups windows into a
-  customer-facing "lunch menu", and two products sharing a schedule repeat it row for row.
-- **Order-level currency and totals.** `order_line` and `order_shipping` each carry their own
-  `currency` and `exchange_rate`, and nothing asserts they agree - an order with a RON line and a
-  EUR line is representable today. `invoice` has `base_currency`; `order` has nothing equivalent.
-  A stored order total is worth considering at the same time, since the bundle work made a line
-  total non-trivial (`price`, plus option deltas, plus children) and every listing recomputes it.
-- **Recipes / bill of materials** - a prepared item consumes ingredients, so depleting stock needs a
-  `product_component` layer. Ingredients would be variants with `track_stock = true` that the dish
-  consumes; the dish itself stays untracked. Only worth building once the `grn` behaviour exists.
-
-Full-text search was on this list and has since shipped: `ProductQuery.filterByTerm` runs a
-`to_tsvector` match over `product_content`, backed by the GIN index in
-`1788300000000-product-content-search.ts`, with a `lower(sku) LIKE` prefix branch over the variant
-codes beside it. Both expressions must stay character-identical to their indexes - see that
-migration and the repository's own JSDoc.

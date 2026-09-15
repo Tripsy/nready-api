@@ -1,4 +1,9 @@
 import type { DeepPartial } from 'typeorm';
+import dataSource from '@/config/data-source.config';
+import { lang } from '@/config/message.setup';
+import { Configuration } from '@/config/settings.config';
+import { BadRequestError } from '@/exceptions';
+import AddressEntity from '@/features/address/address.entity';
 import {
 	type AddressService,
 	addressService,
@@ -7,15 +12,45 @@ import {
 	type ClientService,
 	clientService,
 } from '@/features/client/client.service';
-import ClientAddressEntity from '@/features/client-address/client-address.entity';
+import ClientAddressEntity, {
+	type ClientAddressType,
+} from '@/features/client-address/client-address.entity';
 import { getClientAddressRepository } from '@/features/client-address/client-address.repository';
 import {
 	type ClientAddressValidator,
 	paramsUpdateList,
 } from '@/features/client-address/client-address.validator';
+import type PlaceEntity from '@/features/place/place.entity';
+import { type PlaceType, PlaceTypeEnum } from '@/features/place/place.entity';
 import { pickValuesFromObject } from '@/helpers/objects.helper';
 import { cleanEntityCache } from '@/shared/abstracts/service.abstract';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
+
+/** The place an address sits in, named - each level null when the chain does not reach it. */
+export type AddressPlaceNames = {
+	city: string | null;
+	region: string | null;
+	country: string | null;
+};
+
+/** A client address as the storefront lists it: the row, its street data, and the place named. */
+export type ClientAddressWithPlace = ClientAddressEntity & {
+	place: AddressPlaceNames;
+};
+
+/**
+ * An address flattened into the columns a document copies - `order.billing_details` and the
+ * `order_shipping` address fields share these names with `invoice.billing_details`.
+ */
+export type ClientAddressSnapshot = {
+	address_country: string | null;
+	address_region: string | null;
+	address_city: string | null;
+	/** Street and number, then the client address's own flat/floor note when there is one. */
+	details: string | null;
+	postal_code: string | null;
+	notes: string | null;
+};
 
 /**
  * A client address points at an existing `address`, which it neither creates, edits nor removes -
@@ -95,6 +130,204 @@ export class ClientAddressService {
 
 	public findById(id: number): Promise<ClientAddressEntity> {
 		return this.repository.createQuery().filterById(id).firstOrFail();
+	}
+
+	/**
+	 * The address with its city and up to two ancestors, each named in `language`.
+	 *
+	 * Two levels because `place.parent_id` lets a city hang off a region or straight off a
+	 * country: walking city -> parent -> grandparent reaches the country either way, and
+	 * `toPlaceNames` sorts the levels by `place_type` rather than by position.
+	 */
+	private createPlaceQuery(language: string) {
+		return this.repository
+			.createQuery()
+			.joinAndSelect('client_address.address', 'address', 'INNER')
+			.joinAndSelect('address.city', 'city', 'LEFT')
+			.joinAndSelect(
+				'city.contents',
+				'city_content',
+				'LEFT',
+				'city_content.language = :language',
+				{ language: language },
+			)
+			.joinAndSelect('city.parent', 'city_parent', 'LEFT')
+			.joinAndSelect(
+				'city_parent.contents',
+				'city_parent_content',
+				'LEFT',
+				'city_parent_content.language = :language',
+				{ language: language },
+			)
+			.joinAndSelect('city_parent.parent', 'city_grandparent', 'LEFT')
+			.joinAndSelect(
+				'city_grandparent.contents',
+				'city_grandparent_content',
+				'LEFT',
+				'city_grandparent_content.language = :language',
+				{ language: language },
+			);
+	}
+
+	private toPlaceNames(entry: ClientAddressEntity): AddressPlaceNames {
+		const city = entry.address?.city ?? null;
+
+		const chain = [city, city?.parent, city?.parent?.parent].filter(
+			(place): place is PlaceEntity => !!place,
+		);
+
+		const nameOf = (type: PlaceType): string | null =>
+			chain.find((place) => place.place_type === type)?.contents?.[0]
+				?.name ?? null;
+
+		return {
+			city: nameOf(PlaceTypeEnum.CITY),
+			region: nameOf(PlaceTypeEnum.REGION),
+			country: nameOf(PlaceTypeEnum.COUNTRY),
+		};
+	}
+
+	private withPlace(entry: ClientAddressEntity): ClientAddressWithPlace {
+		return Object.assign(entry, { place: this.toPlaceNames(entry) });
+	}
+
+	/**
+	 * @description Used in `find` method from the public controller; the caller has already proved the client is theirs
+	 *
+	 * Unpaginated, newest first: a client holds a handful of addresses.
+	 */
+	public async findOwn(
+		clientId: number,
+		type: ClientAddressType | undefined,
+		language: string,
+	): Promise<ClientAddressWithPlace[]> {
+		const entries = await this.createPlaceQuery(language)
+			.filterBy('client_address.client_id', clientId)
+			.filterBy('client_address.type', type)
+			.orderBy('id', 'DESC')
+			.all();
+
+		return entries.map((entry) => this.withPlace(entry));
+	}
+
+	/** One address in the shape `findOwn` lists it, for a write to answer with. */
+	public async getOwnEntry(
+		id: number,
+		language: string,
+	): Promise<ClientAddressWithPlace> {
+		const entry = await this.createPlaceQuery(language)
+			.filterById(id)
+			.firstOrFail();
+
+		return this.withPlace(entry);
+	}
+
+	/**
+	 * An address under a client the given account holds, in one query. Somebody else's answers
+	 * the same 404 a missing one does. A soft-deleted client excludes its addresses too - TypeORM
+	 * applies `deleted_at IS NULL` to the joined client.
+	 */
+	public findOwnById(
+		id: number,
+		userId: number,
+	): Promise<ClientAddressEntity> {
+		return this.repository
+			.createQuery()
+			.join('client_address.client', 'client', 'INNER')
+			.filterById(id)
+			.filterBy('client.user_id', userId)
+			.firstOrFail();
+	}
+
+	/**
+	 * @description Used in `create` method from the public controller
+	 *
+	 * Links a picked address as the dashboard does, or writes the typed one as a new `address` row
+	 * and files it in one transaction - so a failure filing it leaves no orphaned address behind.
+	 * The validator guarantees exactly one branch arrives; the guard below only narrows the types.
+	 */
+	public async createOwn(
+		data: ValidatorOutput<ClientAddressValidator, 'publicCreate'>,
+	): Promise<ClientAddressEntity> {
+		if (data.address_id) {
+			await this.checkAddressId(data.address_id);
+
+			return this.repository.save({
+				client_id: data.client_id,
+				address_id: data.address_id,
+				type: data.type,
+				details: data.details || null,
+				notes: data.notes || null,
+			});
+		}
+
+		const cityId = data.city_id;
+		const street = data.street;
+
+		if (!cityId || !street) {
+			throw new BadRequestError(
+				lang('client-address.validation.invalid_street'),
+			);
+		}
+
+		await this.addressService.checkCityId(cityId);
+
+		return dataSource.transaction(async (manager) => {
+			const address = await manager.save(
+				manager.create(AddressEntity, {
+					city_id: cityId,
+					details: street,
+					postal_code: data.postal_code || null,
+				}),
+			);
+
+			return manager.save(
+				manager.create(ClientAddressEntity, {
+					client_id: data.client_id,
+					address_id: address.id,
+					type: data.type,
+					details: data.details || null,
+					notes: data.notes || null,
+				}),
+			);
+		});
+	}
+
+	/**
+	 * @description Used in `toOrder` method from `CartService`; the address as a document copies it
+	 *
+	 * Resolved by id, client and type together, so an address of another client - or a delivery
+	 * address offered as the billing one - is the same 404 a missing id is.
+	 *
+	 * Place names are taken in the default content language rather than the request's: the copy
+	 * is kept for good and read by the back office, so it has to say the same thing whichever
+	 * language the shopper happened to browse in.
+	 */
+	public async getOrderSnapshot(
+		id: number,
+		clientId: number,
+		type: ClientAddressType,
+	): Promise<ClientAddressSnapshot> {
+		const entry = await this.createPlaceQuery(Configuration.language())
+			.filterById(id)
+			.filterBy('client_address.client_id', clientId)
+			.filterBy('client_address.type', type)
+			.firstOrFail();
+
+		const place = this.toPlaceNames(entry);
+
+		const details = [entry.address?.details, entry.details]
+			.filter((part): part is string => !!part)
+			.join(', ');
+
+		return {
+			address_country: place.country,
+			address_region: place.region,
+			address_city: place.city,
+			details: details || null,
+			postal_code: entry.address?.postal_code ?? null,
+			notes: entry.notes,
+		};
 	}
 
 	/**

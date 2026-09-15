@@ -16,7 +16,7 @@ import { roundMoney } from '@/helpers/shop.helper';
  * Everything the resolver needs about one basket line.
  *
  * Money splits across two currencies and mixing them is the easy mistake here, so each field
- * says which one it is in. `exchangeRate` follows `order_product.exchange_rate` - "rate to the
+ * says which one it is in. `exchangeRate` follows `order_line.exchange_rate` - "rate to the
  * base currency", so `base = sale × rate` and `sale = base ÷ rate`, and it is 1 when the sale
  * is already in base currency.
  */
@@ -31,7 +31,13 @@ export type DiscountLineContext = {
 	quantity: number;
 	/** Unit price excluding VAT, in the sale currency. */
 	unitPrice: number;
-	exchangeRate: number;
+	/**
+	 * Omitted by a caller that holds no rate, and read as 1. A cart quotes in the shopper's own
+	 * currency and resolves no rate at all - only a document does, when it is raised - so for a
+	 * basket an `amount` discount and `min_order_value` are read as if the sale currency were the
+	 * base one. A document always states it.
+	 */
+	exchangeRate?: number;
 
 	/** `product_price.min_price` - sale currency, already market-specific. */
 	minPrice?: number | null;
@@ -214,7 +220,7 @@ export function evaluateConditions(
 			case 'min_order_value': {
 				// `value` is base currency, like every other absolute figure on a discount.
 				const orderValueInBase =
-					(context.orderValue ?? 0) * context.exchangeRate;
+					(context.orderValue ?? 0) * (context.exchangeRate ?? 1);
 
 				if (orderValueInBase < Number(value)) {
 					return false;
@@ -291,7 +297,7 @@ export function computeReduction(
 	const rawPerUnit =
 		discount.type === DiscountTypeEnum.PERCENT
 			? (context.unitPrice * Number(discount.value)) / 100
-			: Number(discount.value) / context.exchangeRate;
+			: Number(discount.value) / (context.exchangeRate ?? 1);
 
 	const floor = resolveFloor(context);
 

@@ -1,16 +1,18 @@
 import {
 	Check,
 	Column,
+	CreateDateColumn,
 	Entity,
 	Index,
 	JoinColumn,
 	ManyToOne,
 	OneToMany,
+	PrimaryGeneratedColumn,
+	UpdateDateColumn,
 } from 'typeorm';
 import type ProductEntity from '@/features/product/product.entity';
 import type ProductOptionEntity from '@/features/product/product-option.entity';
 import type TermEntity from '@/features/term/term.entity';
-import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 
 const ENTITY_TABLE_NAME = 'product_option_group';
 
@@ -37,9 +39,15 @@ const ENTITY_TABLE_NAME = 'product_option_group';
 @Index('IDX_product_option_group_label_id', ['label_id'])
 @Check(`(min_select >= 0)`)
 @Check(`(max_select IS NULL OR max_select >= min_select)`)
-export default class ProductOptionGroupEntity extends EntityAbstract {
+// Not `EntityAbstract`: this table carries no `deleted_at`, like the two levels below it. A group
+// is written only through the product form's Options tab, and dropping it from that form deletes
+// it outright - taking its answers and their deltas with it through the cascades
+export default class ProductOptionGroupEntity {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
+
+	@PrimaryGeneratedColumn({ type: 'int' })
+	id!: number;
 
 	@Column('int', { nullable: false })
 	product_id!: number;
@@ -69,6 +77,12 @@ export default class ProductOptionGroupEntity extends EntityAbstract {
 		comment: 'Display order within the product',
 	})
 	position!: number;
+
+	@CreateDateColumn({ type: 'timestamp', nullable: false })
+	created_at!: Date;
+
+	@UpdateDateColumn({ type: 'timestamp', nullable: true })
+	updated_at!: Date | null;
 
 	// RELATIONS
 	@ManyToOne('ProductEntity', {

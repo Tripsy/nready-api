@@ -96,4 +96,14 @@ export class AddressValidator extends BaseValidator<typeof validatorMessages> {
 			).default(false),
 		},
 	});
+
+	/**
+	 * The storefront address search. Only a term: the page size is the controller's and the
+	 * language the request's, and deleted rows are never offered.
+	 */
+	readonly publicFind = z.object({
+		term: this.validateString(this.getMessage('invalid_string'), {
+			minChars: Configuration.get('filter.termMinLength'),
+		}),
+	});
 }

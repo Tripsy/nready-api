@@ -1,3 +1,4 @@
+import { validateParamsWhenId } from '@/middleware/validate-params.middleware';
 import type { FeatureRoutesModule } from '@/shared/types/routes.type';
 
 export default async () => {
@@ -9,8 +10,9 @@ export default async () => {
 		basePath: '/public/clients',
 		controller: clientPublicController,
 		/*
-		 * No `/:id` routes: every row here is addressed through the account behind the request,
-		 * so there is no id for the caller to name and no ownership check left to a later step.
+		 * The one `/:id` route is resolved through `ClientService.findOwnById`, which filters by
+		 * the account behind the request in the same query - somebody else's id reads as missing,
+		 * so there is no ownership check left to a later step.
 		 */
 		routes: {
 			find: {
@@ -20,6 +22,11 @@ export default async () => {
 			create: {
 				path: '',
 				method: 'post',
+			},
+			update: {
+				path: '/:id',
+				method: 'put',
+				handlers: [validateParamsWhenId('id')],
 			},
 		},
 	};

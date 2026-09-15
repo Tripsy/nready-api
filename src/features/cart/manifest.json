@@ -1,8 +1,18 @@
 {
 	"name": "cart",
-	"version": "1.3.0",
+	"version": "1.4.0",
 	"relativePath": "/cart",
 	"entities": ["cart", "cart-item"],
-	"depends_on": ["client", "product", "discount", "order", "user", "term"],
+	"depends_on": [
+		"client",
+		"client-address",
+		"product",
+		"discount",
+		"order",
+		"order-shipping",
+		"warehouse",
+		"user",
+		"term"
+	],
 	"required_by": []
 }

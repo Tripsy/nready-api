@@ -1,15 +1,17 @@
 import {
 	Column,
+	CreateDateColumn,
 	Entity,
 	Index,
 	JoinColumn,
 	ManyToOne,
 	OneToMany,
+	PrimaryGeneratedColumn,
+	UpdateDateColumn,
 } from 'typeorm';
 import type ProductOptionGroupEntity from '@/features/product/product-option-group.entity';
 import type ProductOptionPriceEntity from '@/features/product/product-option-price.entity';
 import type TermEntity from '@/features/term/term.entity';
-import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 
 /**
  * What an order line records about a chosen option. Frozen at the moment of ordering, like
@@ -17,6 +19,11 @@ import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
  * line still has to add up to what was charged.
  */
 export type ProductOptionSnapshot = {
+	/**
+	 * The `product_option` the snapshot was taken from, so an editor can send the choice back as
+	 * an id. Optional: snapshots written before it was recorded carry only the wording.
+	 */
+	option_id?: number;
 	label: string;
 	price_delta: number;
 	currency: string;
@@ -39,11 +46,17 @@ const ENTITY_TABLE_NAME = 'product_option';
 // At most one preselected answer per group, mirroring the default-variant rule
 @Index('IDX_product_option_default', ['option_group_id'], {
 	unique: true,
-	where: 'is_default = true AND deleted_at IS NULL',
+	where: 'is_default = true',
 })
-export default class ProductOptionEntity extends EntityAbstract {
+// Not `EntityAbstract`: this table carries no `deleted_at`. An option has no CRUD surface of its
+// own - it is written only through the product form's Options tab - and `syncOptions` deletes an
+// answer dropped from that form outright, so there is no soft-deleted state to read or restore
+export default class ProductOptionEntity {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
+
+	@PrimaryGeneratedColumn({ type: 'int' })
+	id!: number;
 
 	@Column('int', { nullable: false })
 	option_group_id!: number;
@@ -67,6 +80,12 @@ export default class ProductOptionEntity extends EntityAbstract {
 		comment: 'Preselected when the customer has not chosen',
 	})
 	is_default!: boolean;
+
+	@CreateDateColumn({ type: 'timestamp', nullable: false })
+	created_at!: Date;
+
+	@UpdateDateColumn({ type: 'timestamp', nullable: true })
+	updated_at!: Date | null;
 
 	// RELATIONS
 	@ManyToOne('ProductOptionGroupEntity', {

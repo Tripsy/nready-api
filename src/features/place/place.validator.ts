@@ -163,4 +163,14 @@ export class PlaceValidator extends BaseValidator<typeof validatorMessages> {
 			).default(false),
 		},
 	});
+
+	/**
+	 * The storefront city search. Only a term: the place type is fixed to city, the page size is
+	 * the controller's, and the language is the request's - none of them is the shopper's to widen.
+	 */
+	readonly publicFind = z.object({
+		term: this.validateString(this.getMessage('invalid_string'), {
+			minChars: Configuration.get('filter.termMinLength'),
+		}),
+	});
 }

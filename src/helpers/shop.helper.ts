@@ -7,7 +7,7 @@ import type { ProductVatCategory } from '@/features/product/product.entity';
  * A product carries a *class* (`standard`, `reduced`, ...) rather than a rate, because the rate is
  * a function of jurisdiction and date. This is the one place that turns the class into a number:
  * a cart prices its lines through it on every read, and `CartService.toOrder` calls it once more
- * at confirmation to snapshot the figure onto `order_product.vat_rate`, where it stops moving.
+ * at confirmation to snapshot the figure onto `order_line.vat_rate`, where it stops moving.
  *
  * The rates come from `vat.*` in the settings, so a deployment states them for its own
  * jurisdiction. An unknown class - a row written before the class was dropped from the enum -
@@ -31,6 +31,58 @@ export function resolveVatRate(category: ProductVatCategory): number {
  */
 export function roundMoney(value: number): number {
 	return Math.round(value * 100) / 100;
+}
+
+/**
+ * Splits a charged total across parts in proportion to their weights, reconciling exactly.
+ *
+ * This is what `product.md` §8.3 requires of a bundle: the header carries no money and each
+ * component line takes an apportioned share of the bundle price, pro-rata by the components'
+ * **standalone** prices, at its own VAT rate. Pro-rata over two decimals almost always drifts a
+ * cent or two, so the remainder is assigned to the largest share and the parts sum to `total`
+ * exactly. A shortfall would understate the VAT owed on one line; an excess would charge money no
+ * total accounts for.
+ *
+ * Weights summing to zero fall back to an equal split - a bundle whose components are all priced
+ * at zero still has to divide its own price somehow, and proportion has nothing to go on.
+ *
+ * Shared by the cart, which quotes the split on every read, and by checkout, which freezes it.
+ */
+export function apportion(total: number, weights: readonly number[]): number[] {
+	if (weights.length === 0) {
+		return [];
+	}
+
+	const rounded = roundMoney(total);
+	const sum = weights.reduce((carry, weight) => carry + weight, 0);
+
+	const shares =
+		sum > 0
+			? weights.map((weight) => roundMoney((rounded * weight) / sum))
+			: weights.map(() => roundMoney(rounded / weights.length));
+
+	const drift = roundMoney(
+		rounded - shares.reduce((carry, share) => carry + share, 0),
+	);
+
+	if (drift !== 0) {
+		/*
+		 * The largest share absorbs it, so the correction is the smallest fraction of any line it
+		 * could land on. Ties go to the first, which keeps the result a pure function of the input
+		 * rather than of row order.
+		 */
+		let largest = 0;
+
+		for (let index = 1; index < shares.length; index++) {
+			if (shares[index] > shares[largest]) {
+				largest = index;
+			}
+		}
+
+		shares[largest] = roundMoney(shares[largest] + drift);
+	}
+
+	return shares;
 }
 
 /** ISO 4217 alphabetic code, as stored - uppercase, exactly three letters. */

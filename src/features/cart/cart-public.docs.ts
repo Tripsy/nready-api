@@ -4,6 +4,7 @@ import {
 	getCartPricingMock,
 } from '@/features/cart/cart.mock';
 import {
+	CART_COMPONENTS_MAX,
 	CART_NOTES_MAX,
 	CART_OPTIONS_MAX,
 	CART_QUANTITY_MAX,
@@ -11,6 +12,8 @@ import {
 } from '@/features/cart/cart.validator';
 import type { cartPublicController } from '@/features/cart/cart-public.controller';
 import { CART_TOKEN_HEADER } from '@/features/cart/cart-public.controller';
+import { OrderPaymentMethodEnum } from '@/features/order/order.entity';
+import { ShippingMethodEnum } from '@/features/order-shipping/order-shipping.entity';
 import {
 	type ApiInputDocumentation,
 	helperApiInputDocumentation,
@@ -22,16 +25,12 @@ import {
  * the basket value can switch on when one line is added - so returning only the line that changed
  * would leave the client guessing at the total.
  */
-const cartSample: Record<string, unknown> = (() => {
-	const { deleted_at, ...rest } = getCartEntityMock() as unknown as Record<
-		string,
-		unknown
-	>;
+const cartSample: Record<string, unknown> = {
+	...(getCartEntityMock() as unknown as Record<string, unknown>),
+	pricing: getCartPricingMock(),
+};
 
-	return { ...rest, pricing: getCartPricingMock() };
-})();
-
-const TOKEN_NOTE = `A guest names their cart with the \`${CART_TOKEN_HEADER}\` header, whose value comes from the \`token\` field of any cart response - it is returned in the body rather than set as a cookie, matching how this API hands out its access token. A signed-in caller is addressed by their account instead and the header is ignored: one live cart per account, so a stale handle from another device cannot write past it. Signing in with a guest cart folds it into the account's own, summing the quantities on lines both held`;
+const TOKEN_NOTE = `A guest names their cart with the \`${CART_TOKEN_HEADER}\` header, whose value comes from the \`token\` field of any cart response - it is returned in the body rather than set as a cookie, matching how this API hands out its access token. A signed-in caller is addressed by their account instead and the header is ignored: one cart per account, so a stale handle from another device cannot write past it. Signing in with a guest cart folds it into the account's own, summing the quantities on lines both held - the guest cart is deleted at that point and its handle stops resolving, so the token from the next response is the one to keep`;
 
 /**
  * The storefront half. No permission, and no account except at checkout - a guest filling a basket
@@ -86,7 +85,12 @@ export const docs: Record<
 				options: {
 					type: 'array',
 					required: false,
-					condition: `product option ids, at most ${CART_OPTIONS_MAX}; they must belong to the product being added`,
+					condition: `product option ids, at most ${CART_OPTIONS_MAX}; they must belong to the product being added, and every question the product asks has to receive between its min_select and max_select answers - otherwise 400`,
+				},
+				components: {
+					type: 'array',
+					required: false,
+					condition: `what was chosen inside a bundle, at most ${CART_COMPONENTS_MAX}, each \`{ item_id, units? }\` naming a product_bundle_item. Only the decisions: a component that always comes with the kit is resolved from the catalog and naming one is refused, \`units\` applies to an optional tick box and is bounded by its own quantity, and every choice group must receive exactly one candidate. Accepted only on a bundle, and required when the bundle has choices to make - otherwise 400. The bundle is stored as a header line plus one line per component, and priced with the bundle's price apportioned across them at their own VAT rates`,
 				},
 				notes: {
 					type: 'string',
@@ -202,14 +206,36 @@ export const docs: Record<
 			withMessage: true,
 		},
 		withAuthErrors: true,
-		withErrors: [400, 404, 422],
+		withErrors: [400, 404, 409, 422],
 		request: {
-			notes: 'Requires an account: the order names a `client` to invoice, which cannot be chosen for an anonymous caller. Prices are resolved once more here rather than reused from whatever the shopper was last shown, and those are the figures written to the order - so this is the moment they stop moving. An empty cart answers 400, and so does a cart with any line carrying an `issue`. The cart is terminal afterwards: its status becomes `converted`, it names the order, and the next visit starts a new one',
+			notes: "Requires an account: the order names a `client` to invoice, and it has to be one of the caller's own - listed by `GET /public/clients`, added by `POST /public/clients`. Somebody else's client answers 404, exactly as a missing one does. Prices are resolved once more here rather than reused from whatever the shopper was last shown, and those are the figures written to the order - so this is the moment they stop moving. An empty cart answers 400, and so does a cart with any line carrying an `issue`. The delivery choice is written as the order's first `order_shipping` row, leaving from the active default warehouse at no charge and carrying the client's contact details - 409 when no default warehouse is configured. The cart is deleted once the order is written, in the same transaction and with its lines - the order is the record of what was bought, and the next visit starts a fresh cart with a new token",
 			body: {
 				client_id: {
 					type: 'number',
 					required: true,
-					condition: 'who the order is billed to',
+					condition:
+						"who the order is billed to; one of the caller's own clients",
+				},
+				delivery_method: {
+					type: 'enum',
+					required: true,
+					values: Object.values(ShippingMethodEnum),
+				},
+				billing_address_id: {
+					type: 'number',
+					required: true,
+					condition:
+						'a `billing` address filed under client_id (`GET /public/client-addresses`); copied onto the order as `billing_details`',
+				},
+				delivery_address_id: {
+					type: 'number',
+					required: false,
+					condition: `a \`delivery\` address filed under client_id; required when delivery_method is ${ShippingMethodEnum.COURIER}, ignored for ${ShippingMethodEnum.SELF_PICKUP}; copied onto the shipment`,
+				},
+				payment_method: {
+					type: 'enum',
+					required: true,
+					values: Object.values(OrderPaymentMethodEnum),
 				},
 				notes: {
 					type: 'string',

@@ -8,7 +8,8 @@
 	"error": {
 		"not_found": "Warehouse not found",
 		"code_taken": "A warehouse with this code already exists",
-		"default_conflict": "Another warehouse is already set as default"
+		"default_conflict": "Another warehouse is already set as default",
+		"default_missing": "No active default warehouse is configured, so the order cannot be shipped from anywhere"
 	},
 	"success": {
 		"create": "Warehouse created successfully",

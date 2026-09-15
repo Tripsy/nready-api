@@ -17,8 +17,8 @@ const entitySample = (() => {
 })();
 
 /**
- * The storefront half: the bill-to choices at checkout. Every row is the caller's own, so there is
- * no id in any path and no permission to hold - an account is all it takes.
+ * The storefront half: the bill-to choices at checkout. Every row is the caller's own - the one id
+ * in a path is resolved within the account - and there is no permission to hold.
  */
 export const docs: Record<
 	keyof typeof clientPublicController,
@@ -85,6 +85,51 @@ export const docs: Record<
 				notes: { type: 'string', required: false },
 			},
 			sample: clientInputPayloads.create,
+		},
+	}),
+
+	update: helperApiInputDocumentation({
+		description: 'Update one of your own clients',
+		withBearerAuth: true,
+		success: {
+			status: 200,
+			description: 'Client updated',
+			dataSample: entitySample,
+			withMessage: true,
+		},
+		withAuthErrors: true,
+		withErrors: [404, 409, 422],
+		request: {
+			notes: `Requires an account. The id must name a client linked to that account - somebody else's answers 404, exactly as a missing one does. Partial: send only what changes; client_type defaults to the stored one and picks the branch the same way create does. person_identification_number is refused here. Changing a company's name, CUI or registration number to one already on file answers 409`,
+			params: {
+				id: {
+					type: 'number',
+					required: true,
+					condition: "one of the caller's own clients",
+				},
+			},
+			body: {
+				client_type: {
+					type: 'enum',
+					required: false,
+					values: Object.values(ClientTypeEnum),
+				},
+				company_name: { type: 'string', required: false },
+				company_cui: { type: 'string', required: false },
+				company_reg_com: { type: 'string', required: false },
+				person_name: { type: 'string', required: false },
+				iban: {
+					type: 'string',
+					required: false,
+					condition: 'checked for IBAN format',
+				},
+				bank_name: { type: 'string', required: false },
+				contact_name: { type: 'string', required: false },
+				contact_email: { type: 'string', required: false },
+				contact_phone: { type: 'string', required: false },
+				notes: { type: 'string', required: false },
+			},
+			sample: clientInputPayloads.update,
 		},
 	}),
 };

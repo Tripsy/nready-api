@@ -14,6 +14,7 @@ import {
 import WarehouseEntity, {
 	STATUS_TRANSITIONS,
 	type WarehouseStatus,
+	WarehouseStatusEnum,
 } from '@/features/warehouse/warehouse.entity';
 import { getWarehouseRepository } from '@/features/warehouse/warehouse.repository';
 import {
@@ -241,6 +242,30 @@ export class WarehouseService {
 			.filterById(id)
 			.withDeleted(withDeleted)
 			.firstOrFail();
+	}
+
+	/**
+	 * @description Used in `toOrder` method from `CartService`; where a checkout's shipment leaves from
+	 *
+	 * The active default only. `IDX_warehouse_default` allows at most one, and an inactive default
+	 * is treated as none - goods should not be promised from a site somebody switched off.
+	 *
+	 * A missing default is a 409 rather than a quiet fallback to any warehouse: picking one
+	 * arbitrarily would move stock from a site nobody chose, and the operator fixing the
+	 * configuration needs to hear about it.
+	 */
+	public async findDefault(): Promise<WarehouseEntity> {
+		const entry = await this.repository
+			.createQuery()
+			.filterBy('is_default', true)
+			.filterBy('status', WarehouseStatusEnum.ACTIVE)
+			.first();
+
+		if (!entry) {
+			throw new CustomError(409, lang('warehouse.error.default_missing'));
+		}
+
+		return entry;
 	}
 
 	/**

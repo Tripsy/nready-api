@@ -1,6 +1,14 @@
-import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
+import {
+	Column,
+	CreateDateColumn,
+	Entity,
+	Index,
+	JoinColumn,
+	ManyToOne,
+	PrimaryGeneratedColumn,
+	UpdateDateColumn,
+} from 'typeorm';
 import type ProductOptionEntity from '@/features/product/product-option.entity';
-import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import { numericTransformer } from '@/shared/transformers/numeric.transformer';
 
 const ENTITY_TABLE_NAME = 'product_option_price';
@@ -20,17 +28,21 @@ const ENTITY_TABLE_NAME = 'product_option_price';
 })
 @Index('IDX_product_option_price_unique', ['option_id', 'currency'], {
 	unique: true,
-	where: 'deleted_at IS NULL',
 })
-export default class ProductOptionPriceEntity extends EntityAbstract {
+// Not `EntityAbstract`: this table carries no `deleted_at`, like the two levels above it. A delta
+// is written only through the product form's Options tab, and is deleted outright when its
+// currency is dropped from that form or its option goes
+export default class ProductOptionPriceEntity {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
 
+	@PrimaryGeneratedColumn({ type: 'int' })
+	id!: number;
+
 	/*
-	 * Non-partial on purpose. `ProductOptionRepository.syncPrices` reads this key with `withDeleted`, so it can revive a
-	 * row rather than collide with the partial unique index, and no index carrying
-	 * `WHERE deleted_at IS NULL` answers a query that does not say it. The foreign key's cascade
-	 * looks the children up the same way.
+	 * Duplicates the leading column of `IDX_product_option_price_unique`, which is unconditional
+	 * and answers a lookup by `option_id` alone - so this one earns its place on nothing but the
+	 * `option_id` foreign key's cascade, and dropping it should be a decision of its own.
 	 */
 	@Column('int', { nullable: false })
 	@Index('IDX_product_option_price_option_id')
@@ -54,6 +66,12 @@ export default class ProductOptionPriceEntity extends EntityAbstract {
 		transformer: numericTransformer,
 	})
 	price_delta!: number;
+
+	@CreateDateColumn({ type: 'timestamp', nullable: false })
+	created_at!: Date;
+
+	@UpdateDateColumn({ type: 'timestamp', nullable: true })
+	updated_at!: Date | null;
 
 	// RELATIONS
 	@ManyToOne('ProductOptionEntity', {
