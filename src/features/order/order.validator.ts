@@ -19,6 +19,7 @@ import {
  */
 export const paramsUpdateList: string[] = [
 	'client_id',
+	'billing_address_id',
 	'type',
 	'issued_at',
 	'notes',
@@ -57,6 +58,7 @@ const REF_CODE_MAX_CHARS = 10;
 const validatorMessages = [
 	...sharedValidatorMessages,
 	'invalid_client_id',
+	'invalid_billing_address_id',
 	'invalid_currency',
 	'invalid_type',
 	'invalid_lines',
@@ -209,6 +211,15 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 	 */
 	readonly create = z.object({
 		client_id: this.validateId(this.getMessage('invalid_client_id')),
+		/*
+		 * Optional, and not checked against the client here: whether the address is one the billed
+		 * client holds is a data question, answered by `OrderService` against `client_address`,
+		 * which owns the 404 either way.
+		 */
+		billing_address_id: this.validateId(
+			this.getMessage('invalid_billing_address_id'),
+			{ required: false },
+		),
 		currency: this.currencySchema(),
 		type: this.validateEnum(
 			OrderTypeEnum,
@@ -248,6 +259,10 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 			client_id: this.validateId(this.getMessage('invalid_client_id'), {
 				required: false,
 			}),
+			billing_address_id: this.validateId(
+				this.getMessage('invalid_billing_address_id'),
+				{ required: false },
+			),
 			currency: this.currencySchema().optional(),
 			type: this.validateEnum(
 				OrderTypeEnum,

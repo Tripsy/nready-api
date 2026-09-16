@@ -10,7 +10,7 @@ import CarrierEntity from '@/features/carrier/carrier.entity';
 
 /**
  * Real couriers, paired with the domain they are reachable under. International names sit
- * next to the local ones an order-shipping row realistically picks from.
+ * next to the local ones an shipping row realistically picks from.
  *
  * The domain is stored rather than derived from the name: `Fan Courier` → `fancourier.ro`
  * loses the space, `DPD` → `dpd.com` lowercases, and a rule covering both is longer than

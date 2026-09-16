@@ -23,7 +23,7 @@ const ENTITY_TABLE_NAME = 'warehouse';
  * Warehouse exists to give quantities somewhere to belong, or as a label for where products are
  * shipped from - even for products marked with `track_stock = false`.
  *
- * That second job is why `order_shipping.warehouse_id` is `NOT NULL` while stock tracking is
+ * That second job is why `shipping.warehouse_id` is `NOT NULL` while stock tracking is
  * optional: a kitchen sending out food owns no inventory, but the order still left from somewhere.
  */
 @Entity({

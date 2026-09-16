@@ -167,7 +167,7 @@ class CartPublicController extends BaseController {
 	/**
 	 * Checkout. Requires an account: the order names a `client` to invoice, and it has to be one
 	 * of the caller's own (`/public/clients`) - a shopper with none creates one there first. The
-	 * delivery choice becomes the order's first `order_shipping` row and the payment choice is
+	 * delivery choice becomes the order's first `shipping` row and the payment choice is
 	 * recorded on the order.
 	 *
 	 * The cart is terminal afterwards, so the response is the order rather than the basket - there

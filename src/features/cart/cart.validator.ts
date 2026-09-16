@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { Configuration } from '@/config/settings.config';
 import { OrderPaymentMethodEnum } from '@/features/order/order.entity';
-import { ShippingMethodEnum } from '@/features/order-shipping/order-shipping.entity';
+import { ShippingMethodEnum } from '@/features/shipping/shipping.entity';
 import { hasAtLeastOneValue } from '@/helpers/objects.helper';
 import { CURRENCY_CODE_CHARS, normalizeCurrency } from '@/helpers/shop.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';

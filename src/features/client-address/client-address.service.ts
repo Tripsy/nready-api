@@ -13,6 +13,7 @@ import {
 	clientService,
 } from '@/features/client/client.service';
 import ClientAddressEntity, {
+	type ClientAddressSnapshot,
 	type ClientAddressType,
 } from '@/features/client-address/client-address.entity';
 import { getClientAddressRepository } from '@/features/client-address/client-address.repository';
@@ -36,20 +37,6 @@ export type AddressPlaceNames = {
 /** A client address as the storefront lists it: the row, its street data, and the place named. */
 export type ClientAddressWithPlace = ClientAddressEntity & {
 	place: AddressPlaceNames;
-};
-
-/**
- * An address flattened into the columns a document copies - `order.billing_details` and the
- * `order_shipping` address fields share these names with `invoice.billing_details`.
- */
-export type ClientAddressSnapshot = {
-	address_country: string | null;
-	address_region: string | null;
-	address_city: string | null;
-	/** Street and number, then the client address's own flat/floor note when there is one. */
-	details: string | null;
-	postal_code: string | null;
-	notes: string | null;
 };
 
 /**
@@ -293,27 +280,8 @@ export class ClientAddressService {
 		});
 	}
 
-	/**
-	 * @description Used in `toOrder` method from `CartService`; the address as a document copies it
-	 *
-	 * Resolved by id, client and type together, so an address of another client - or a delivery
-	 * address offered as the billing one - is the same 404 a missing id is.
-	 *
-	 * Place names are taken in the default content language rather than the request's: the copy
-	 * is kept for good and read by the back office, so it has to say the same thing whichever
-	 * language the shopper happened to browse in.
-	 */
-	public async getOrderSnapshot(
-		id: number,
-		clientId: number,
-		type: ClientAddressType,
-	): Promise<ClientAddressSnapshot> {
-		const entry = await this.createPlaceQuery(Configuration.language())
-			.filterById(id)
-			.filterBy('client_address.client_id', clientId)
-			.filterBy('client_address.type', type)
-			.firstOrFail();
-
+	/** The flattening both snapshot readers share, once the row has been resolved. */
+	private toSnapshot(entry: ClientAddressEntity): ClientAddressSnapshot {
 		const place = this.toPlaceNames(entry);
 
 		const details = [entry.address?.details, entry.details]
@@ -328,6 +296,45 @@ export class ClientAddressService {
 			postal_code: entry.address?.postal_code ?? null,
 			notes: entry.notes,
 		};
+	}
+
+	/**
+	 * @description Used in `updateStatus` method from `ShippingService`; the address as a shipped document freezes it
+	 *
+	 * By id alone: a shipment reached this point through its own `client_address_id`, and whose
+	 * address it is was settled when the order was placed. Nothing here is a permission check.
+	 */
+	public async getSnapshotById(id: number): Promise<ClientAddressSnapshot> {
+		const entry = await this.createPlaceQuery(Configuration.language())
+			.filterById(id)
+			.firstOrFail();
+
+		return this.toSnapshot(entry);
+	}
+
+	/**
+	 * @description Used in `toOrder` method from `CartService`; proves an address is the client's to use
+	 *
+	 * Resolved by id, client and type together, so an address of another client - or a delivery
+	 * address offered as the billing one - is the same 404 a missing id is. Checkout calls this for
+	 * the refusal rather than for the value: the order and its shipment reference the row.
+	 *
+	 * Place names are taken in the default content language rather than the request's: a snapshot
+	 * taken from one is kept for good and read by the back office, so it has to say the same thing
+	 * whichever language the shopper happened to browse in.
+	 */
+	public async getOrderSnapshot(
+		id: number,
+		clientId: number,
+		type: ClientAddressType,
+	): Promise<ClientAddressSnapshot> {
+		const entry = await this.createPlaceQuery(Configuration.language())
+			.filterById(id)
+			.filterBy('client_address.client_id', clientId)
+			.filterBy('client_address.type', type)
+			.firstOrFail();
+
+		return this.toSnapshot(entry);
 	}
 
 	/**

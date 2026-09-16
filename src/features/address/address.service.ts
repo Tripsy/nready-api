@@ -1,13 +1,16 @@
 import type { DeepPartial } from 'typeorm';
 import { lang } from '@/config/message.setup';
+import { Configuration } from '@/config/settings.config';
 import { CustomError } from '@/exceptions';
+import type { AddressSnapshot } from '@/features/address/address.entity';
 import AddressEntity from '@/features/address/address.entity';
 import { getAddressRepository } from '@/features/address/address.repository';
 import {
 	type AddressValidator,
 	paramsUpdateList,
 } from '@/features/address/address.validator';
-import { PlaceTypeEnum } from '@/features/place/place.entity';
+import type PlaceEntity from '@/features/place/place.entity';
+import { type PlaceType, PlaceTypeEnum } from '@/features/place/place.entity';
 import {
 	type PlaceService,
 	placeService,
@@ -98,6 +101,78 @@ export class AddressService {
 			.filterById(id)
 			.withDeleted(withDeleted)
 			.firstOrFail();
+	}
+
+	/**
+	 * The city with up to two ancestors, each named in `language`.
+	 *
+	 * Two levels because `place.parent_id` lets a city hang off a region or straight off a country:
+	 * walking city -> parent -> grandparent reaches the country either way, and the levels are told
+	 * apart by `place_type` rather than by position.
+	 */
+	private createPlaceQuery(language: string) {
+		return this.repository
+			.createQuery()
+			.joinAndSelect('address.city', 'city', 'LEFT')
+			.joinAndSelect(
+				'city.contents',
+				'city_content',
+				'LEFT',
+				'city_content.language = :language',
+				{ language: language },
+			)
+			.joinAndSelect('city.parent', 'city_parent', 'LEFT')
+			.joinAndSelect(
+				'city_parent.contents',
+				'city_parent_content',
+				'LEFT',
+				'city_parent_content.language = :language',
+				{ language: language },
+			)
+			.joinAndSelect('city_parent.parent', 'city_grandparent', 'LEFT')
+			.joinAndSelect(
+				'city_grandparent.contents',
+				'city_grandparent_content',
+				'LEFT',
+				'city_grandparent_content.language = :language',
+				{ language: language },
+			);
+	}
+
+	/**
+	 * @description Used in `updateStatus` method from `ShippingService`; the address as a dispatched movement freezes it
+	 *
+	 * The warehouse end of a movement resolves through here, the client end through
+	 * `ClientAddressService.getSnapshotById` - which adds the flat/floor note and instructions a
+	 * client address carries of its own. A warehouse has neither, so `notes` is null.
+	 *
+	 * Place names are taken in the default content language rather than the request's: the copy is
+	 * kept for good and read by the back office, so it has to say the same thing whichever language
+	 * the request happened to arrive in.
+	 */
+	public async getSnapshotById(id: number): Promise<AddressSnapshot> {
+		const entry = await this.createPlaceQuery(Configuration.language())
+			.filterById(id)
+			.firstOrFail();
+
+		const city = entry.city ?? null;
+
+		const chain = [city, city?.parent, city?.parent?.parent].filter(
+			(place): place is PlaceEntity => !!place,
+		);
+
+		const nameOf = (type: PlaceType): string | null =>
+			chain.find((place) => place.place_type === type)?.contents?.[0]
+				?.name ?? null;
+
+		return {
+			address_country: nameOf(PlaceTypeEnum.COUNTRY),
+			address_region: nameOf(PlaceTypeEnum.REGION),
+			address_city: nameOf(PlaceTypeEnum.CITY),
+			details: entry.details || null,
+			postal_code: entry.postal_code ?? null,
+			notes: null,
+		};
 	}
 
 	/**

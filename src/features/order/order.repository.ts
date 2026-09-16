@@ -6,7 +6,7 @@ import OrderLineEntity from '@/features/order/order-line.entity';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
 
 /** `ORD-1183`, `ORD 1183`, `ord/1183` - how a reference is written down when it is not typed. */
-const REFERENCE_PATTERN = /^([a-z]{2,10})[\s\-/]?(\d{1,10})$/i;
+export const REFERENCE_PATTERN = /^([a-z]{2,10})[\s\-/]?(\d{1,10})$/i;
 
 export class OrderQuery extends RepositoryAbstract<OrderEntity> {
 	constructor(repository: Repository<OrderEntity>) {

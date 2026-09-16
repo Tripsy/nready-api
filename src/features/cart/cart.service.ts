@@ -17,7 +17,6 @@ import {
 	type CartPricingService,
 	cartPricingService,
 } from '@/features/cart/cart-pricing.service';
-import { ClientTypeEnum } from '@/features/client/client.entity';
 import {
 	type ClientService,
 	clientService,
@@ -33,11 +32,9 @@ import {
 	type OrderService,
 	orderService,
 } from '@/features/order/order.service';
-import OrderShippingEntity, {
-	ShippingMethodEnum,
-} from '@/features/order-shipping/order-shipping.entity';
 import ProductEntity, {
 	ProductCompositionEnum,
+	ProductTypeEnum,
 } from '@/features/product/product.entity';
 import {
 	type BundleChoice,
@@ -50,6 +47,14 @@ import {
 	productOptionSelectionService,
 } from '@/features/product/product-option-selection.service';
 import ProductVariantEntity from '@/features/product/product-variant.entity';
+import {
+	ShippingMethodEnum,
+	ShippingScopeEnum,
+} from '@/features/shipping/shipping.entity';
+import {
+	type ShippingService,
+	shippingService,
+} from '@/features/shipping/shipping.service';
 import {
 	type WarehouseService,
 	warehouseService,
@@ -204,6 +209,48 @@ function toOrderLines(lines: readonly CartLine[]): OrderLineInput[] {
 		});
 }
 
+/**
+ * What physically travels for an order, as shipping lines.
+ *
+ * - **A bundle header is left out and its components kept.** The header holds no stock - it names
+ *   what was sold - while each component line is a real variant with its quantity already
+ *   multiplied out by the bundle's.
+ * - **Only physical products travel.** A digital product or a service is fulfilled some other way,
+ *   and a parcel listing one would have nothing to pick.
+ * - **One line per variant.** The same variant can sit on two cart lines (with different options,
+ *   or standalone beside a bundle that contains it), and `shipping_line` holds one row per variant,
+ *   so the quantities are summed.
+ */
+function toShippingLines(
+	lines: readonly CartLine[],
+	physicalProductIds: ReadonlySet<number>,
+): { variant_id: number; product_id: number; quantity: number }[] {
+	const byVariant = new Map<
+		number,
+		{ variant_id: number; product_id: number; quantity: number }
+	>();
+
+	for (const line of lines) {
+		if (line.is_bundle || !physicalProductIds.has(line.product_id)) {
+			continue;
+		}
+
+		const existing = byVariant.get(line.variant_id);
+
+		if (existing) {
+			existing.quantity += Number(line.quantity);
+		} else {
+			byVariant.set(line.variant_id, {
+				variant_id: line.variant_id,
+				product_id: line.product_id,
+				quantity: Number(line.quantity),
+			});
+		}
+	}
+
+	return [...byVariant.values()];
+}
+
 export class CartService {
 	constructor(
 		private repository: ReturnType<typeof getCartRepository>,
@@ -215,6 +262,7 @@ export class CartService {
 		private bundleSelection: ProductBundleSelectionService,
 		private warehouseService: WarehouseService,
 		private clientAddressService: ClientAddressService,
+		private shippingService: ShippingService,
 	) {}
 
 	/**
@@ -805,16 +853,21 @@ export class CartService {
 	 * verified-buyer badge for a purchase they never made. Somebody else's client answers the
 	 * same 404 a missing one does.
 	 *
-	 * **The delivery choice becomes the order's first `order_shipping` row**, written in the same
-	 * transaction so an order never exists without saying how it travels. It leaves from the
-	 * active default warehouse and is priced at zero: no shipping rate exists yet to charge from,
-	 * which is also what the basket quotes. The contact details and the delivery address are copied
-	 * onto it as a snapshot - a later edit to the client must not re-address a parcel on its way.
+	 * **The delivery choice becomes the order's first `shipping` row**, written through
+	 * `ShippingService.createWithin` in the same transaction, so an order never exists without
+	 * saying how it travels and the row obeys the rules a back-office create does. It leaves from
+	 * the active default warehouse, carries every physical item of the order (`toShippingLines`),
+	 * and is priced at zero: no shipping rate exists yet to charge from, which is also what the
+	 * basket quotes. The client's contact details are copied onto it.
 	 *
-	 * **The billing client and address are copied onto the order** (`billing_details`) for the
-	 * same reason: a client address can be edited or deleted outright, and the order must keep
-	 * saying who it was billed to. Both addresses have to be filed under the billed client, with
-	 * the matching type - anything else is the client-address 404.
+	 * An order with nothing physical in it - only digital products or services - raises no
+	 * shipment: there is nothing to pick, and an empty parcel would sit in the dispatch queue.
+	 *
+	 * **Both addresses are referenced, not copied** - `order.billing_address_id` and the shipment's
+	 * `destination_client_address_id`. They have to be filed under the billed client with the
+	 * matching type; anything else is the client-address 404. The destination is frozen into
+	 * `shipping.destination_data` when the shipment ships, which is the point after which
+	 * re-addressing a parcel already on its way would be a lie.
 	 */
 	public async toOrder(
 		cart: CartEntity,
@@ -827,30 +880,30 @@ export class CartService {
 			userId,
 		);
 
-		const billingAddress = await this.clientAddressService.getOrderSnapshot(
+		/*
+		 * Resolved for what they prove, not for what they return: each call refuses an address that
+		 * is not filed under this client with the matching type, which is the whole ownership check
+		 * behind the two ids below. The rows themselves are referenced, not copied.
+		 */
+		await this.clientAddressService.getOrderSnapshot(
 			data.billing_address_id,
 			client.id,
 			ClientAddressTypeEnum.BILLING,
 		);
 
-		const deliveryAddress =
+		const deliveryAddressId =
 			data.delivery_method === ShippingMethodEnum.COURIER &&
 			data.delivery_address_id
-				? await this.clientAddressService.getOrderSnapshot(
-						data.delivery_address_id,
-						client.id,
-						ClientAddressTypeEnum.DELIVERY,
-					)
+				? data.delivery_address_id
 				: null;
 
-		const identity =
-			client.client_type === ClientTypeEnum.COMPANY
-				? {
-						company_name: client.company_name,
-						company_cui: client.company_cui,
-						company_reg_com: client.company_reg_com,
-					}
-				: { person_name: client.person_name };
+		if (deliveryAddressId) {
+			await this.clientAddressService.getOrderSnapshot(
+				deliveryAddressId,
+				client.id,
+				ClientAddressTypeEnum.DELIVERY,
+			);
+		}
 
 		const items = await this.getItems(cart.id);
 
@@ -870,6 +923,25 @@ export class CartService {
 		 * rate is resolved once so the order lines and the shipment are frozen at the same figure.
 		 */
 		const warehouse = await this.warehouseService.findDefault();
+
+		const physicalProducts = await dataSource
+			.getRepository(ProductEntity)
+			.find({
+				select: { id: true },
+				where: {
+					id: In([
+						...new Set(
+							pricing.lines.map((line) => line.product_id),
+						),
+					]),
+					type: ProductTypeEnum.PHYSICAL,
+				},
+			});
+
+		const shippingLines = toShippingLines(
+			pricing.lines,
+			new Set(physicalProducts.map((product) => product.id)),
+		);
 		const exchangeRate = await this.orderService.resolveExchangeRate(
 			pricing.currency,
 		);
@@ -885,29 +957,22 @@ export class CartService {
 				currency: pricing.currency,
 				exchange_rate: exchangeRate,
 				payment_method: data.payment_method,
-				billing_details: {
-					client_type: client.client_type,
-					...identity,
-					iban: client.iban,
-					bank_name: client.bank_name,
-					address_country: billingAddress.address_country,
-					address_region: billingAddress.address_region,
-					address_city: billingAddress.address_city,
-					details: billingAddress.details,
-					postal_code: billingAddress.postal_code,
-					contact_name: client.contact_name,
-					contact_email: client.contact_email,
-					contact_phone: client.contact_phone,
-				},
+				billing_address_id: data.billing_address_id,
 				notes: data.notes ?? null,
 				lines: toOrderLines(pricing.lines),
 			});
 
-			await manager.save(
-				manager.create(OrderShippingEntity, {
+			if (shippingLines.length > 0) {
+				await this.shippingService.createWithin(manager, {
+					// A checkout always produces the same kind of movement: stock leaving a
+					// warehouse for the client. A relocation or a return is raised elsewhere
+					scope: ShippingScopeEnum.DELIVERY,
 					order_id: order.id,
 					method: data.delivery_method,
-					warehouse_id: warehouse.id,
+					pickup_warehouse_id: warehouse.id,
+					// Null for a pickup: the goods are collected from the warehouse
+					destination_client_address_id:
+						deliveryAddressId ?? undefined,
 					price: 0,
 					vat_rate: 0,
 					currency: pricing.currency,
@@ -915,18 +980,13 @@ export class CartService {
 					contact_name:
 						client.contact_name ??
 						client.person_name ??
-						client.company_name,
-					contact_phone: client.contact_phone,
-					contact_email: client.contact_email,
-					// Null for a pickup: the goods are collected from the warehouse
-					address_country: deliveryAddress?.address_country ?? null,
-					address_region: deliveryAddress?.address_region ?? null,
-					address_city: deliveryAddress?.address_city ?? null,
-					details: deliveryAddress?.details ?? null,
-					postal_code: deliveryAddress?.postal_code ?? null,
-					notes: deliveryAddress?.notes ?? null,
-				}),
-			);
+						client.company_name ??
+						undefined,
+					contact_phone: client.contact_phone ?? undefined,
+					contact_email: client.contact_email ?? undefined,
+					lines: shippingLines,
+				});
+			}
 
 			// By id rather than by entity: `remove` would strip the id off the object the caller
 			// still holds, and the lines go through the `cart_item.cart_id` cascade either way.
@@ -1030,4 +1090,5 @@ export const cartService = new CartService(
 	productBundleSelectionService,
 	warehouseService,
 	clientAddressService,
+	shippingService,
 );

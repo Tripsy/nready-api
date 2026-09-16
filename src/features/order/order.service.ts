@@ -12,7 +12,6 @@ import { DocumentTypeEnum } from '@/features/document-series/document-series.ent
 import { documentSeriesService } from '@/features/document-series/document-series.service';
 import { exchangeRateService } from '@/features/exchange-rate/exchange-rate.service';
 import OrderEntity, {
-	type OrderBillingDetails,
 	type OrderPaymentMethod,
 	type OrderStatus,
 	OrderStatusEnum,
@@ -110,8 +109,14 @@ export type OrderCreateInput = {
 	type?: OrderType;
 	/** How the client pays. Absent on a back-office document that has not agreed it yet. */
 	payment_method?: OrderPaymentMethod | null;
-	/** The billing client and address, copied by the caller. Absent on a back-office document. */
-	billing_details?: OrderBillingDetails | null;
+	/**
+	 * The client address the order is billed to. Absent on a back-office document that has not
+	 * agreed one yet.
+	 *
+	 * The caller is what proves the address belongs to the billed client - a checkout resolves it
+	 * through `ClientAddressService.getOrderSnapshot`, which answers a 404 for anybody else's.
+	 */
+	billing_address_id?: number | null;
 	notes?: string | null;
 	/** Defaults to now. Injectable so a backdated import states its own date. */
 	issued_at?: Date;
@@ -179,7 +184,7 @@ const ENTRY_COLUMNS = [
 	'order.status',
 	'order.type',
 	'order.payment_method',
-	'order.billing_details',
+	'order.billing_address_id',
 	'order.issued_at',
 	'order.notes',
 	'order.created_at',
@@ -358,7 +363,7 @@ export class OrderService {
 				status: OrderStatusEnum.PENDING,
 				type: data.type ?? OrderTypeEnum.STANDARD,
 				payment_method: data.payment_method ?? null,
-				billing_details: data.billing_details ?? null,
+				billing_address_id: data.billing_address_id ?? null,
 				issued_at: issuedAt,
 				notes: data.notes ?? null,
 			}),
@@ -488,6 +493,7 @@ export class OrderService {
 				currency: data.currency,
 				exchange_rate: exchangeRate,
 				type: data.type,
+				billing_address_id: data.billing_address_id ?? null,
 				issued_at: issuedAt,
 				notes: data.notes ?? null,
 				lines: data.lines.map((line, index) => ({

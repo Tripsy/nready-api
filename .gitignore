@@ -48,5 +48,6 @@ audit.json
 
 # Throwaway runtime probes - see ../nready-ui/.claude/skills/probe-runtime. The container
 # mounts only this repo, so a probe has to sit here rather than in a temp dir outside it.
+/tsconfig.probe.json
 __probe-*.ts
 __probe-*.mjs

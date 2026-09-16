@@ -4,5 +4,5 @@
 	"relativePath": "/discount",
 	"entities": ["discount", "discount-target"],
 	"depends_on": [],
-	"required_by": ["invoice", "order", "order-shipping", "cart"]
+	"required_by": ["invoice", "order", "shipping", "cart"]
 }

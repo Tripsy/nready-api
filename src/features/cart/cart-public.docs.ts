@@ -13,7 +13,7 @@ import {
 import type { cartPublicController } from '@/features/cart/cart-public.controller';
 import { CART_TOKEN_HEADER } from '@/features/cart/cart-public.controller';
 import { OrderPaymentMethodEnum } from '@/features/order/order.entity';
-import { ShippingMethodEnum } from '@/features/order-shipping/order-shipping.entity';
+import { ShippingMethodEnum } from '@/features/shipping/shipping.entity';
 import {
 	type ApiInputDocumentation,
 	helperApiInputDocumentation,
@@ -208,7 +208,7 @@ export const docs: Record<
 		withAuthErrors: true,
 		withErrors: [400, 404, 409, 422],
 		request: {
-			notes: "Requires an account: the order names a `client` to invoice, and it has to be one of the caller's own - listed by `GET /public/clients`, added by `POST /public/clients`. Somebody else's client answers 404, exactly as a missing one does. Prices are resolved once more here rather than reused from whatever the shopper was last shown, and those are the figures written to the order - so this is the moment they stop moving. An empty cart answers 400, and so does a cart with any line carrying an `issue`. The delivery choice is written as the order's first `order_shipping` row, leaving from the active default warehouse at no charge and carrying the client's contact details - 409 when no default warehouse is configured. The cart is deleted once the order is written, in the same transaction and with its lines - the order is the record of what was bought, and the next visit starts a fresh cart with a new token",
+			notes: "Requires an account: the order names a `client` to invoice, and it has to be one of the caller's own - listed by `GET /public/clients`, added by `POST /public/clients`. Somebody else's client answers 404, exactly as a missing one does. Prices are resolved once more here rather than reused from whatever the shopper was last shown, and those are the figures written to the order - so this is the moment they stop moving. An empty cart answers 400, and so does a cart with any line carrying an `issue`. The delivery choice is written as the order's first `shipping` row, leaving from the active default warehouse at no charge and carrying the client's contact details - 409 when no default warehouse is configured. The cart is deleted once the order is written, in the same transaction and with its lines - the order is the record of what was bought, and the next visit starts a fresh cart with a new token",
 			body: {
 				client_id: {
 					type: 'number',
@@ -225,12 +225,12 @@ export const docs: Record<
 					type: 'number',
 					required: true,
 					condition:
-						'a `billing` address filed under client_id (`GET /public/client-addresses`); copied onto the order as `billing_details`',
+						'a `billing` address filed under client_id (`GET /public/client-addresses`); referenced by the order as `billing_address_id`',
 				},
 				delivery_address_id: {
 					type: 'number',
 					required: false,
-					condition: `a \`delivery\` address filed under client_id; required when delivery_method is ${ShippingMethodEnum.COURIER}, ignored for ${ShippingMethodEnum.SELF_PICKUP}; copied onto the shipment`,
+					condition: `a \`delivery\` address filed under client_id; required when delivery_method is ${ShippingMethodEnum.COURIER}, ignored for ${ShippingMethodEnum.SELF_PICKUP}; referenced by the shipment as \`client_address_id\` and frozen into \`address_data\` when it ships`,
 				},
 				payment_method: {
 					type: 'enum',

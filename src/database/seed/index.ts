@@ -20,6 +20,7 @@ import { placeSeed } from '@/features/place/database/place.seed';
 import { productSeed } from '@/features/product/database/product.seed';
 import { ratingSeed } from '@/features/rating/database/rating.seed';
 import { reviewSeed } from '@/features/review/database/review.seed';
+import { shippingSeed } from '@/features/shipping/database/shipping.seed';
 import { termSeed } from '@/features/term/database/term.seed';
 import { userSeed } from '@/features/user/database/user.seed';
 import { vendorSeed } from '@/features/vendor/database/vendor.seed';
@@ -74,6 +75,9 @@ const seeds: readonly SeedDefinition[] = [
 	// Reads client ids and priced product variants; allocates its numbers from the `ORD` series,
 	// so it has to follow `documentSeriesSeed` as well
 	orderSeed,
+	// Reads orders with their lines, plus warehouse, carrier and client address ids - so it has to
+	// follow `orderSeed`, `warehouseSeed` and `clientAddressSeed`
+	shippingSeed,
 	// Reads product, product variant and user ids, and the completed orders a verified review
 	// names - so it has to follow `orderSeed`
 	reviewSeed,

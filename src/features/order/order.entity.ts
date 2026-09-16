@@ -7,7 +7,7 @@ import {
 	OneToMany,
 } from 'typeorm';
 import type ClientEntity from '@/features/client/client.entity';
-import type { ClientType } from '@/features/client/client.entity';
+import type ClientAddressEntity from '@/features/client-address/client-address.entity';
 import type OrderLineEntity from '@/features/order/order-line.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import type { StatusTransitions } from '@/shared/types/common.type';
@@ -33,8 +33,8 @@ export type OrderStatus =
  *
  * **`canceled` stays reachable from `confirmed`**, unlike `grn`, where confirming already moved
  * stock and cancelling has to post reversals. Confirming an order moves nothing: stock leaves on
- * the shipping transition, not here (see `order-shipping.entity.ts`, `warehouse_id`), so an order
- * canceled before it ships has nothing to undo. A shipment already under way is `order_shipping`'s
+ * the shipping transition, not here (see `shipping.entity.ts`, `warehouse_id`), so an order
+ * canceled before it ships has nothing to undo. A shipment already under way is `shipping`'s
  * own status machine to resolve.
  *
  * **`completed` is terminal.** An order that goes wrong afterwards is corrected on the money, not
@@ -78,38 +78,6 @@ export const OrderPaymentMethodEnum = {
 
 export type OrderPaymentMethod =
 	(typeof OrderPaymentMethodEnum)[keyof typeof OrderPaymentMethodEnum];
-
-/**
- * Who the order is billed to and where, frozen when it was placed. The field names follow
- * `invoice.billing_details` so an invoice raised from the order copies it across - declared here
- * rather than imported because `invoice` depends on `order`, not the other way round.
- *
- * The place names are text, not ids: a city renamed or removed later must not change a document
- * already issued against it.
- */
-export type OrderBillingDetails = {
-	client_type: ClientType;
-
-	person_name?: string | null;
-
-	company_name?: string | null;
-	company_cui?: string | null;
-	company_reg_com?: string | null;
-
-	iban?: string | null;
-	bank_name?: string | null;
-
-	address_country: string | null;
-	address_region: string | null;
-	address_city: string | null;
-	/** Street and number, followed by the flat, floor or apartment when the client address states one. */
-	details: string | null;
-	postal_code: string | null;
-
-	contact_name?: string | null;
-	contact_email?: string | null;
-	contact_phone?: string | null;
-};
 
 const ENTITY_TABLE_NAME = 'order';
 
@@ -173,12 +141,24 @@ export default class OrderEntity extends EntityAbstract {
 	})
 	payment_method!: OrderPaymentMethod | null;
 
-	@Column('jsonb', {
+	/**
+	 * Where the order is billed, named by reference rather than copied.
+	 *
+	 * Null on a back-office document raised before a billing address is agreed, and null again once
+	 * that address is removed - the key is `SET NULL`, so deleting a client address stays possible
+	 * and cannot take the order with it.
+	 *
+	 * The counterparty's own details are not duplicated here either; they are read through
+	 * `client_id`. An invoice raised from the order is where they get frozen, into
+	 * `invoice.billing_details` - the invoice is the document that has to keep saying who was
+	 * billed whatever the client edits afterwards, and an order is still amendable.
+	 */
+	@Column('int', {
 		nullable: true,
-		comment:
-			'Snapshot of the billing client and address at the moment the order was placed',
+		comment: 'The client address the order is billed to',
 	})
-	billing_details!: OrderBillingDetails | null;
+	@Index('IDX_order_billing_address_id')
+	billing_address_id!: number | null;
 
 	@Column({ type: 'timestamp', nullable: false })
 	@Index('IDX_order_issued_at')
@@ -193,6 +173,14 @@ export default class OrderEntity extends EntityAbstract {
 	})
 	@JoinColumn({ name: 'client_id' })
 	client!: ClientEntity;
+
+	// SET NULL rather than RESTRICT: a client address is deleted outright, and an order placed
+	// against it must not be what blocks the client from tidying their address book
+	@ManyToOne('ClientAddressEntity', {
+		onDelete: 'SET NULL',
+	})
+	@JoinColumn({ name: 'billing_address_id' })
+	billing_address?: ClientAddressEntity | null;
 
 	@OneToMany(
 		'OrderLineEntity',

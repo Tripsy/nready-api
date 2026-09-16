@@ -9,7 +9,7 @@
 		"product",
 		"discount",
 		"order",
-		"order-shipping",
+		"shipping",
 		"warehouse",
 		"user",
 		"term"

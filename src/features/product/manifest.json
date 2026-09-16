@@ -22,5 +22,5 @@
 		"product-variant-attribute"
 	],
 	"depends_on": ["brand", "category", "term"],
-	"required_by": ["order", "grn", "review", "cart"]
+	"required_by": ["order", "grn", "review", "cart", "shipping"]
 }

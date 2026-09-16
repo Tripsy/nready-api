@@ -9,6 +9,7 @@ import {
 	UpdateDateColumn,
 } from 'typeorm';
 import type AddressEntity from '@/features/address/address.entity';
+import type { AddressSnapshot } from '@/features/address/address.entity';
 import type ClientEntity from '@/features/client/client.entity';
 
 export const ClientAddressTypeEnum = {
@@ -18,6 +19,13 @@ export const ClientAddressTypeEnum = {
 
 export type ClientAddressType =
 	(typeof ClientAddressTypeEnum)[keyof typeof ClientAddressTypeEnum];
+
+/**
+ * A client address flattened as a document freezes it. The shape is `AddressSnapshot`, which
+ * `address` owns because a warehouse's address flattens to the same thing; the alias stays so
+ * callers that only deal in client addresses keep naming what they mean.
+ */
+export type ClientAddressSnapshot = AddressSnapshot;
 
 const ENTITY_TABLE_NAME = 'client_address';
 

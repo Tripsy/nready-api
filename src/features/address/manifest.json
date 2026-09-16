@@ -4,5 +4,5 @@
 	"relativePath": "/address",
 	"entities": ["address"],
 	"depends_on": ["place"],
-	"required_by": ["warehouse", "client-address"]
+	"required_by": ["warehouse", "client-address", "shipping"]
 }
