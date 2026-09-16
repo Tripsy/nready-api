@@ -208,6 +208,21 @@ export class CartValidator extends BaseValidator<typeof validatorMessages> {
 	});
 
 	/**
+	 * The storefront read. `client_id` is a **preview**, not a commitment: it asks for the basket
+	 * priced against a buyer the caller holds, so a discount scoped to that client shows before
+	 * checkout rather than appearing only on the order.
+	 *
+	 * Optional because most reads have no client to name - a guest has none, and a shopper has not
+	 * chosen one until the checkout screen. Whether the id is one the caller holds is not a shape
+	 * question and is answered by the controller.
+	 */
+	readonly publicRead = z.object({
+		client_id: this.validateId(this.getMessage('invalid_client_id'), {
+			required: false,
+		}),
+	});
+
+	/**
 	 * Checkout. The client is named by the caller because an account may hold several - billing
 	 * privately or through a company is the shopper's choice. Whether the named client is one the
 	 * caller holds is not a shape question and is answered by `CartService.toOrder`.

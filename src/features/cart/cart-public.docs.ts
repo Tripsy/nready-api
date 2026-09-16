@@ -47,9 +47,17 @@ export const docs: Record<
 			description: 'The cart and what it currently costs',
 			dataSample: cartSample,
 		},
-		withErrors: [422],
+		withErrors: [404, 422],
 		request: {
 			notes: `Creates a cart and returns its \`token\` when the caller has none, so a first page load needs no separate call. Never cached. ${TOKEN_NOTE}. ${PRICING_NOTE}`,
+			query: {
+				client_id: {
+					type: 'number',
+					required: false,
+					condition:
+						"prices the basket against one of the caller's own clients, so a discount scoped to that buyer shows before checkout instead of appearing for the first time on the order; ignored for a guest, and somebody else's client answers 404",
+				},
+			},
 		},
 	}),
 
@@ -208,7 +216,7 @@ export const docs: Record<
 		withAuthErrors: true,
 		withErrors: [400, 404, 409, 422],
 		request: {
-			notes: "Requires an account: the order names a `client` to invoice, and it has to be one of the caller's own - listed by `GET /public/clients`, added by `POST /public/clients`. Somebody else's client answers 404, exactly as a missing one does. Prices are resolved once more here rather than reused from whatever the shopper was last shown, and those are the figures written to the order - so this is the moment they stop moving. An empty cart answers 400, and so does a cart with any line carrying an `issue`. The delivery choice is written as the order's first `shipping` row, leaving from the active default warehouse at no charge and carrying the client's contact details - 409 when no default warehouse is configured. The cart is deleted once the order is written, in the same transaction and with its lines - the order is the record of what was bought, and the next visit starts a fresh cart with a new token",
+			notes: "Requires an account: the order names a `client` to invoice, and it has to be one of the caller's own - listed by `GET /public/clients`, added by `POST /public/clients`. Somebody else's client answers 404, exactly as a missing one does. Prices are resolved once more here rather than reused from whatever the shopper was last shown, and those are the figures written to the order - so this is the moment they stop moving. They are resolved against `client_id`, so a discount targeting that buyer applies now and never appears on the basket, which names no client - the order can therefore total less than the cart last quoted. An empty cart answers 400, and so does a cart with any line carrying an `issue`. The delivery choice is written as the order's first `shipping` row, leaving from the active default warehouse at no charge and carrying the client's contact details - 409 when no default warehouse is configured. The cart is deleted once the order is written, in the same transaction and with its lines - the order is the record of what was bought, and the next visit starts a fresh cart with a new token",
 			body: {
 				client_id: {
 					type: 'number',

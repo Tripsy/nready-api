@@ -11,7 +11,9 @@ export function getPlaceEntityMock(): PlaceEntity {
 		id: 1,
 		place_type: PlaceTypeEnum.COUNTRY,
 		parent_id: null,
-		code: 'RO',
+		// `code` is the alpha-3 natural key; `alpha2_code` is what country rules match against
+		code: 'ROU',
+		alpha2_code: 'RO',
 		created_at: createPastDate(86400),
 		updated_at: null,
 		deleted_at: null,
@@ -23,7 +25,8 @@ export function getPlaceEntityMock(): PlaceEntity {
 export const placeInputPayloads = {
 	create: {
 		place_type: PlaceTypeEnum.COUNTRY,
-		code: 'RO',
+		code: 'ROU',
+		alpha2_code: 'RO',
 		parent_id: undefined,
 		contents: [
 			{
@@ -36,7 +39,8 @@ export const placeInputPayloads = {
 	update: {
 		id: 1,
 		place_type: PlaceTypeEnum.COUNTRY,
-		code: 'RO',
+		code: 'ROU',
+		alpha2_code: 'RO',
 		parent_id: undefined,
 		contents: [
 			{

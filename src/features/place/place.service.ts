@@ -95,6 +95,7 @@ export class PlaceService {
 			const entry = {
 				place_type: data.place_type,
 				code: data.code,
+				alpha2_code: data.alpha2_code,
 				parent_id: data.parent_id,
 			};
 

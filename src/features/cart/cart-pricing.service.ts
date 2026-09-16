@@ -7,6 +7,7 @@ import type { DiscountSnapshot } from '@/features/discount/discount.entity';
 import {
 	type DiscountResolutionService,
 	discountResolutionService,
+	type OrderDiscountBasis,
 } from '@/features/discount/discount-resolution.service';
 import type ProductEntity from '@/features/product/product.entity';
 import {
@@ -92,9 +93,16 @@ export type CartLine = {
 	vat_rate: number;
 	/** `unit_price × quantity`, excluding VAT and before any discount. */
 	subtotal: number;
-	/** Money off the whole line, in the cart's currency. */
+	/** Money off the whole line, in the cart's currency - every snapshot below, summed. */
 	discount_reduction: number;
-	discount: DiscountSnapshot | null;
+	/**
+	 * The rules that reduced this line, each carrying the share it took: the line's own best
+	 * discount first, then an order-wide campaign apportioned onto it. Null when none applied.
+	 *
+	 * An array for the same reason `order_line.discount` is one - the two stack, and a basket has
+	 * to be able to name both.
+	 */
+	discount: DiscountSnapshot[] | null;
 	/** `subtotal - discount_reduction`, excluding VAT. What the line actually costs. */
 	total: number;
 	vat_amount: number;
@@ -112,12 +120,53 @@ export type CartPricing = {
 	lines: CartLine[];
 	/** Sum of `subtotal` over sellable lines, excluding VAT. */
 	subtotal: number;
+	/** Everything the discounts took off, the order-wide campaign included. */
 	discount_reduction: number;
+	/**
+	 * The order-wide campaign that fired, or null. Its money is already inside
+	 * `discount_reduction` and inside the lines it was apportioned onto - this names it so a
+	 * basket can show what the shopper earned rather than only that a total moved.
+	 */
+	order_discount: DiscountSnapshot | null;
+	/** What `order_discount` took off. Already counted in `discount_reduction`. */
+	order_discount_reduction: number;
 	vat_amount: number;
 	/** What the shopper would pay, VAT included. */
 	total: number;
 	/** True while any line carries an `issue` - checkout is refused until they are resolved. */
 	has_issues: boolean;
+};
+
+/**
+ * Who the basket is priced for, beyond the cart row itself.
+ */
+export type CartPricingContext = {
+	/**
+	 * The client the basket would be billed to, so a discount targeting that buyer applies.
+	 *
+	 * Stated only at checkout, where the caller has named one and its ownership has been proven.
+	 * A basket being browsed leaves it out: an account may hold several clients - a person billing
+	 * privately and through their company - so there is no single buyer to price against until one
+	 * is chosen, and picking one here would quote a figure the shopper never asked for.
+	 *
+	 * ⚠️ A client-scoped discount therefore appears only once the order is raised, which is the
+	 * same point every other figure is frozen at.
+	 */
+	clientId?: number | null;
+	/**
+	 * ISO 3166-1 alpha-2, from the country the billing address resolves to, for
+	 * `conditions.applicable_countries`.
+	 *
+	 * Stated only at checkout, for the same reason `clientId` is: a basket being browsed names no
+	 * address, so there is no buyer country to judge against and every country condition fails
+	 * closed until one is chosen.
+	 */
+	countryCode?: string | null;
+	/**
+	 * The moment the catalog is read at. Injectable so a test is not at the mercy of the clock,
+	 * and so an availability window is judged against one instant across the whole basket.
+	 */
+	now?: Date;
 };
 
 /**
@@ -167,7 +216,7 @@ export class CartPricingService {
 		cart: CartEntity,
 		items: CartItemEntity[],
 		language: string = Configuration.language(),
-		now: Date = new Date(),
+		context: CartPricingContext = {},
 	): Promise<CartPricing> {
 		if (items.length === 0) {
 			return {
@@ -175,11 +224,15 @@ export class CartPricingService {
 				lines: [],
 				subtotal: 0,
 				discount_reduction: 0,
+				order_discount: null,
+				order_discount_reduction: 0,
 				vat_amount: 0,
 				total: 0,
 				has_issues: false,
 			};
 		}
+
+		const now = context.now ?? new Date();
 
 		const catalog = await this.loadCatalog(cart.currency, language, items);
 
@@ -232,6 +285,8 @@ export class CartPricingService {
 				}
 
 				const resolved = await this.discountResolution.resolveForLine({
+					clientId: context.clientId ?? null,
+					countryCode: context.countryCode ?? null,
 					variantId: line.variant_id,
 					productId: line.product_id,
 					brandId:
@@ -252,12 +307,88 @@ export class CartPricingService {
 				return {
 					...line,
 					discount_reduction: reduction,
-					discount: resolved?.snapshot ?? null,
+					discount: resolved ? [resolved.snapshot] : null,
 					total: total,
 					vat_amount: roundMoney((total * line.vat_rate) / 100),
 				};
 			}),
 		);
+
+		/*
+		 * Third pass: an order-wide campaign, costed against the basket and apportioned over what
+		 * the lines still cost - so each gives up its share at its own VAT rate.
+		 *
+		 * It stacks on top of the second pass rather than competing with it, which is why the
+		 * basis carries what each line has already given up: `headroom` is what is left before
+		 * `min_price`, so the floor holds against both passes together rather than against each
+		 * one separately.
+		 *
+		 * `min_order_value` is still read against the untouched `subtotal` - see
+		 * `DiscountBasketContext.orderValue` for why a threshold cannot be tested against a figure
+		 * the discounts have already moved.
+		 */
+		const basisLines: number[] = [];
+		const basis: OrderDiscountBasis[] = [];
+
+		lines.forEach((line, index) => {
+			// The same two exclusions the line pass makes, plus a line with nothing left to give.
+			if (line.issue !== null || line.is_bundle || line.total <= 0) {
+				return;
+			}
+
+			const floor = catalog.minPriceByVariant.get(line.variant_id);
+
+			basisLines.push(index);
+			basis.push({
+				net: line.total,
+				headroom:
+					floor === null || floor === undefined
+						? null
+						: roundMoney(
+								Math.max(
+									0,
+									(line.unit_price - Number(floor)) *
+										line.quantity,
+								) - line.discount_reduction,
+							),
+			});
+		});
+
+		const campaign = await this.discountResolution.resolveForOrder(
+			{
+				orderValue: subtotal,
+				countryCode: context.countryCode ?? null,
+				now: now,
+			},
+			basis,
+		);
+
+		if (campaign) {
+			basisLines.forEach((lineIndex, basisIndex) => {
+				const share = campaign.reductions[basisIndex];
+
+				if (share <= 0) {
+					return;
+				}
+
+				const line = lines[lineIndex];
+				const reduction = roundMoney(line.discount_reduction + share);
+				const total = roundMoney(line.subtotal - reduction);
+
+				lines[lineIndex] = {
+					...line,
+					// The campaign's own snapshot states what it took off the document; the copy
+					// landing here states this line's share of it.
+					discount: [
+						...(line.discount ?? []),
+						{ ...campaign.snapshot, reduction: share },
+					],
+					discount_reduction: reduction,
+					total: total,
+					vat_amount: roundMoney((total * line.vat_rate) / 100),
+				};
+			});
+		}
 
 		const sellable = lines.filter((line) => line.issue === null);
 
@@ -274,6 +405,8 @@ export class CartPricingService {
 			lines: lines,
 			subtotal: subtotal,
 			discount_reduction: discountReduction,
+			order_discount: campaign?.snapshot ?? null,
+			order_discount_reduction: campaign?.reduction ?? 0,
 			vat_amount: vatAmount,
 			total: roundMoney(netTotal + vatAmount),
 			has_issues: lines.some((line) => line.issue !== null),

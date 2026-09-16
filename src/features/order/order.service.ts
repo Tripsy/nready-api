@@ -7,7 +7,14 @@ import {
 	type ClientService,
 	clientService,
 } from '@/features/client/client.service';
-import type { DiscountSnapshot } from '@/features/discount/discount.entity';
+import {
+	type ClientAddressService,
+	clientAddressService,
+} from '@/features/client-address/client-address.service';
+import {
+	DiscountScopeEnum,
+	type DiscountSnapshot,
+} from '@/features/discount/discount.entity';
 import { DocumentTypeEnum } from '@/features/document-series/document-series.entity';
 import { documentSeriesService } from '@/features/document-series/document-series.service';
 import { exchangeRateService } from '@/features/exchange-rate/exchange-rate.service';
@@ -73,8 +80,12 @@ export type OrderLineInput = {
 	/** Unit price excluding VAT, in `currency`, with any option deltas already folded in. */
 	price: number;
 	vat_rate: number;
-	discount?: DiscountSnapshot | null;
-	/** Money off the whole line, in `currency`. Zero - or absent - when nothing applied. */
+	/**
+	 * The rules that reduced this line, each carrying the share it took. An array because a line
+	 * discount and an order-wide campaign stack, and the document has to name both.
+	 */
+	discount?: DiscountSnapshot[] | null;
+	/** Money off the whole line, in `currency` - the snapshots above, summed. */
 	discount_reduction?: number;
 	options?: ProductOptionSnapshot[] | null;
 	notes?: string | null;
@@ -139,8 +150,17 @@ export type OrderTotals = {
 	exchange_rate: number;
 	/** Sum of `price x quantity` over every line, VAT excluded and before any discount. */
 	subtotal: number;
-	/** Sum of the line reductions, VAT excluded. */
+	/** Sum of the line reductions, VAT excluded - the order-wide campaign included. */
 	discount_reduction: number;
+	/**
+	 * How much of `discount_reduction` came from an order-wide campaign rather than from the
+	 * lines' own discounts.
+	 *
+	 * Derived from the snapshots rather than stored: the money itself lives in the line
+	 * reductions, where the VAT base needs it, and a second column holding the same figure is one
+	 * that can drift from them.
+	 */
+	order_discount_reduction: number;
 	/** VAT on the subtotal net of those reductions, each line at its own rate. */
 	vat_amount: number;
 	total: number;
@@ -229,6 +249,7 @@ export class OrderService {
 		private repository: ReturnType<typeof getOrderRepository>,
 		private lineRepository: ReturnType<typeof getOrderLineRepository>,
 		private clientService: ClientService,
+		private clientAddressService: ClientAddressService,
 		private discountService: OrderDiscountService,
 		private optionService: OrderOptionService,
 	) {}
@@ -418,7 +439,10 @@ export class OrderService {
 				price: line.price,
 				currency: currency,
 				exchange_rate: exchangeRate,
-				discount: line.discount ? [line.discount] : null,
+				discount:
+					line.discount && line.discount.length > 0
+						? line.discount
+						: null,
 				discount_reduction: line.discount_reduction ?? 0,
 				options:
 					line.options && line.options.length > 0
@@ -477,10 +501,22 @@ export class OrderService {
 			data.currency,
 		);
 
+		/*
+		 * The buyer's country, for a campaign that names one. A back-office document may not have
+		 * agreed a billing address yet, and every country condition then fails closed - which is
+		 * the same answer the storefront gives a basket that has chosen none.
+		 */
+		const countryCode = data.billing_address_id
+			? await this.clientAddressService.getCountryCodeById(
+					data.billing_address_id,
+				)
+			: null;
+
 		const discounts = await this.discountService.resolveForLines(
 			data.lines,
 			{
 				clientId: data.client_id,
+				countryCode: countryCode,
 				currency: data.currency,
 				exchangeRate: exchangeRate,
 				now: issuedAt,
@@ -502,8 +538,8 @@ export class OrderService {
 					quantity: line.quantity,
 					price: line.price,
 					vat_rate: line.vat_rate,
-					discount: discounts[index]?.snapshot ?? null,
-					discount_reduction: discounts[index]?.reduction ?? 0,
+					discount: discounts.lines[index]?.snapshots ?? null,
+					discount_reduction: discounts.lines[index]?.reduction ?? 0,
 					options: options[index],
 					notes: line.notes ?? null,
 				})),
@@ -616,8 +652,15 @@ export class OrderService {
 			lineCurrency,
 		);
 
+		const countryCode = entry.billing_address_id
+			? await this.clientAddressService.getCountryCodeById(
+					entry.billing_address_id,
+				)
+			: null;
+
 		const discounts = await this.discountService.resolveForLines(lines, {
 			clientId: entry.client_id,
+			countryCode: countryCode,
 			currency: lineCurrency,
 			exchangeRate: exchangeRate,
 			now: entry.issued_at,
@@ -630,8 +673,8 @@ export class OrderService {
 				quantity: line.quantity,
 				price: line.price,
 				vat_rate: line.vat_rate,
-				discount: discounts[index]?.snapshot ?? null,
-				discount_reduction: discounts[index]?.reduction ?? 0,
+				discount: discounts.lines[index]?.snapshots ?? null,
+				discount_reduction: discounts.lines[index]?.reduction ?? 0,
 				options: options[index],
 				notes: line.notes ?? null,
 			})),
@@ -822,6 +865,7 @@ export class OrderService {
 	public computeTotals(lines: OrderLineEntity[]): OrderTotals {
 		let subtotal = 0;
 		let discountReduction = 0;
+		let orderDiscountReduction = 0;
 		let vatAmount = 0;
 		let hasDiscount = false;
 
@@ -838,11 +882,20 @@ export class OrderService {
 
 			if (line.discount && line.discount.length > 0) {
 				hasDiscount = true;
+
+				for (const snapshot of line.discount) {
+					if (snapshot.scope === DiscountScopeEnum.ORDER) {
+						orderDiscountReduction += Number(
+							snapshot.reduction ?? 0,
+						);
+					}
+				}
 			}
 		}
 
 		subtotal = roundMoney(subtotal);
 		discountReduction = roundMoney(discountReduction);
+		orderDiscountReduction = roundMoney(orderDiscountReduction);
 		vatAmount = roundMoney(vatAmount);
 
 		const first = lines[0];
@@ -852,6 +905,7 @@ export class OrderService {
 			exchange_rate: first ? Number(first.exchange_rate) : 1,
 			subtotal: subtotal,
 			discount_reduction: discountReduction,
+			order_discount_reduction: orderDiscountReduction,
 			vat_amount: vatAmount,
 			total: roundMoney(subtotal - discountReduction + vatAmount),
 			has_discount: hasDiscount,
@@ -925,6 +979,7 @@ export const orderService = new OrderService(
 	getOrderRepository(),
 	getOrderLineRepository(),
 	clientService,
+	clientAddressService,
 	orderDiscountService,
 	orderOptionService,
 );

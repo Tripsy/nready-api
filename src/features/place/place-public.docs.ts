@@ -32,6 +32,7 @@ export const docs: Record<
 							id: 3,
 							place_type: 'region',
 							code: 'CJ',
+							alpha2_code: null,
 							contents: [
 								{
 									language: 'en',

@@ -30,6 +30,7 @@ context yet. Read the relevant one *before* proposing an approach in that area, 
 | `auth.md` | Token model, `res.locals.auth`, policy layer, passwords, rate limiting, social login | `account`/`user-permission` features, `*.policy.ts`, auth middleware |
 | `comment.md` | Comment status model, guest vs member writes, automatic flagging at 3 distinct reporters, thread cache, the target-participation registry a target closes itself with | `src/features/comment/**`, `src/features/complaint/**`, `event.config.ts`, `target-participation.config.ts` |
 | `database.md` | Entities, repository/query layer, transactions, migrations, seeds | `*.entity.ts`, `*.repository.ts`, `*.service.ts`, `*.subscriber.ts`, migrations |
+| `discount.md` | Discount scopes and targets, the two resolution passes and how they stack, the gross `min_order_value` base, order-wide apportionment, where the money sits on a line | `src/features/discount/**`, `cart-pricing.service.ts`, `order-discount.service.ts` |
 | `error-handling.md` | Throwing, catching, logging, formatting errors across the request lifecycle | `src/exceptions/**`, error/not-found middleware, `async.handler.ts` |
 | `feature-installer.md` | Feature packaging, the `manifest.json` contract, `depends_on`/`required_by` version ranges, install/remove/upgrade checks | `cli/feature.ts`, `cli/helpers/version.ts`, `**/manifest.json` |
 | `product.md` | The product / variant / option / bundle split, availability windows, order-line arithmetic | `src/features/product/**`, `order-line.entity.ts`, `order-shipping/**` |

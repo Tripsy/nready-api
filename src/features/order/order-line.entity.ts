@@ -151,9 +151,10 @@ export default class OrderLineEntity extends EntityAbstract {
 	})
 	discount_reduction!: number;
 
-	// `price` is the variant price alone; the deltas recorded here are what reconciles it with the
-	// line total. Snapshot rather than a join table for the same reason `discount` is one - the
-	// option may be renamed, repriced or withdrawn, and the charged figure must not move with it
+	// `price` already has these deltas folded in; they describe how the figure was reached and are
+	// never added to it again (`product.md` §5). Snapshot rather than a join table for the same
+	// reason `discount` is one - the option may be renamed, repriced or withdrawn, and the charged
+	// figure must not move with it
 	@Column('jsonb', {
 		nullable: true,
 		comment:

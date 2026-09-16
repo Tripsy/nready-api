@@ -4,6 +4,7 @@ import type { DiscountSnapshot } from '@/features/discount/discount.entity';
 import {
 	type DiscountResolutionService,
 	discountResolutionService,
+	type OrderDiscountBasis,
 } from '@/features/discount/discount-resolution.service';
 import ProductCategoryEntity from '@/features/product/product-category.entity';
 import ProductPriceEntity from '@/features/product/product-price.entity';
@@ -20,9 +21,27 @@ export type OrderDiscountLine = {
 };
 
 export type OrderLineDiscount = {
-	snapshot: DiscountSnapshot | null;
-	/** Money off the whole line, in the document's currency. Zero when nothing applied. */
+	/**
+	 * The rules that reduced this line, each carrying the share it took - the line's own best
+	 * discount, then an order-wide campaign apportioned onto it. Null when none applied.
+	 */
+	snapshots: DiscountSnapshot[] | null;
+	/** Money off the whole line, in the document's currency - the snapshots above, summed. */
 	reduction: number;
+};
+
+/** What the catalog took off a whole document. */
+export type OrderDocumentDiscount = {
+	/** Index-aligned with the lines handed in. */
+	lines: OrderLineDiscount[];
+	/** The order-wide campaign that fired, or null. */
+	campaign: DiscountSnapshot | null;
+	/**
+	 * What `campaign` took off the document. **Already inside the line reductions above** - it is
+	 * stated separately so a reader can see what the campaign was worth, never to be subtracted
+	 * a second time.
+	 */
+	campaign_reduction: number;
 };
 
 export type OrderDiscountContext = {
@@ -30,6 +49,12 @@ export type OrderDiscountContext = {
 	currency: string;
 	/** Rate to the base currency, following `order_line.exchange_rate`. */
 	exchangeRate: number;
+	/**
+	 * ISO 3166-1 alpha-2, from the country the document's billing address resolves to, for
+	 * `conditions.applicable_countries`. Null when the document names no billing address or its
+	 * place chain reaches no country - either way every country condition then fails closed.
+	 */
+	countryCode?: string | null;
 	/**
 	 * The moment the discounts are asked about - the document's issue date, so a backdated order
 	 * gets the campaign that was running the day it was issued rather than today's.
@@ -61,9 +86,9 @@ export class OrderDiscountService {
 	public async resolveForLines(
 		lines: readonly OrderDiscountLine[],
 		context: OrderDiscountContext,
-	): Promise<OrderLineDiscount[]> {
+	): Promise<OrderDocumentDiscount> {
 		if (lines.length === 0) {
-			return [];
+			return { lines: [], campaign: null, campaign_reduction: 0 };
 		}
 
 		const catalog = await this.loadCatalog(lines, context.currency);
@@ -77,10 +102,11 @@ export class OrderDiscountService {
 			),
 		);
 
-		return Promise.all(
-			lines.map(async (line) => {
-				const resolved = await this.discountResolution.resolveForLine({
+		const resolved = await Promise.all(
+			lines.map((line) =>
+				this.discountResolution.resolveForLine({
 					clientId: context.clientId,
+					countryCode: context.countryCode ?? null,
 					variantId: line.variant_id,
 					productId: line.product_id,
 					brandId:
@@ -94,14 +120,73 @@ export class OrderDiscountService {
 						catalog.minPriceByVariant.get(line.variant_id) ?? null,
 					orderValue: orderValue,
 					now: context.now,
-				});
-
-				return {
-					snapshot: resolved?.snapshot ?? null,
-					reduction: resolved?.reduction ?? 0,
-				};
-			}),
+				}),
+			),
 		);
+
+		const perLine: OrderLineDiscount[] = resolved.map((line) => ({
+			snapshots: line ? [line.snapshot] : null,
+			reduction: line?.reduction ?? 0,
+		}));
+
+		/*
+		 * The order-wide pass, stacked on top of what each line already gave up - which is why
+		 * the basis states both what is left on the line and how much of its floor is unspent.
+		 * `min_order_value` still reads the gross `orderValue` above.
+		 */
+		const basis: OrderDiscountBasis[] = lines.map((line, index) => {
+			const gross = roundMoney(line.price * line.quantity);
+			const floor = catalog.minPriceByVariant.get(line.variant_id);
+			const taken = perLine[index].reduction;
+
+			return {
+				net: roundMoney(gross - taken),
+				headroom:
+					floor === null || floor === undefined
+						? null
+						: roundMoney(
+								Math.max(
+									0,
+									(line.price - Number(floor)) *
+										line.quantity,
+								) - taken,
+							),
+			};
+		});
+
+		const campaign = await this.discountResolution.resolveForOrder(
+			{
+				exchangeRate: context.exchangeRate,
+				orderValue: orderValue,
+				countryCode: context.countryCode ?? null,
+				now: context.now,
+			},
+			basis,
+		);
+
+		if (campaign) {
+			campaign.reductions.forEach((share, index) => {
+				if (share <= 0) {
+					return;
+				}
+
+				perLine[index] = {
+					// The campaign's own snapshot states what it took off the document; the copy
+					// landing here states this line's share of it.
+					snapshots: [
+						...(perLine[index].snapshots ?? []),
+						{ ...campaign.snapshot, reduction: share },
+					],
+					reduction: roundMoney(perLine[index].reduction + share),
+				};
+			});
+		}
+
+		return {
+			lines: perLine,
+			campaign: campaign?.snapshot ?? null,
+			campaign_reduction: campaign?.reduction ?? 0,
+		};
 	}
 
 	/**

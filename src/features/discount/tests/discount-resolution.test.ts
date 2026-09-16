@@ -7,9 +7,11 @@ import DiscountEntity, {
 	DiscountTypeEnum,
 } from '@/features/discount/discount.entity';
 import {
+	computeOrderReductions,
 	computeReduction,
 	type DiscountLineContext,
 	evaluateConditions,
+	type OrderDiscountBasis,
 } from '@/features/discount/discount-resolution.service';
 
 function makeDiscount(overrides: {
@@ -40,6 +42,70 @@ const baseContext: DiscountLineContext = {
 	unitPrice: 100,
 	exchangeRate: 1,
 };
+
+describe('computeOrderReductions', () => {
+	const basis = (
+		...lines: (number | OrderDiscountBasis)[]
+	): OrderDiscountBasis[] =>
+		lines.map((line) => (typeof line === 'number' ? { net: line } : line));
+
+	const orderDiscount = (value: number, type?: DiscountType) =>
+		makeDiscount({ value, type, scope: DiscountScopeEnum.ORDER });
+
+	it('apportions a percentage pro-rata by what each line still costs', () => {
+		expect(
+			computeOrderReductions(orderDiscount(10), basis(60, 40), 1),
+		).toEqual([6, 4]);
+	});
+
+	it('converts an absolute campaign from base into the sale currency', () => {
+		expect(
+			computeOrderReductions(
+				orderDiscount(20, DiscountTypeEnum.AMOUNT),
+				basis(60, 40),
+				2,
+			),
+		).toEqual([6, 4]);
+	});
+
+	it('clamps a line to its headroom and does not pass the remainder on', () => {
+		// The 10% campaign is worth 10, but the first line may only give up 2 more before it
+		// reaches its floor. The second keeps its own share rather than absorbing the rest.
+		expect(
+			computeOrderReductions(
+				orderDiscount(10),
+				basis({ net: 60, headroom: 2 }, { net: 40 }),
+				1,
+			),
+		).toEqual([2, 4]);
+	});
+
+	it('never takes more off than the basket still costs', () => {
+		expect(
+			computeOrderReductions(
+				orderDiscount(100, DiscountTypeEnum.AMOUNT),
+				basis(10, 10),
+				1,
+			),
+		).toEqual([10, 10]);
+	});
+
+	it('reconciles the rounding remainder so the shares sum to the campaign', () => {
+		const reductions = computeOrderReductions(
+			orderDiscount(10),
+			basis(33.33, 33.33, 33.34),
+			1,
+		);
+
+		expect(reductions.reduce((sum, value) => sum + value, 0)).toBe(10);
+	});
+
+	it('takes nothing off a basket with no money left on it', () => {
+		expect(
+			computeOrderReductions(orderDiscount(10), basis(0, 0), 1),
+		).toEqual([0, 0]);
+	});
+});
 
 describe('computeReduction', () => {
 	it('applies a percentage to the unit price, times quantity', () => {
@@ -227,6 +293,9 @@ describe('evaluateConditions', () => {
 		).toBe(true);
 	});
 
+	// Alpha-2 throughout, the vocabulary every country rule shares - the evaluator only uppercases
+	// and compares, so it would pass either way, but a fixture in a vocabulary the validator
+	// refuses to store is a test documenting a contract that does not exist
 	it('matches applicable_countries case-insensitively and fails a missing country', () => {
 		const rules = { applicable_countries: ['RO', 'BG'] };
 

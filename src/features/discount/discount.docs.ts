@@ -56,7 +56,7 @@ export const docs: Record<
 				conditions: {
 					type: 'object',
 					required: false,
-					format: '{ hour_range?: [number, number]; day_range?: [number, number]; min_order_value?: number; applicable_countries?: string[] }',
+					format: '{ hour_range?: [number, number]; day_range?: [number, number]; min_order_value?: number; applicable_countries?: string[] (ISO 3166-1 alpha-2, e.g. RO) }',
 				},
 				value: {
 					type: 'number',
@@ -143,7 +143,7 @@ export const docs: Record<
 				conditions: {
 					type: 'object',
 					required: false,
-					format: '{ hour_range?: [number, number]; day_range?: [number, number]; min_order_value?: number; applicable_countries?: string[] }',
+					format: '{ hour_range?: [number, number]; day_range?: [number, number]; min_order_value?: number; applicable_countries?: string[] (ISO 3166-1 alpha-2, e.g. RO) }',
 				},
 				value: {
 					type: 'number',

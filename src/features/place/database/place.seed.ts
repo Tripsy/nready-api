@@ -17,6 +17,11 @@ type PlaceSeedRow = {
 	name: string;
 	place_type: (typeof PlaceTypeEnum)[keyof typeof PlaceTypeEnum];
 	parent_code: string | null;
+	/**
+	 * ISO 3166-1 alpha-2, on countries only - the vocabulary country rules are matched against.
+	 * Omitted by every region and city, which have no country code of their own.
+	 */
+	alpha2?: string;
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -32,36 +37,42 @@ const placeData: readonly PlaceSeedRow[] = [
 		name: 'Romania',
 		place_type: PlaceTypeEnum.COUNTRY,
 		parent_code: null,
+		alpha2: 'RO',
 	},
 	{
 		code: 'HUN',
 		name: 'Hungary',
 		place_type: PlaceTypeEnum.COUNTRY,
 		parent_code: null,
+		alpha2: 'HU',
 	},
 	{
 		code: 'BGR',
 		name: 'Bulgaria',
 		place_type: PlaceTypeEnum.COUNTRY,
 		parent_code: null,
+		alpha2: 'BG',
 	},
 	{
 		code: 'AUT',
 		name: 'Austria',
 		place_type: PlaceTypeEnum.COUNTRY,
 		parent_code: null,
+		alpha2: 'AT',
 	},
 	{
 		code: 'DEU',
 		name: 'Germany',
 		place_type: PlaceTypeEnum.COUNTRY,
 		parent_code: null,
+		alpha2: 'DE',
 	},
 	{
 		code: 'ITA',
 		name: 'Italy',
 		place_type: PlaceTypeEnum.COUNTRY,
 		parent_code: null,
+		alpha2: 'IT',
 	},
 
 	// Romanian counties
@@ -284,6 +295,7 @@ export const placeSeed: SeedDefinition = {
 			const saved = await placeRepository.save(
 				placeRepository.create({
 					code: place.code,
+					alpha2_code: place.alpha2 ?? null,
 					place_type: place.place_type,
 					parent_id: parentId,
 				}),

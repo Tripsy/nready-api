@@ -809,10 +809,32 @@ export class CartService {
 		return query.all();
 	}
 
-	/** The cart as the storefront sees it: the row, plus what it costs at this moment. */
+	/**
+	 * Refuses a client the buyer does not hold, for a caller that wants to name one.
+	 *
+	 * The same check `toOrder` makes, exposed so the read can preview against a client without the
+	 * controller reaching for `ClientService` itself: somebody else's client answers the same 404 a
+	 * missing one does, so the endpoint cannot be used to discover which clients exist.
+	 */
+	public async assertOwnClient(
+		clientId: number,
+		userId: number,
+	): Promise<void> {
+		await this.clientService.findOwnById(clientId, userId);
+	}
+
+	/**
+	 * The cart as the storefront sees it: the row, plus what it costs at this moment.
+	 *
+	 * `clientId` is a preview and is normally absent. An account may hold several clients and a
+	 * basket names none of them, so nothing is assumed here - but once the checkout screen has one
+	 * chosen, pricing against it is what stops a client-scoped discount appearing for the first
+	 * time on the order. The caller is what proves the client belongs to the buyer.
+	 */
 	public async withPricing(
 		cart: CartEntity,
 		language?: string,
+		clientId?: number | null,
 	): Promise<CartWithPricing> {
 		const items = await this.getItems(cart.id);
 
@@ -822,7 +844,9 @@ export class CartService {
 			currency: cart.currency,
 			user_id: cart.user_id,
 			expires_at: cart.expires_at,
-			pricing: await this.pricing.price(cart, items, language),
+			pricing: await this.pricing.price(cart, items, language, {
+				clientId: clientId ?? null,
+			}),
 		};
 	}
 
@@ -911,7 +935,24 @@ export class CartService {
 			throw new BadRequestError(lang('cart.error.empty'));
 		}
 
-		const pricing = await this.pricing.price(cart, items, language);
+		/*
+		 * The buyer's country, for a campaign that names one. Read separately from the ownership
+		 * check above because that returns a snapshot, whose `address_country` is a display name
+		 * frozen for the document ("Romania") rather than the code a condition matches ("ROU").
+		 */
+		const countryCode = await this.clientAddressService.getCountryCodeById(
+			data.billing_address_id,
+		);
+
+		/*
+		 * Priced against the client being billed and their country, neither of which the basket
+		 * could name: a discount targeting that buyer, or their market, applies here and nowhere
+		 * earlier - so the figures the order is written at can sit below the ones last quoted.
+		 */
+		const pricing = await this.pricing.price(cart, items, language, {
+			clientId: client.id,
+			countryCode: countryCode,
+		});
 
 		if (pricing.has_issues) {
 			throw new BadRequestError(lang('cart.error.has_issues'));

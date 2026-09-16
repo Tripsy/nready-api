@@ -173,22 +173,30 @@ Customer orders **one 32 cm Margherita, stuffed crust, extra mozzarella and pros
 
 - `variant_id` → `PIZZA-MARG-32`, `product_id` → `PIZZA-MARG`
 - `quantity` = 1
-- **`price` = 45.00** - the variant price *alone*
+- **`price` = 68.00** - the unit price with the option deltas *already folded in*
 - `vat_rate` = 11.00, `currency` = RON
 - `options` = `[ {Stuffed crust, +8.00, RON}, {Extra mozzarella, +6.00, RON}, {Prosciutto, +9.00, RON} ]`
 
 ```
- 45.00  variant price
- +8.00  stuffed crust
- +6.00  extra mozzarella
- +9.00  prosciutto
+ 45.00  variant price      (not stored on the line)
+ +8.00  stuffed crust      ┐
+ +6.00  extra mozzarella   ├ options snapshots - describe, do not add
+ +9.00  prosciutto         ┘
 ──────
- 68.00  × quantity 1  = 68.00 net
-                        75.48 gross (11% VAT)
+ 68.00  price × quantity 1  = 68.00 net, before discounts
+                              75.48 gross (11% VAT)
 ```
 
-**`price` is not the line total and is not meant to be** - the deltas are what reconcile it. Any code
-that treats `price * quantity` as the line total is wrong the moment an option is chosen.
+**`price * quantity` is the line figure before discounts**, and the deltas must never be added to
+it again - `OrderService.computeTotals` and `OrderDiscountService` both read `price` that way. The
+snapshots are there so an invoice can say *why* the figure is 68, not to compute it. The variant
+price alone is recoverable as `price - SUM(options[].price_delta)`, and only as long as nobody
+agreed a different figure: a back-office line's `price` is what the operator agreed, deltas
+included, and may not decompose into the catalog price at all.
+
+Both writers state it the same way - `CartService.toOrder` copies `CartLine.unit_price` (the
+cart's `base_price` is the variant price alone, for display), and `OrderOptionService` records the
+deltas of a back-office line without moving its `price`.
 
 `options` is a snapshot, frozen for the same reason `DiscountSnapshot` is: raise stuffed crust to 10
 RON next week and last month's receipt still reads 8.
@@ -477,7 +485,7 @@ These need the service layer. None of them can be pushed into a constraint.
 3. **`min_select` / `max_select` compliance at checkout.** The bounds are stored on
    `product_option_group`; only the service can count what was submitted. A bundle choice has no
    bounds to check - exactly one candidate, which the order flow enforces by shape (§8.1).
-4. **The line total.** `price` plus the sum of the option deltas, then quantity, then discounts,
+4. **The line total.** `price` (option deltas already in it, §5) times quantity, then discounts,
    then VAT - in that order, since discounts apply to prices excluding VAT.
 5. **A bundle adds up to at least two units.** `SUM(product_bundle_item.quantity)` over the bundle's
    components that are *not* `is_optional` and belong to no group has to reach two once

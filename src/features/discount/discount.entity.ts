@@ -68,7 +68,15 @@ export type DiscountConditions = {
 	day_range?: [number, number];
 	/** Basket subtotal in the base currency, excluding VAT. */
 	min_order_value?: number;
-	/** ISO 3166-1 alpha-2 codes. */
+	/**
+	 * ISO 3166-1 **alpha-2** codes, matched against the country the buyer's billing address
+	 * resolves to (`place.alpha2_code`).
+	 *
+	 * Alpha-2 because it is the only vocabulary the whole codebase can share: the reader-side
+	 * rule in `article_visibility_rule.allowed_countries` is compared against CDN geo headers
+	 * (`getRequestCountry`), which emit alpha-2 and are not ours to change. `place.code` stays
+	 * alpha-3 - it is the place seed's natural key, not a country rule's vocabulary.
+	 */
 	applicable_countries?: string[];
 };
 
@@ -88,6 +96,25 @@ export type DiscountSnapshot = {
 	type: DiscountType;
 	conditions?: DiscountConditions;
 	value: number;
+	/**
+	 * The rule this came from, so reporting groups by it rather than by matching on `label` or
+	 * `reference` - both of which an operator may edit after the document was raised.
+	 *
+	 * Optional because rows written before it existed carry none, and because the id is no use
+	 * to a reader without the catalog behind it: the rest of the snapshot is what makes the
+	 * document readable on its own.
+	 */
+	discount_id?: number;
+	/**
+	 * What this snapshot alone took off the line, in the line currency, after clamping.
+	 *
+	 * A line may carry several snapshots - its own best discount, then an order-wide campaign
+	 * apportioned onto it - while `order_line.discount_reduction` is their **sum** and the only
+	 * figure the VAT base is computed from. This is what splits that sum back up, and it cannot
+	 * be replayed from `type` and `value` because neither carries the floor the figure was
+	 * clamped to.
+	 */
+	reduction?: number;
 };
 
 const ENTITY_TABLE_NAME = 'discount';

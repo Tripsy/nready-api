@@ -75,6 +75,9 @@ export class DiscountValidator extends BaseValidator<typeof validatorMessages> {
 				])
 				.optional(),
 			min_order_value: z.number().nonnegative().optional(),
+			// ISO 3166-1 alpha-2, the vocabulary every country rule in this codebase speaks.
+			// `getRequestCountry` reads it from CDN geo headers, which emit nothing else, so the
+			// one input we do not control sets the standard and the rest meets it
 			applicable_countries: z
 				.array(z.string().length(2).toUpperCase())
 				.optional(),

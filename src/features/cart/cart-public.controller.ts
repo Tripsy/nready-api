@@ -68,14 +68,39 @@ class CartPublicController extends BaseController {
 		);
 	}
 
+	/**
+	 * The client a signed-in shopper asked the basket to be priced against, or null.
+	 *
+	 * A guest is answered with null rather than an error: naming a client requires an account, and
+	 * refusing the whole read over an ignorable query parameter would break a basket for the case
+	 * this surface exists for. A signed-in caller naming somebody else's client gets the 404
+	 * `assertOwnClient` raises.
+	 */
+	private async previewClientId(
+		clientId: number | undefined,
+		res: Response,
+	): Promise<number | null> {
+		const userId = this.getUserId(res);
+
+		if (!clientId || userId === null) {
+			return null;
+		}
+
+		await this.cartService.assertOwnClient(clientId, userId);
+
+		return clientId;
+	}
+
 	private async respond(
 		cart: CartEntity,
 		res: Response,
 		message?: string,
+		clientId?: number | null,
 	): Promise<void> {
 		const data = await this.cartService.withPricing(
 			cart,
 			res.locals.language,
+			clientId,
 		);
 
 		res.locals.output.data(data);
@@ -95,12 +120,20 @@ class CartPublicController extends BaseController {
 	 * catalog at this moment, which is the property a cached copy would destroy.
 	 */
 	public read = asyncHandler(async (req: Request, res: Response) => {
+		// `req.query` alone is correct here: the route's path is `''` and declares no params.
+		const data = this.validate(this.validator.publicRead, req.query, res);
+
 		const cart = await this.cartService.resolve(
 			this.getToken(req),
 			this.getUserId(res),
 		);
 
-		await this.respond(cart, res);
+		await this.respond(
+			cart,
+			res,
+			undefined,
+			await this.previewClientId(data.client_id, res),
+		);
 	});
 
 	public addItem = asyncHandler(async (req: Request, res: Response) => {

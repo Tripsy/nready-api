@@ -50,6 +50,7 @@ describe('PlaceService', () => {
 		expect(mockPlace.repository.save).toHaveBeenCalledWith({
 			place_type: createData.place_type,
 			code: createData.code,
+			alpha2_code: createData.alpha2_code,
 			parent_id: createData.parent_id,
 		});
 

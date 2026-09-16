@@ -179,6 +179,40 @@ export class ClientAddressService {
 	}
 
 	/**
+	 * The ISO 3166-1 alpha-2 code of the country an address sits in, or null when the place chain
+	 * does not reach one or that country has no code recorded.
+	 *
+	 * Read from `place.alpha2_code` rather than from the snapshot: `AddressSnapshot.address_country`
+	 * is a display name frozen for a document and deliberately not an id, so it says "Romania"
+	 * where a rule needs "RO". Alpha-2 rather than the alpha-3 `code` beside it, because that is
+	 * the vocabulary every country rule shares - see `place.alpha2_code`.
+	 * `discount.conditions.applicable_countries` is matched against this.
+	 *
+	 * Null rather than a 404: a buyer whose address resolves to no country simply fails every
+	 * country condition, which is what failing closed means here - it is not a broken request.
+	 */
+	public async getCountryCodeById(id: number): Promise<string | null> {
+		const entry = await this.createPlaceQuery(Configuration.language())
+			.filterById(id)
+			.first();
+
+		if (!entry) {
+			return null;
+		}
+
+		const city = entry.address?.city ?? null;
+
+		const chain = [city, city?.parent, city?.parent?.parent].filter(
+			(place): place is PlaceEntity => !!place,
+		);
+
+		return (
+			chain.find((place) => place.place_type === PlaceTypeEnum.COUNTRY)
+				?.alpha2_code ?? null
+		);
+	}
+
+	/**
 	 * @description Used in `find` method from the public controller; the caller has already proved the client is theirs
 	 *
 	 * Unpaginated, newest first: a client holds a handful of addresses.

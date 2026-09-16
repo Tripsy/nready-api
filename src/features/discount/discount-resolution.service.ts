@@ -2,6 +2,7 @@ import dataSource from '@/config/data-source.config';
 import DiscountEntity, {
 	DiscountConditionKeys,
 	type DiscountConditions,
+	DiscountScopeEnum,
 	type DiscountSnapshot,
 	DiscountTypeEnum,
 } from '@/features/discount/discount.entity';
@@ -10,27 +11,17 @@ import DiscountTargetEntity, {
 	DiscountTargetTypeEnum,
 } from '@/features/discount/discount-target.entity';
 import { isoWeekday } from '@/helpers/date.helper';
-import { roundMoney } from '@/helpers/shop.helper';
+import { apportion, roundMoney } from '@/helpers/shop.helper';
 
 /**
- * Everything the resolver needs about one basket line.
+ * What every condition is judged against, whichever scope is being resolved.
  *
  * Money splits across two currencies and mixing them is the easy mistake here, so each field
  * says which one it is in. `exchangeRate` follows `order_line.exchange_rate` - "rate to the
  * base currency", so `base = sale × rate` and `sale = base ÷ rate`, and it is 1 when the sale
  * is already in base currency.
  */
-export type DiscountLineContext = {
-	clientId?: number | null;
-	variantId: number;
-	productId: number;
-	brandId?: number | null;
-	/** The product's own categories. Ancestors are expanded here, not by the caller. */
-	categoryIds?: readonly number[];
-
-	quantity: number;
-	/** Unit price excluding VAT, in the sale currency. */
-	unitPrice: number;
+export type DiscountBasketContext = {
 	/**
 	 * Omitted by a caller that holds no rate, and read as 1. A cart quotes in the shopper's own
 	 * currency and resolves no rate at all - only a document does, when it is raised - so for a
@@ -39,10 +30,14 @@ export type DiscountLineContext = {
 	 */
 	exchangeRate?: number;
 
-	/** `product_price.min_price` - sale currency, already market-specific. */
-	minPrice?: number | null;
-
-	/** Basket subtotal excluding VAT, sale currency, for `min_order_value`. */
+	/**
+	 * Basket subtotal excluding VAT, sale currency, for `min_order_value`.
+	 *
+	 * **Gross - before any discount.** A threshold tested against a figure the discounts have
+	 * already moved is circular: applying one drops the basket back under its own bar, and with
+	 * an order-wide campaign stacking on top of the line discounts there is no order to evaluate
+	 * the two in that settles it. So both passes read the same untouched subtotal.
+	 */
 	orderValue?: number;
 	/** Buyer country for `applicable_countries`. */
 	countryCode?: string | null;
@@ -53,6 +48,23 @@ export type DiscountLineContext = {
 	 * caller re-resolving an order can ask "did this hold at confirmation time".
 	 */
 	now?: Date;
+};
+
+/** Everything the resolver needs about one basket line, on top of the basket it sits in. */
+export type DiscountLineContext = DiscountBasketContext & {
+	clientId?: number | null;
+	variantId: number;
+	productId: number;
+	brandId?: number | null;
+	/** The product's own categories. Ancestors are expanded here, not by the caller. */
+	categoryIds?: readonly number[];
+
+	quantity: number;
+	/** Unit price excluding VAT, in the sale currency. */
+	unitPrice: number;
+
+	/** `product_price.min_price` - sale currency, already market-specific. */
+	minPrice?: number | null;
 };
 
 export type ResolvedDiscount = {
@@ -150,8 +162,8 @@ async function buildTargetGroups(
  * is not implemented"). Each group is an equality on `target_type` and an `IN` on `entity_id`,
  * which is exactly the shape `IDX_discount_target_entity` is built for.
  *
- * `scope = 'order'` never appears here: those apply to the basket as a whole and are a separate
- * application step. Folding them in would charge them once per line.
+ * `scope = 'order'` never appears here: those apply to the basket as a whole and are resolved by
+ * `findOrderCandidates` in a pass of their own. Folding them in would charge them once per line.
  */
 async function findCandidates(
 	context: DiscountLineContext,
@@ -200,10 +212,15 @@ async function findCandidates(
 		.getMany();
 }
 
-/** True when every rule on the discount is satisfied by the line and its basket. */
+/**
+ * True when every rule on the discount is satisfied by the basket the question is asked about.
+ *
+ * Takes the basket half of the context rather than a whole line: no condition key names a line,
+ * and an order-wide campaign has no line to offer.
+ */
 export function evaluateConditions(
 	conditions: DiscountConditions | undefined | null,
-	context: DiscountLineContext,
+	context: DiscountBasketContext,
 ): boolean {
 	if (!conditions) {
 		return true;
@@ -311,7 +328,16 @@ export function computeReduction(
 	);
 }
 
-export function buildSnapshot(discount: DiscountEntity): DiscountSnapshot {
+/**
+ * The document's own record of a rule that fired.
+ *
+ * `reduction` is stated by the caller because only it knows what survived clamping, and a line
+ * may carry two of these - see `DiscountSnapshot`.
+ */
+export function buildSnapshot(
+	discount: DiscountEntity,
+	reduction?: number,
+): DiscountSnapshot {
 	return {
 		label: discount.label,
 		scope: discount.scope,
@@ -320,7 +346,108 @@ export function buildSnapshot(discount: DiscountEntity): DiscountSnapshot {
 		type: discount.type,
 		conditions: discount.conditions,
 		value: Number(discount.value),
+		discount_id: discount.id,
+		...(reduction === undefined ? {} : { reduction: reduction }),
 	};
+}
+
+/**
+ * One line as the order-wide pass sees it: what it still costs, and how much of that it may
+ * give up.
+ */
+export type OrderDiscountBasis = {
+	/**
+	 * What the line costs after its own discount, sale currency, VAT excluded. It is both the
+	 * apportionment weight and a ceiling - a campaign cannot take more off a line than is left
+	 * on it.
+	 */
+	net: number;
+	/**
+	 * The most this line may **still** give up before it reaches `product_price.min_price`, with
+	 * whatever the line-scope pass already took off it already deducted.
+	 *
+	 * `null` when the market states no floor, where the only bound is `net`. The caller computes
+	 * it because only it holds the floor and knows what the first pass spent.
+	 */
+	headroom?: number | null;
+};
+
+export type ResolvedOrderDiscount = {
+	discount: DiscountEntity;
+	/** Carries the campaign's whole `reduction`; each line also records the share it took. */
+	snapshot: DiscountSnapshot;
+	/** Per line, index-aligned with the basis handed in. */
+	reductions: number[];
+	/** Sum of `reductions`, sale currency. */
+	reduction: number;
+};
+
+/**
+ * Every live order-wide discount, in one query.
+ *
+ * No join to `discount_target`, unlike `findCandidates`: `scope = 'order'` takes no targets by
+ * construction - `ScopeWithTargets` excludes it - so the scope column is the whole selection.
+ */
+async function findOrderCandidates(
+	context: DiscountBasketContext,
+): Promise<DiscountEntity[]> {
+	const now = context.now ?? new Date();
+
+	return dataSource
+		.getRepository(DiscountEntity)
+		.createQueryBuilder('discount')
+		.where('discount.scope = :scope', { scope: DiscountScopeEnum.ORDER })
+		.andWhere('discount.deleted_at IS NULL')
+		.andWhere('(discount.start_at IS NULL OR discount.start_at <= :now)', {
+			now,
+		})
+		.andWhere('(discount.end_at IS NULL OR discount.end_at >= :now)', {
+			now,
+		})
+		.getMany();
+}
+
+/**
+ * What an order-wide discount takes off each line.
+ *
+ * The campaign is costed once against the basket, then apportioned pro-rata by what each line
+ * still costs - so every line gives up its share **at its own VAT rate**. One figure held over
+ * the whole document could not do that, and VAT is owed per line.
+ *
+ * ⚠️ **A clamped line loses its share rather than passing it on.** Where a floor bites, the
+ * campaign takes less than its headline figure. Redistributing the remainder needs a second pass
+ * that can breach another line's floor in turn, and what the document records has to be a figure
+ * it can explain.
+ */
+export function computeOrderReductions(
+	discount: DiscountEntity,
+	basis: readonly OrderDiscountBasis[],
+	exchangeRate?: number,
+): number[] {
+	const nets = basis.map((line) => Math.max(0, roundMoney(line.net)));
+	const basketNet = roundMoney(nets.reduce((sum, net) => sum + net, 0));
+
+	if (basketNet <= 0) {
+		return basis.map(() => 0);
+	}
+
+	const raw =
+		discount.type === DiscountTypeEnum.PERCENT
+			? (basketNet * Number(discount.value)) / 100
+			: Number(discount.value) / (exchangeRate ?? 1);
+
+	// Nothing comes off beyond what the basket still costs, whatever the campaign is worth.
+	const shares = apportion(Math.min(roundMoney(raw), basketNet), nets);
+
+	return shares.map((share, index) => {
+		const headroom = basis[index].headroom;
+		const ceiling =
+			headroom === null || headroom === undefined
+				? nets[index]
+				: Math.min(headroom, nets[index]);
+
+		return roundMoney(Math.max(0, Math.min(share, ceiling)));
+	});
 }
 
 export class DiscountResolutionService {
@@ -360,7 +487,67 @@ export class DiscountResolutionService {
 				best = {
 					discount,
 					reduction,
-					snapshot: buildSnapshot(discount),
+					snapshot: buildSnapshot(discount, reduction),
+				};
+			}
+		}
+
+		return best;
+	}
+
+	/**
+	 * The single best order-wide campaign for a basket, or null when none applies.
+	 *
+	 * Costed the way `resolveForLine` is - largest reduction wins outright, ties to the lowest id
+	 * - except that what is compared is the figure taken off the **whole** basket. That is why
+	 * the lines are handed over rather than just their total: a floor on one of them changes what
+	 * a campaign is worth overall, so two campaigns cannot be ranked without pricing both.
+	 *
+	 * It applies **on top of** whatever the line-scope pass granted, which is what `basis`
+	 * already has deducted.
+	 */
+	public async resolveForOrder(
+		context: DiscountBasketContext,
+		basis: readonly OrderDiscountBasis[],
+	): Promise<ResolvedOrderDiscount | null> {
+		if (basis.length === 0) {
+			return null;
+		}
+
+		const candidates = await findOrderCandidates(context);
+
+		let best: ResolvedOrderDiscount | null = null;
+
+		for (const discount of candidates) {
+			if (!evaluateConditions(discount.conditions, context)) {
+				continue;
+			}
+
+			const reductions = computeOrderReductions(
+				discount,
+				basis,
+				context.exchangeRate,
+			);
+			const reduction = roundMoney(
+				reductions.reduce((sum, value) => sum + value, 0),
+			);
+
+			if (reduction <= 0) {
+				continue;
+			}
+
+			const isBetter =
+				best === null ||
+				reduction > best.reduction ||
+				(reduction === best.reduction &&
+					discount.id < best.discount.id);
+
+			if (isBetter) {
+				best = {
+					discount: discount,
+					snapshot: buildSnapshot(discount, reduction),
+					reductions: reductions,
+					reduction: reduction,
 				};
 			}
 		}
