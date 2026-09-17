@@ -28,6 +28,7 @@ import {
 const cartSample: Record<string, unknown> = {
 	...(getCartEntityMock() as unknown as Record<string, unknown>),
 	pricing: getCartPricingMock(),
+	delivery: null,
 };
 
 const TOKEN_NOTE = `A guest names their cart with the \`${CART_TOKEN_HEADER}\` header, whose value comes from the \`token\` field of any cart response - it is returned in the body rather than set as a cookie, matching how this API hands out its access token. A signed-in caller is addressed by their account instead and the header is ignored: one cart per account, so a stale handle from another device cannot write past it. Signing in with a guest cart folds it into the account's own, summing the quantities on lines both held - the guest cart is deleted at that point and its handle stops resolving, so the token from the next response is the one to keep`;
@@ -56,6 +57,19 @@ export const docs: Record<
 					required: false,
 					condition:
 						"prices the basket against one of the caller's own clients, so a discount scoped to that buyer shows before checkout instead of appearing for the first time on the order; ignored for a guest, and somebody else's client answers 404",
+				},
+				delivery_method: {
+					type: 'enum',
+					required: false,
+					values: Object.values(ShippingMethodEnum),
+					condition:
+						'with client_id, quotes the delivery into `delivery`: the flat rate for the destination country (domestic or international, VAT included, converted into the cart currency) with the best `shipping` discount for that client applied. A self pickup is free. `delivery` stays null without client_id, for a courier with no delivery_address_id, or when nothing in the cart is physical. A rule limited by applicable_countries does not show here - the billing country is only known at checkout. `pricing.total` stays the goods alone',
+				},
+				delivery_address_id: {
+					type: 'number',
+					required: false,
+					condition:
+						"a `delivery` address filed under client_id, read for a courier only; somebody else's answers 404",
 				},
 			},
 		},
@@ -216,7 +230,7 @@ export const docs: Record<
 		withAuthErrors: true,
 		withErrors: [400, 404, 409, 422],
 		request: {
-			notes: "Requires an account: the order names a `client` to invoice, and it has to be one of the caller's own - listed by `GET /public/clients`, added by `POST /public/clients`. Somebody else's client answers 404, exactly as a missing one does. Prices are resolved once more here rather than reused from whatever the shopper was last shown, and those are the figures written to the order - so this is the moment they stop moving. They are resolved against `client_id`, so a discount targeting that buyer applies now and never appears on the basket, which names no client - the order can therefore total less than the cart last quoted. An empty cart answers 400, and so does a cart with any line carrying an `issue`. The delivery choice is written as the order's first `shipping` row, leaving from the active default warehouse at no charge and carrying the client's contact details - 409 when no default warehouse is configured. The cart is deleted once the order is written, in the same transaction and with its lines - the order is the record of what was bought, and the next visit starts a fresh cart with a new token",
+			notes: "Requires an account: the order names a `client` to invoice, and it has to be one of the caller's own - listed by `GET /public/clients`, added by `POST /public/clients`. Somebody else's client answers 404, exactly as a missing one does. Prices are resolved once more here rather than reused from whatever the shopper was last shown, and those are the figures written to the order - so this is the moment they stop moving. They are resolved against `client_id`, so a discount targeting that buyer applies now and never appears on the basket, which names no client - the order can therefore total less than the cart last quoted. An empty cart answers 400, and so does a cart with any line carrying an `issue`. The delivery choice is written as the order's first `shipping` row, leaving from the active default warehouse and carrying the client's contact details. It is priced the way `delivery` on a cart read quotes it - now with the billing country known, so a country-limited shipping discount can apply - and its `operational_cost` starts at the configured estimate - 409 when no default warehouse is configured. The cart is deleted once the order is written, in the same transaction and with its lines - the order is the record of what was bought, and the next visit starts a fresh cart with a new token",
 			body: {
 				client_id: {
 					type: 'number',

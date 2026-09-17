@@ -15,6 +15,7 @@ import {
 	type ClientAddressService,
 	clientAddressService,
 } from '@/features/client-address/client-address.service';
+import type { DiscountSnapshot } from '@/features/discount/discount.entity';
 import {
 	type OrderService,
 	orderService,
@@ -37,6 +38,11 @@ import {
 	type ShippingValidator,
 } from '@/features/shipping/shipping.validator';
 import ShippingLineEntity from '@/features/shipping/shipping-line.entity';
+import {
+	quoteShipping,
+	type ShippingRateService,
+	shippingRateService,
+} from '@/features/shipping/shipping-rate.service';
 import {
 	type WarehouseService,
 	warehouseService,
@@ -70,6 +76,7 @@ const ENTRY_COLUMNS = [
 	'shipping.currency',
 	'shipping.exchange_rate',
 	'shipping.discount',
+	'shipping.discount_reduction',
 	'shipping.contact_name',
 	'shipping.contact_phone',
 	'shipping.contact_email',
@@ -104,6 +111,38 @@ const DESTINATION_WAREHOUSE_COLUMNS = [
 
 const CARRIER_COLUMNS = ['carrier.id', 'carrier.name'];
 
+/**
+ * A movement as the buyer it is delivered to sees it: where it stands, how it travels, what it was
+ * charged and how to follow it. Everything the business reads about its own side stays off - the
+ * operational cost, the internal notes, the contact snapshot, the allocation ids and the exchange
+ * rate. The discount snapshot stays off too: `discount_reduction` is the figure, and the rule's
+ * conditions are the business's own.
+ */
+const PUBLIC_ENTRY_COLUMNS = [
+	'shipping.id',
+	'shipping.scope',
+	'shipping.order_id',
+	'shipping.status',
+	'shipping.method',
+	'shipping.destination_data',
+	'shipping.price',
+	'shipping.vat_rate',
+	'shipping.currency',
+	'shipping.discount_reduction',
+	'shipping.tracking_number',
+	'shipping.tracking_url',
+	'shipping.shipped_at',
+	'shipping.delivered_at',
+	'shipping.estimated_delivery_at',
+	'shipping.created_at',
+];
+
+/** Only the name: a self-pickup buyer needs to know where to collect, not the warehouse code. */
+const PUBLIC_PICKUP_WAREHOUSE_COLUMNS = [
+	'pickup_warehouse.id',
+	'pickup_warehouse.name',
+];
+
 /** One line as the payload states it, after validation. */
 type ShippingLinePayload = ValidatorOutput<
 	ShippingValidator,
@@ -122,12 +161,14 @@ type ShippingCreateRequired =
 	| 'vat_rate'
 	| 'currency';
 
-export type ShippingCreateInput = Pick<
-	ShippingCreatePayload,
-	ShippingCreateRequired
+export type ShippingCreateInput = Required<
+	Pick<ShippingCreatePayload, ShippingCreateRequired>
 > &
 	Partial<Omit<ShippingCreatePayload, ShippingCreateRequired>> & {
 		exchange_rate?: number;
+		/** The `shipping`-scope discount a checkout resolved; a back-office create states none. */
+		discount?: DiscountSnapshot[] | null;
+		discount_reduction?: number;
 	};
 
 /** The movement as `read` hands it over, with what travels in it attached. */
@@ -191,6 +232,7 @@ const SCOPE_SHAPE: Record<
 export class ShippingService {
 	constructor(
 		private repository: ReturnType<typeof getShippingRepository>,
+		private shippingRateService: ShippingRateService,
 		private orderService: OrderService,
 		private warehouseService: WarehouseService,
 		private carrierService: CarrierService,
@@ -465,9 +507,67 @@ export class ShippingService {
 	): Promise<ShippingEntity> {
 		await this.checkReferences(data);
 
+		const input = await this.withRateDefaults(data);
+
 		return dataSource.transaction((manager) =>
-			this.createWithin(manager, data),
+			this.createWithin(manager, input),
 		);
+	}
+
+	/**
+	 * Fills what the operator left out of a back-office create from the flat-rate table
+	 * (`quoteShipping`): the price and VAT rate as a pair, and the operational cost on its own.
+	 * Anything stated is kept - an operator agreeing a figure on the phone is the one deciding it.
+	 *
+	 * The rate is judged by the client address the goods travel to (a delivery) or from (a return).
+	 * Quoting in a currency other than the base one needs the published exchange rate, which is then
+	 * written onto the row too, so the stored price and the rate it was converted at agree.
+	 *
+	 * No discount is resolved here: the operator states the price, the same way they state a line
+	 * price on a back-office order. A shipping discount applies at checkout.
+	 */
+	private async withRateDefaults(
+		data: ValidatorOutput<ShippingValidator, 'create'>,
+	): Promise<ShippingCreateInput> {
+		// The validator allows the pair only together, so one being absent means both are
+		const needsPrice = data.price === undefined;
+		const needsCost =
+			data.operational_cost === undefined ||
+			data.operational_cost === null;
+
+		if (!needsPrice && !needsCost) {
+			return {
+				...data,
+				price: data.price ?? 0,
+				vat_rate: data.vat_rate ?? 0,
+			};
+		}
+
+		const exchangeRate =
+			needsPrice && data.currency !== Configuration.get('app.currency')
+				? await this.orderService.resolveExchangeRate(data.currency)
+				: 1;
+
+		const quote = quoteShipping({
+			scope: data.scope,
+			method: data.method,
+			countryCode: await this.shippingRateService.resolveCountryCode(
+				data.scope === ShippingScopeEnum.RETURN
+					? data.pickup_client_address_id
+					: data.destination_client_address_id,
+			),
+			exchangeRate: exchangeRate,
+		});
+
+		return {
+			...data,
+			price: needsPrice ? quote.price : (data.price ?? 0),
+			vat_rate: needsPrice ? quote.vat_rate : (data.vat_rate ?? 0),
+			operational_cost: needsCost
+				? quote.operational_cost
+				: data.operational_cost,
+			...(needsPrice ? { exchange_rate: exchangeRate } : {}),
+		};
 	}
 
 	/**
@@ -500,6 +600,8 @@ export class ShippingService {
 				tracking_number: data.tracking_number || null,
 				tracking_url: data.tracking_url || null,
 				price: data.price,
+				discount: data.discount ?? null,
+				discount_reduction: data.discount_reduction ?? 0,
 				operational_cost: data.operational_cost ?? null,
 				vat_rate: data.vat_rate,
 				currency: data.currency,
@@ -563,6 +665,19 @@ export class ShippingService {
 		}
 
 		Object.assign(entry, pickValuesFromObject(data, paramsUpdateList));
+
+		/*
+		 * A price lowered under what a checkout discount took off would leave a negative net. The
+		 * reduction follows it down - the rule cannot take off more than there is - and the snapshot
+		 * is kept in step, since it states the same figure.
+		 */
+		if (entry.discount_reduction > entry.price) {
+			entry.discount_reduction = entry.price;
+			entry.discount = entry.discount?.map((snapshot) => ({
+				...snapshot,
+				reduction: entry.price,
+			}));
+		}
 
 		/*
 		 * Re-resolved against the row's own scope, so an edit cannot leave an end the scope has no
@@ -778,6 +893,41 @@ export class ShippingService {
 		});
 	}
 
+	/**
+	 * @description Used in `find` method from `ShippingPublicController`
+	 *
+	 * The movements of one of the account's orders, oldest first - the order a delivery and any
+	 * return against it happened in. The order is resolved through `OrderService.findOwnById` first,
+	 * so somebody else's order answers the same 404 as a missing one and no row of theirs is read.
+	 *
+	 * Unpaginated: an order has one delivery and rarely more than a return beside it.
+	 */
+	public async findForOwnOrder(
+		orderId: number,
+		userId: number,
+	): Promise<ShippingEntity[]> {
+		await this.orderService.findOwnById(orderId, userId);
+
+		return (
+			this.repository
+				.createQuery()
+				.select([
+					...PUBLIC_ENTRY_COLUMNS,
+					...PUBLIC_PICKUP_WAREHOUSE_COLUMNS,
+					...CARRIER_COLUMNS,
+				])
+				/*
+				 * `join` rather than `joinAndSelect`: the latter selects the whole joined row whatever
+				 * the column list says, which would hand the buyer the warehouse's notes and address id.
+				 */
+				.join('shipping.pickup_warehouse', 'pickup_warehouse', 'LEFT')
+				.join('shipping.carrier', 'carrier', 'LEFT')
+				.filterBy('order_id', orderId)
+				.orderBy('id')
+				.all()
+		);
+	}
+
 	public findByFilter(
 		data: ValidatorOutput<ShippingValidator, 'find'>,
 		withDeleted: boolean,
@@ -830,6 +980,7 @@ export class ShippingService {
 
 export const shippingService = new ShippingService(
 	getShippingRepository(),
+	shippingRateService,
 	orderService,
 	warehouseService,
 	carrierService,

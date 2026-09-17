@@ -309,11 +309,31 @@ export default class ShippingEntity extends EntityAbstract {
 	})
 	exchange_rate!: number;
 
+	/**
+	 * The `shipping`-scope discount that reduced `price`, when one did. One snapshot at most: a
+	 * shipment has a single price and the best rule wins outright, but the column keeps the array
+	 * shape `order_line.discount` has so a reader handles both the same way.
+	 */
 	@Column('jsonb', {
 		nullable: true,
 		comment: 'Array of discount snapshots applied',
 	})
-	discount?: DiscountSnapshot[];
+	discount?: DiscountSnapshot[] | null;
+
+	/**
+	 * What the discount took off `price`, excluding VAT, in `currency` - the snapshot's `reduction`,
+	 * stored as a figure of its own for the reason `order_line.discount_reduction` is: it is what VAT
+	 * is charged after, so what the client pays is `(price - discount_reduction) x (1 + vat_rate)`.
+	 */
+	@Column('decimal', {
+		precision: 12,
+		scale: 2,
+		nullable: false,
+		default: 0,
+		comment: 'Money off the price, excluding VAT, in the shipment currency',
+		transformer: numericTransformer,
+	})
+	discount_reduction!: number;
 
 	// CONTACT DETAILS
 	@Column('varchar', { nullable: true })

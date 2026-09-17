@@ -164,6 +164,11 @@ async function buildTargetGroups(
  *
  * `scope = 'order'` never appears here: those apply to the basket as a whole and are resolved by
  * `findOrderCandidates` in a pass of their own. Folding them in would charge them once per line.
+ *
+ * `scope = 'shipping'` is excluded explicitly, because unlike `order` it does carry targets: a
+ * free-delivery rule for one client is a `client` target row, and matched here it would take the
+ * same percentage off every product that client buys. It reduces the shipment, in
+ * `findShippingCandidates`.
  */
 async function findCandidates(
 	context: DiscountLineContext,
@@ -201,6 +206,9 @@ async function findCandidates(
 			'target.discount_id = discount.id AND target.deleted_at IS NULL',
 		)
 		.where(`(${clauses.join(' OR ')})`, parameters)
+		.andWhere('discount.scope != :shippingScope', {
+			shippingScope: DiscountScopeEnum.SHIPPING,
+		})
 		.andWhere('discount.deleted_at IS NULL')
 		.andWhere('(discount.start_at IS NULL OR discount.start_at <= :now)', {
 			now,
@@ -450,6 +458,91 @@ export function computeOrderReductions(
 	});
 }
 
+/** What the shipping pass needs: the basket it is judged against, the buyer, and the price. */
+export type DiscountShippingContext = DiscountBasketContext & {
+	clientId?: number | null;
+	/** The shipment price excluding VAT, sale currency. */
+	price: number;
+};
+
+export type ResolvedShippingDiscount = {
+	discount: DiscountEntity;
+	/** Money off the shipment price, sale currency, VAT excluded. */
+	reduction: number;
+	snapshot: DiscountSnapshot;
+};
+
+/**
+ * Every live shipping discount that could apply to this buyer, in one query.
+ *
+ * A rule with no targets is for everyone; a rule with targets names the clients it is for, and only
+ * `client` rows count - the targets endpoint refuses any other type on this scope, so the filter is
+ * a guard for rows written before that check rather than a rule of its own. Without a client (a
+ * basket nobody has chosen a buyer for yet) only the untargeted rules can match.
+ */
+async function findShippingCandidates(
+	context: DiscountShippingContext,
+): Promise<DiscountEntity[]> {
+	const now = context.now ?? new Date();
+
+	const targeted = `EXISTS (
+		SELECT 1 FROM discount_target target
+		WHERE target.discount_id = discount.id AND target.deleted_at IS NULL
+	)`;
+
+	const query = dataSource
+		.getRepository(DiscountEntity)
+		.createQueryBuilder('discount')
+		.where('discount.scope = :scope', { scope: DiscountScopeEnum.SHIPPING })
+		.andWhere('discount.deleted_at IS NULL')
+		.andWhere('(discount.start_at IS NULL OR discount.start_at <= :now)', {
+			now,
+		})
+		.andWhere('(discount.end_at IS NULL OR discount.end_at >= :now)', {
+			now,
+		});
+
+	if (!context.clientId) {
+		return query.andWhere(`NOT ${targeted}`).getMany();
+	}
+
+	return query
+		.andWhere(
+			`(NOT ${targeted} OR EXISTS (
+				SELECT 1 FROM discount_target client_target
+				WHERE client_target.discount_id = discount.id
+					AND client_target.deleted_at IS NULL
+					AND client_target.target_type = :clientType
+					AND client_target.entity_id = :clientId
+			))`,
+			{
+				clientType: DiscountTargetTypeEnum.CLIENT,
+				clientId: context.clientId,
+			},
+		)
+		.getMany();
+}
+
+/**
+ * Money off a shipment price, sale currency, VAT excluded.
+ *
+ * An `amount` is base currency like every absolute figure on a discount, so it is converted at the
+ * rate. Nothing comes off beyond the price: a shipment has no floor of its own the way a product has
+ * `min_price`, so free is the limit.
+ */
+export function computeShippingReduction(
+	discount: DiscountEntity,
+	price: number,
+	exchangeRate?: number,
+): number {
+	const raw =
+		discount.type === DiscountTypeEnum.PERCENT
+			? (price * Number(discount.value)) / 100
+			: Number(discount.value) / (exchangeRate ?? 1);
+
+	return roundMoney(Math.max(0, Math.min(raw, price)));
+}
+
 export class DiscountResolutionService {
 	/**
 	 * The single best discount for one basket line, or null when nothing applies.
@@ -548,6 +641,60 @@ export class DiscountResolutionService {
 					snapshot: buildSnapshot(discount, reduction),
 					reductions: reductions,
 					reduction: reduction,
+				};
+			}
+		}
+
+		return best;
+	}
+
+	/**
+	 * The single best shipping discount for one shipment, or null when none applies.
+	 *
+	 * Its own pass, and it **stacks with both goods passes**: it reduces a different figure - the
+	 * shipment's price rather than any line - so there is nothing for it to compete with. Ranked the
+	 * way the other two are: largest reduction wins outright, ties to the lowest id.
+	 *
+	 * `min_order_value` is read against the goods subtotal in `orderValue`, which is what "free
+	 * delivery over 200" means to the buyer - the shipment's own price never counts toward it.
+	 */
+	public async resolveForShipping(
+		context: DiscountShippingContext,
+	): Promise<ResolvedShippingDiscount | null> {
+		if (context.price <= 0) {
+			return null;
+		}
+
+		const candidates = await findShippingCandidates(context);
+
+		let best: ResolvedShippingDiscount | null = null;
+
+		for (const discount of candidates) {
+			if (!evaluateConditions(discount.conditions, context)) {
+				continue;
+			}
+
+			const reduction = computeShippingReduction(
+				discount,
+				context.price,
+				context.exchangeRate,
+			);
+
+			if (reduction <= 0) {
+				continue;
+			}
+
+			const isBetter =
+				best === null ||
+				reduction > best.reduction ||
+				(reduction === best.reduction &&
+					discount.id < best.discount.id);
+
+			if (isBetter) {
+				best = {
+					discount: discount,
+					reduction: reduction,
+					snapshot: buildSnapshot(discount, reduction),
 				};
 			}
 		}

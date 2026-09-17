@@ -77,6 +77,7 @@ const validatorMessages = [
 	'invalid_price',
 	'invalid_operational_cost',
 	'invalid_vat_rate',
+	'price_needs_vat_rate',
 	'invalid_currency',
 	'invalid_contact_name',
 	'invalid_contact_phone',
@@ -240,42 +241,61 @@ export class ShippingValidator extends BaseValidator<typeof validatorMessages> {
 	 *
 	 * A new movement always starts at `pending`, so `status` is not a field here.
 	 */
-	readonly create = z.object({
-		scope: this.validateEnum(
-			ShippingScopeEnum,
-			this.getMessage('invalid_scope'),
-		),
-		method: this.validateEnum(
-			ShippingMethodEnum,
-			this.getMessage('invalid_method'),
-		),
-		...this.referenceSchema(),
-		carrier_id: this.validateId(this.getMessage('invalid_carrier_id'), {
-			required: false,
-		}),
-		tracking_number: this.validateString(
-			this.getMessage('invalid_tracking_number'),
-			{ required: false },
-		),
-		tracking_url: this.validateString(
-			this.getMessage('invalid_tracking_url'),
-			{ required: false },
-		),
-		price: this.priceSchema(),
-		operational_cost: this.operationalCostSchema(),
-		vat_rate: this.vatRateSchema(),
-		currency: this.currencySchema(),
-		...this.contactSchema(),
-		estimated_delivery_at: this.validateDate(
+	readonly create = z
+		.object({
+			scope: this.validateEnum(
+				ShippingScopeEnum,
+				this.getMessage('invalid_scope'),
+			),
+			method: this.validateEnum(
+				ShippingMethodEnum,
+				this.getMessage('invalid_method'),
+			),
+			...this.referenceSchema(),
+			carrier_id: this.validateId(this.getMessage('invalid_carrier_id'), {
+				required: false,
+			}),
+			tracking_number: this.validateString(
+				this.getMessage('invalid_tracking_number'),
+				{ required: false },
+			),
+			tracking_url: this.validateString(
+				this.getMessage('invalid_tracking_url'),
+				{ required: false },
+			),
+			/*
+			 * Both optional: a price left out is quoted from the flat-rate table in `settings.shipping`,
+			 * with the VAT rate that goes with it, and so is an operational cost - see
+			 * `ShippingService.withRateDefaults`.
+			 */
+			price: this.priceSchema().optional(),
+			operational_cost: this.operationalCostSchema(),
+			vat_rate: this.vatRateSchema().optional(),
+			currency: this.currencySchema(),
+			...this.contactSchema(),
+			estimated_delivery_at: this.validateDate(
+				{
+					invalid_date: this.getMessage('invalid_date'),
+					invalid_date_format: this.getMessage('invalid_date_format'),
+				},
+				{ required: false, requireTime: false },
+			),
+			notes: this.notesSchema(),
+			lines: this.linesSchema().optional(),
+		})
+		/*
+		 * The two are quoted as a pair - the net price is split out of the VAT-inclusive rate at a
+		 * VAT rate - so stating one and not the other would have the quote overwrite the figure the
+		 * operator did type. Both or neither.
+		 */
+		.refine(
+			(data) =>
+				(data.price === undefined) === (data.vat_rate === undefined),
 			{
-				invalid_date: this.getMessage('invalid_date'),
-				invalid_date_format: this.getMessage('invalid_date_format'),
+				message: this.getMessage('price_needs_vat_rate'),
+				path: ['price'],
 			},
-			{ required: false, requireTime: false },
-		),
-		notes: this.notesSchema(),
-		lines: this.linesSchema().optional(),
-	});
+		);
 
 	readonly read = z.object({
 		id: this.validateId(this.getMessage('invalid_id', { name: 'id' })),
@@ -355,6 +375,11 @@ export class ShippingValidator extends BaseValidator<typeof validatorMessages> {
 
 	readonly restore = z.object({
 		id: this.validateId(this.getMessage('invalid_id', { name: 'id' })),
+	});
+
+	/** The order a buyer asks about. Ownership is resolved by the service, not here. */
+	readonly publicFind = z.object({
+		order_id: this.validateId(this.getMessage('invalid_order_id')),
 	});
 
 	readonly find = this.validateFind({

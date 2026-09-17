@@ -21,7 +21,8 @@
 		"invalid_lines": "Invalid movement lines",
 		"invalid_variant_id": "Invalid variant",
 		"invalid_product_id": "Invalid product",
-		"invalid_quantity": "Invalid quantity"
+		"invalid_quantity": "Invalid quantity",
+		"price_needs_vat_rate": "Price and VAT rate go together - state both, or leave both out to use the shipping rates"
 	},
 	"error": {
 		"not_found": "Movement not found",

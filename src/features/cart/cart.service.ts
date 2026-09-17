@@ -48,6 +48,7 @@ import {
 } from '@/features/product/product-option-selection.service';
 import ProductVariantEntity from '@/features/product/product-variant.entity';
 import {
+	type ShippingMethod,
 	ShippingMethodEnum,
 	ShippingScopeEnum,
 } from '@/features/shipping/shipping.entity';
@@ -56,11 +57,26 @@ import {
 	shippingService,
 } from '@/features/shipping/shipping.service';
 import {
+	type ShippingPricing,
+	type ShippingRateService,
+	shippingRateService,
+} from '@/features/shipping/shipping-rate.service';
+import {
 	type WarehouseService,
 	warehouseService,
 } from '@/features/warehouse/warehouse.service';
 import { createFutureDate } from '@/helpers/date.helper';
+import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
+
+/**
+ * How the shopper said the order should travel, as far as the checkout screen has got. The address
+ * is a `client_address` of type delivery, and is only read for a courier.
+ */
+export type CartDeliveryChoice = {
+	method: ShippingMethod;
+	addressId: number | null;
+};
 
 /** A cart plus what it currently costs - the only shape the storefront is ever handed. */
 export type CartWithPricing = {
@@ -70,6 +86,13 @@ export type CartWithPricing = {
 	user_id: number | null;
 	expires_at: Date;
 	pricing: CartPricing;
+	/**
+	 * What delivering it would cost, or null when that cannot be said yet - no delivery choice was
+	 * asked about, a courier has no address chosen, or nothing in the basket is physical. Kept out
+	 * of `pricing.total`, which stays the goods: the delivery is its own document row, and a basket
+	 * page that never asks still shows the same total it always has.
+	 */
+	delivery: ShippingPricing | null;
 };
 
 /**
@@ -263,6 +286,7 @@ export class CartService {
 		private warehouseService: WarehouseService,
 		private clientAddressService: ClientAddressService,
 		private shippingService: ShippingService,
+		private shippingRateService: ShippingRateService,
 	) {}
 
 	/**
@@ -308,7 +332,24 @@ export class CartService {
 			}
 		}
 
-		return this.create(userId, currency);
+		try {
+			return await this.create(userId, currency);
+		} catch (error) {
+			/*
+			 * Two reads for the same account can arrive together with no cart to find - the header
+			 * and the checkout summary both refetch the moment an order clears the basket - and both
+			 * reach this insert. `UQ_cart_user` lets one through; the other reads the cart the first
+			 * just created instead of answering 500.
+			 */
+			if (!userId || !RepositoryAbstract.isUniqueViolation(error)) {
+				throw error;
+			}
+
+			return this.repository
+				.createQuery()
+				.filterBy('user_id', userId)
+				.firstOrFail();
+		}
 	}
 
 	private async create(
@@ -835,8 +876,13 @@ export class CartService {
 		cart: CartEntity,
 		language?: string,
 		clientId?: number | null,
+		delivery?: CartDeliveryChoice | null,
 	): Promise<CartWithPricing> {
 		const items = await this.getItems(cart.id);
+
+		const pricing = await this.pricing.price(cart, items, language, {
+			clientId: clientId ?? null,
+		});
 
 		return {
 			id: cart.id,
@@ -844,10 +890,97 @@ export class CartService {
 			currency: cart.currency,
 			user_id: cart.user_id,
 			expires_at: cart.expires_at,
-			pricing: await this.pricing.price(cart, items, language, {
-				clientId: clientId ?? null,
-			}),
+			pricing: pricing,
+			delivery:
+				clientId && delivery
+					? await this.previewDelivery(pricing, clientId, delivery)
+					: null,
 		};
+	}
+
+	/**
+	 * The checkout screen's delivery figure, priced the way `toOrder` will price it.
+	 *
+	 * Needs a client: the delivery address has to be proven one of theirs before its country may
+	 * decide a rate, and a client-targeted shipping discount has nobody to match without one. The
+	 * billing country is not known here, so a rule limited by `applicable_countries` fails closed
+	 * until the order is placed - the same point a country-limited goods discount first appears.
+	 */
+	private async previewDelivery(
+		pricing: CartPricing,
+		clientId: number,
+		delivery: CartDeliveryChoice,
+	): Promise<ShippingPricing | null> {
+		const isCourier = delivery.method === ShippingMethodEnum.COURIER;
+
+		if (isCourier && !delivery.addressId) {
+			return null;
+		}
+
+		const physical = await this.findPhysicalProductIds(pricing.lines);
+
+		if (physical.size === 0) {
+			return null;
+		}
+
+		const countryCode =
+			isCourier && delivery.addressId
+				? await this.resolveOwnDeliveryCountry(
+						delivery.addressId,
+						clientId,
+					)
+				: null;
+
+		return this.shippingRateService.priceForBuyer(
+			{
+				scope: ShippingScopeEnum.DELIVERY,
+				method: delivery.method,
+				countryCode: countryCode,
+				exchangeRate: await this.orderService.resolveExchangeRate(
+					pricing.currency,
+				),
+			},
+			{
+				clientId: clientId,
+				countryCode: null,
+				orderValue: pricing.subtotal,
+			},
+		);
+	}
+
+	/**
+	 * The country of a delivery address, once `getOrderSnapshot` has proven it is filed under this
+	 * client as a delivery address - somebody else's answers the same 404 a missing one does.
+	 */
+	private async resolveOwnDeliveryCountry(
+		addressId: number,
+		clientId: number,
+	): Promise<string | null> {
+		await this.clientAddressService.getOrderSnapshot(
+			addressId,
+			clientId,
+			ClientAddressTypeEnum.DELIVERY,
+		);
+
+		return this.clientAddressService.getCountryCodeById(addressId);
+	}
+
+	/** The products among these lines that are physical - the ones a shipment has to carry. */
+	private async findPhysicalProductIds(
+		lines: readonly CartLine[],
+	): Promise<Set<number>> {
+		const productIds = [...new Set(lines.map((line) => line.product_id))];
+
+		if (productIds.length === 0) {
+			return new Set();
+		}
+
+		const products = await dataSource.getRepository(ProductEntity).find({
+			select: { id: true },
+			where: { id: In(productIds), type: ProductTypeEnum.PHYSICAL },
+		});
+
+		return new Set(products.map((product) => product.id));
 	}
 
 	/**
@@ -881,8 +1014,8 @@ export class CartService {
 	 * `ShippingService.createWithin` in the same transaction, so an order never exists without
 	 * saying how it travels and the row obeys the rules a back-office create does. It leaves from
 	 * the active default warehouse, carries every physical item of the order (`toShippingLines`),
-	 * and is priced at zero: no shipping rate exists yet to charge from, which is also what the
-	 * basket quotes. The client's contact details are copied onto it.
+	 * and is priced from the flat-rate table (`ShippingRateService`) with the best shipping discount
+	 * for this buyer applied. The client's contact details are copied onto it.
 	 *
 	 * An order with nothing physical in it - only digital products or services - raises no
 	 * shipment: there is nothing to pick, and an empty parcel would sit in the dispatch queue.
@@ -965,27 +1098,39 @@ export class CartService {
 		 */
 		const warehouse = await this.warehouseService.findDefault();
 
-		const physicalProducts = await dataSource
-			.getRepository(ProductEntity)
-			.find({
-				select: { id: true },
-				where: {
-					id: In([
-						...new Set(
-							pricing.lines.map((line) => line.product_id),
-						),
-					]),
-					type: ProductTypeEnum.PHYSICAL,
-				},
-			});
-
 		const shippingLines = toShippingLines(
 			pricing.lines,
-			new Set(physicalProducts.map((product) => product.id)),
+			await this.findPhysicalProductIds(pricing.lines),
 		);
 		const exchangeRate = await this.orderService.resolveExchangeRate(
 			pricing.currency,
 		);
+
+		/*
+		 * The delivery is priced at the same rate the lines are frozen at, against the destination's
+		 * country, with the best shipping discount for this buyer - the figure the checkout screen
+		 * previewed, now with the billing country known for a country-limited rule.
+		 */
+		const deliveryPricing =
+			shippingLines.length > 0
+				? await this.shippingRateService.priceForBuyer(
+						{
+							scope: ShippingScopeEnum.DELIVERY,
+							method: data.delivery_method,
+							countryCode: deliveryAddressId
+								? await this.clientAddressService.getCountryCodeById(
+										deliveryAddressId,
+									)
+								: null,
+							exchangeRate: exchangeRate,
+						},
+						{
+							clientId: client.id,
+							countryCode: countryCode,
+							orderValue: pricing.subtotal,
+						},
+					)
+				: null;
 
 		return dataSource.transaction(async (manager) => {
 			/*
@@ -1003,7 +1148,7 @@ export class CartService {
 				lines: toOrderLines(pricing.lines),
 			});
 
-			if (shippingLines.length > 0) {
+			if (deliveryPricing && shippingLines.length > 0) {
 				await this.shippingService.createWithin(manager, {
 					// A checkout always produces the same kind of movement: stock leaving a
 					// warehouse for the client. A relocation or a return is raised elsewhere
@@ -1014,8 +1159,11 @@ export class CartService {
 					// Null for a pickup: the goods are collected from the warehouse
 					destination_client_address_id:
 						deliveryAddressId ?? undefined,
-					price: 0,
-					vat_rate: 0,
+					price: deliveryPricing.price,
+					vat_rate: deliveryPricing.vat_rate,
+					operational_cost: deliveryPricing.operational_cost,
+					discount: deliveryPricing.discount,
+					discount_reduction: deliveryPricing.discount_reduction,
 					currency: pricing.currency,
 					exchange_rate: exchangeRate,
 					contact_name:
@@ -1132,4 +1280,5 @@ export const cartService = new CartService(
 	warehouseService,
 	clientAddressService,
 	shippingService,
+	shippingRateService,
 );

@@ -25,6 +25,15 @@ export const paramsUpdateList: string[] = [
 	'notes',
 ];
 
+/**
+ * What a buyer may sort their own orders by. Narrower than the dashboard's: the row id and the
+ * creation stamp say nothing the issue date does not.
+ */
+export const PublicOrderByEnum = {
+	ISSUED_AT: 'issued_at',
+	REF_NUMBER: 'ref_number',
+} as const;
+
 export const OrderByEnum = {
 	ID: 'id',
 	REF_NUMBER: 'ref_number',
@@ -367,6 +376,30 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 				this.getMessage('invalid_boolean'),
 				{ required: false },
 			).default(false),
+		},
+	});
+
+	/**
+	 * A buyer's own orders. The owner is never a filter - it is the account behind the request - and
+	 * neither is anything a buyer has no reason to search by: they hold a handful of orders, so a
+	 * status is the one narrowing worth offering.
+	 */
+	readonly publicFind = this.validateFind({
+		orderByEnum: PublicOrderByEnum,
+		defaultOrderBy: PublicOrderByEnum.ISSUED_AT,
+
+		directionEnum: OrderDirectionEnum,
+		defaultDirection: OrderDirectionEnum.DESC,
+
+		defaultLimit: Configuration.get('filter.limit'),
+		defaultPage: 1,
+
+		filterSchema: {
+			status: this.validateEnum(
+				OrderStatusEnum,
+				this.getMessage('invalid_status'),
+				{ required: false },
+			),
 		},
 	});
 

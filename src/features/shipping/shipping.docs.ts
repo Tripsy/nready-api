@@ -34,9 +34,11 @@ const entitySample: Record<string, unknown> = {
 	destination_data: null,
 	tracking_number: null,
 	tracking_url: null,
-	vat_rate: 0,
-	price: 0,
-	operational_cost: null,
+	vat_rate: 21,
+	price: 20.66,
+	operational_cost: 15,
+	discount: null,
+	discount_reduction: 0,
 	currency: 'RON',
 	exchange_rate: 1,
 	contact_name: 'Ana Popescu',
@@ -144,16 +146,23 @@ export const docs: Record<
 				carrier_id: { type: 'number', required: false },
 				tracking_number: { type: 'string', required: false },
 				tracking_url: { type: 'string', required: false },
-				price: { type: 'number', required: true },
+				price: {
+					type: 'number',
+					required: false,
+					condition:
+						'excluding VAT, in currency. Left out together with vat_rate, both are quoted from the flat-rate table: a courier delivery or return is charged the domestic or international rate (VAT included, split at the standard rate) by the country of its client address - the destination for a delivery, the pickup for a return - and a relocation or a self pickup is free. A non-base currency is converted at the published exchange rate, which is written onto the row',
+				},
 				operational_cost: {
 					type: 'number',
 					required: false,
-					condition: 'internal cost in base currency, 0 or more',
+					condition:
+						'internal cost in base currency, 0 or more; left out, it starts at the configured estimate for the scope (nothing for a self pickup)',
 				},
 				vat_rate: {
 					type: 'number',
-					required: true,
-					condition: '0 to 100',
+					required: false,
+					condition:
+						'0 to 100; quoted together with price when left out',
 				},
 				currency: {
 					type: 'string',

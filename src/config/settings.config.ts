@@ -201,6 +201,41 @@ function loadSettings() {
 			zero: 0,
 			exempt: 0,
 		},
+		/*
+		 * What moving goods costs, by the kind of movement. Every figure is in the base currency
+		 * (`app.currency`); a quote in another currency is converted at the order's exchange rate.
+		 *
+		 * `price` is what the client pays for a courier delivery or a return, **VAT included** -
+		 * the figure a shopper is shown - and is split back into a net price at the standard VAT
+		 * rate when a shipment is written. A relocation is internal and a self-pickup carries
+		 * nothing, so neither is charged. Domestic means the client address resolves to
+		 * `domesticCountry` (ISO 3166-1 alpha-2, the vocabulary `place.alpha2_code` holds).
+		 *
+		 * `operationalCost` is the business's own estimate of carrying one out, written onto the
+		 * shipment as its starting `operational_cost` and replaced once the carrier invoices.
+		 */
+		shipping: {
+			domesticCountry: (
+				process.env.SHIPPING_DOMESTIC_COUNTRY || 'RO'
+			).toUpperCase(),
+			price: {
+				domestic: Number(process.env.SHIPPING_PRICE_DOMESTIC ?? 25),
+				international: Number(
+					process.env.SHIPPING_PRICE_INTERNATIONAL ?? 50,
+				),
+			},
+			operationalCost: {
+				delivery: Number(
+					process.env.SHIPPING_OPERATIONAL_COST_DELIVERY ?? 15,
+				),
+				return: Number(
+					process.env.SHIPPING_OPERATIONAL_COST_RETURN ?? 15,
+				),
+				relocation: Number(
+					process.env.SHIPPING_OPERATIONAL_COST_RELOCATION ?? 30,
+				),
+			},
+		},
 		user: {
 			authSecret: (process.env.AUTH_JWT_SECRET as string) || 'secret',
 			authExpiresIn: Number(process.env.AUTH_JWT_EXPIRES_IN) || 86400,

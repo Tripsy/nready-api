@@ -1,5 +1,11 @@
 import type { Repository } from 'typeorm';
 import dataSource from '@/config/data-source.config';
+import { lang } from '@/config/message.setup';
+import { BadRequestError } from '@/exceptions';
+import {
+	type DiscountScope,
+	DiscountScopeEnum,
+} from '@/features/discount/discount.entity';
 import DiscountTargetEntity, {
 	type DiscountTargetType,
 	DiscountTargetTypeEnum,
@@ -18,6 +24,33 @@ export class DiscountTargetService {
 			DiscountTargetEntity,
 		),
 	) {}
+
+	/**
+	 * Refuses a target set the discount's scope cannot use.
+	 *
+	 * Only `shipping` is constrained: it narrows itself to clients and has nothing else it could
+	 * apply to, and the line pass matches targets without reading the scope - so a product target on
+	 * a shipping discount would be a rule that silently never fires. Every other scope keeps
+	 * accepting any type, as it always has.
+	 */
+	public assertTargetsFitScope(
+		scope: DiscountScope,
+		targets: DiscountTargetMap,
+	): void {
+		if (scope !== DiscountScopeEnum.SHIPPING) {
+			return;
+		}
+
+		const misfit = discountTargetTypes.some(
+			(targetType) =>
+				targetType !== DiscountTargetTypeEnum.CLIENT &&
+				(targets[targetType]?.length ?? 0) > 0,
+		);
+
+		if (misfit) {
+			throw new BadRequestError(lang('discount.error.shipping_targets'));
+		}
+	}
 
 	/** Entity ids currently linked to a discount, grouped by target type. */
 	public async listTargets(discountId: number): Promise<DiscountTargetMap> {

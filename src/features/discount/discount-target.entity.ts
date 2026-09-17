@@ -8,9 +8,13 @@ import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 
 /**
  * What a target row points at - every discount scope except `order`, which applies to the
- * basket as a whole and therefore has nothing to point at.
+ * basket as a whole and therefore has nothing to point at, and `shipping`, which narrows itself
+ * with `client` targets rather than having a target type of its own.
  */
-type ScopeWithTargets = Exclude<DiscountScope, typeof DiscountScopeEnum.ORDER>;
+type ScopeWithTargets = Exclude<
+	DiscountScope,
+	typeof DiscountScopeEnum.ORDER | typeof DiscountScopeEnum.SHIPPING
+>;
 
 // `satisfies` catches a target type that is not a scope.
 export const DiscountTargetTypeEnum = {

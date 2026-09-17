@@ -11,7 +11,7 @@ paths:
 money reaches a line. For where the reduction then sits in the line arithmetic, see `product.md`
 §10.4.
 
-## 1. Six scopes, two shapes
+## 1. Seven scopes, three shapes
 
 `client`, `product`, `variant`, `category` and `brand` attach to rows through `discount_target`,
 which is polymorphic and holds all five. **`order` takes no targets** - `ScopeWithTargets` excludes
@@ -20,6 +20,15 @@ it at the type level - and applies to the basket as a whole.
 That split is why there are two queries rather than one. `findCandidates` inner-joins
 `discount_target`, so an order-wide campaign can never appear in it; `findOrderCandidates` selects
 on the scope column alone. Folding the two together would charge a campaign once per line.
+
+**`shipping` reduces a shipment's price, not the goods.** It takes `client` targets only (enforced by
+`DiscountTargetService.assertTargetsFitScope` on the targets endpoint and on a scope change): no
+targets means every buyer, targets mean those clients. Because it *does* carry targets, `findCandidates`
+excludes it by scope - without that, a client-targeted free-delivery rule would also take its
+percentage off every line that client buys. It is resolved by `resolveForShipping`, stacks with both
+goods passes (a different figure), and is recorded on `shipping.discount` with the money in
+`shipping.discount_reduction`, the counterpart of `order_line.discount_reduction`. `min_order_value`
+reads the goods subtotal; the shipment price never counts toward it.
 
 Country is **not** a scope. It describes the buyer rather than the goods, so it is a condition
 (`conditions.applicable_countries`) evaluated after candidates are selected.
@@ -104,6 +113,10 @@ own `reduction`**, and `discount_reduction` is their sum.
   checkout screen does and the basket page does not, since an account may hold several clients.
 - **Checkout** - `CartService.toOrder`, which prices once more against the chosen client and freezes
   the result.
+- **Shipping** - `ShippingRateService.priceForBuyer`, which quotes the flat rate (`settings.shipping`)
+  and applies the best shipping discount; used by the checkout preview (`CartService.previewDelivery`)
+  and `toOrder`. A back-office shipment resolves no shipping discount - the operator states the price,
+  and a price left out is quoted from the rate table only.
 - **Back office** - `OrderDiscountService.resolveForLines`, one call returning both passes, used by
   `createEntry` and `buildLines`. The operator states the price; what comes off it is the catalog's
   decision.

@@ -225,6 +225,14 @@ const CLIENT_COLUMNS = [
 	'client.contact_email',
 ];
 
+/**
+ * The document as its buyer sees it. `deleted_at` is dropped because a soft-deleted order is never
+ * served to them; `client_id` stays so a buyer holding several clients can tell which one was billed.
+ */
+const PUBLIC_ENTRY_COLUMNS = ENTRY_COLUMNS.filter(
+	(column) => column !== 'order.deleted_at',
+);
+
 const LINE_COLUMNS = [
 	'order_line.id',
 	'order_line.order_id',
@@ -936,6 +944,119 @@ export class OrderService {
 			lines: lines,
 			totals: this.computeTotals(lines),
 		});
+	}
+
+	/**
+	 * @description Used in `OrderPublicController` and `ShippingPublicController`; the ownership check
+	 *
+	 * One of the account's orders, resolved through `client.user_id` in the same query - somebody
+	 * else's id reads as missing (404), so no ownership check is left to a later step. A soft-deleted
+	 * order or client counts as missing too: TypeORM applies `deleted_at IS NULL` to the join.
+	 */
+	public findOwnById(id: number, userId: number): Promise<OrderEntity> {
+		return this.repository
+			.createQuery()
+			.select(PUBLIC_ENTRY_COLUMNS)
+			.join('order.client', 'client', 'INNER')
+			.filterById(id)
+			.filterBy('client.user_id', userId)
+			.firstOrFail();
+	}
+
+	/**
+	 * @description Used in `read` method from `OrderPublicController`
+	 *
+	 * The same shape `getEntryData` returns, minus what the back office alone reads. Not cached:
+	 * the `read` key is per order id alone and a per-caller key would only ever be warmed by one
+	 * account, while the ownership read has to run on every request regardless.
+	 */
+	public async getOwnEntryData(
+		id: number,
+		userId: number,
+	): Promise<OrderWithLines> {
+		const order = await this.repository
+			.createQuery()
+			.select([...PUBLIC_ENTRY_COLUMNS, ...CLIENT_COLUMNS])
+			.joinAndSelect('order.client', 'client', 'INNER')
+			.filterById(id)
+			.filterBy('client.user_id', userId)
+			.firstOrFail();
+
+		const lines = await this.getLines(order.id);
+
+		return Object.assign(order, {
+			lines: lines,
+			totals: this.computeTotals(lines),
+		});
+	}
+
+	/**
+	 * @description Used in `find` method from `OrderPublicController`
+	 *
+	 * Every order billed to any of the account's clients. The listing carries no lines or totals,
+	 * for the reason `findByFilter` gives - the detail read attaches them.
+	 */
+	public async findOwnByFilter(
+		data: ValidatorOutput<OrderValidator, 'publicFind'>,
+		userId: number,
+	): Promise<[(OrderEntity & { totals: OrderTotals })[], number]> {
+		const [entries, total] = await this.repository
+			.createQuery()
+			.select([...PUBLIC_ENTRY_COLUMNS, ...CLIENT_COLUMNS])
+			.joinAndSelect('order.client', 'client', 'INNER')
+			.filterBy('client.user_id', userId)
+			.filterBy('status', data.filter.status)
+			.orderBy(data.order_by, data.direction)
+			.orderBy('id', data.direction)
+			.pagination(data.page, data.limit)
+			.all(true);
+
+		return [await this.attachTotals(entries), total];
+	}
+
+	/**
+	 * What each order on a page adds up to - the one figure a buyer scans a history for.
+	 *
+	 * One read of the money columns for the whole page rather than `getLines` per order: the labels
+	 * and SKUs that read resolves are not needed to sum a document, and a page of twenty orders
+	 * would otherwise cost forty queries.
+	 */
+	private async attachTotals(
+		orders: OrderEntity[],
+	): Promise<(OrderEntity & { totals: OrderTotals })[]> {
+		const lines =
+			orders.length === 0
+				? []
+				: await this.lineRepository.find({
+						select: {
+							order_id: true,
+							price: true,
+							quantity: true,
+							vat_rate: true,
+							currency: true,
+							exchange_rate: true,
+							discount: true,
+							discount_reduction: true,
+						},
+						where: {
+							order_id: In(orders.map((order) => order.id)),
+						},
+					});
+
+		const linesByOrder = new Map<number, OrderLineEntity[]>();
+
+		for (const line of lines) {
+			const list = linesByOrder.get(line.order_id) ?? [];
+
+			list.push(line);
+			linesByOrder.set(line.order_id, list);
+		}
+
+		return orders.map((order) =>
+			Object.assign(order, {
+				totals: this.computeTotals(linesByOrder.get(order.id) ?? []),
+			}),
+		);
 	}
 
 	public findByFilter(

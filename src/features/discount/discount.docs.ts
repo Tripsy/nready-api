@@ -232,8 +232,9 @@ export const docs: Record<
 			dataSample: { client: [3, 9], category: [12] },
 		},
 		withAuthErrors: true,
-		withErrors: [404, 422],
+		withErrors: [400, 404, 422],
 		request: {
+			notes: 'A discount with scope `shipping` accepts `client` targets only - any other non-empty type answers 400, judged against the set as it will stand after the call. With no targets a shipping discount applies to every buyer; with client targets, to those clients alone',
 			params: {
 				id: {
 					type: 'number',

@@ -9,6 +9,7 @@ import DiscountEntity, {
 import {
 	computeOrderReductions,
 	computeReduction,
+	computeShippingReduction,
 	type DiscountLineContext,
 	evaluateConditions,
 	type OrderDiscountBasis,
@@ -318,5 +319,39 @@ describe('evaluateConditions', () => {
 				{ ...baseContext, orderValue: 1 },
 			),
 		).toBe(false);
+	});
+});
+
+describe('computeShippingReduction', () => {
+	const shippingDiscount = (value: number, type?: DiscountType) =>
+		makeDiscount({ value, type, scope: DiscountScopeEnum.SHIPPING });
+
+	it('applies a percentage to the shipment price', () => {
+		expect(computeShippingReduction(shippingDiscount(50), 20.66, 1)).toBe(
+			10.33,
+		);
+	});
+
+	it('converts an absolute discount from base into the sale currency', () => {
+		expect(
+			computeShippingReduction(
+				shippingDiscount(10, DiscountTypeEnum.AMOUNT),
+				20,
+				5,
+			),
+		).toBe(2);
+	});
+
+	it('never takes more off than the price - free is the limit', () => {
+		expect(
+			computeShippingReduction(
+				shippingDiscount(100, DiscountTypeEnum.AMOUNT),
+				20.66,
+				1,
+			),
+		).toBe(20.66);
+		expect(computeShippingReduction(shippingDiscount(100), 20.66, 1)).toBe(
+			20.66,
+		);
 	});
 });

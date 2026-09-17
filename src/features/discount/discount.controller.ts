@@ -123,9 +123,15 @@ class DiscountController extends BaseController {
 			res,
 		);
 
-		await this.discountService.findById(data.id, false);
+		const discount = await this.discountService.findById(data.id, false);
 
 		const { id, ...targets } = data;
+
+		// Judged against the set as it will stand: a type absent from the body keeps its links
+		this.targetService.assertTargetsFitScope(discount.scope, {
+			...(await this.targetService.listTargets(id)),
+			...targets,
+		});
 
 		res.locals.output.data(
 			await this.targetService.replaceTargets(id, targets),

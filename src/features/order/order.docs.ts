@@ -17,7 +17,7 @@ import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
  * listing names the counterparty and the reference, and loading every line of every row to do it
  * would be the query's whole cost.
  */
-const orderSample: Record<string, unknown> = {
+export const orderSample: Record<string, unknown> = {
 	id: 118,
 	client_id: 7,
 	ref_code: 'ORD',
@@ -40,7 +40,7 @@ const orderSample: Record<string, unknown> = {
 };
 
 /** What `read` adds on top: the lines, and what they add up to. */
-const orderWithLinesSample: Record<string, unknown> = {
+export const orderWithLinesSample: Record<string, unknown> = {
 	...orderSample,
 	lines: [
 		{
@@ -82,7 +82,7 @@ const statusTransitionNote = Object.entries(STATUS_TRANSITIONS)
 	.map(([from, to]) => `${from} -> ${to.join(' | ') || '(terminal)'}`)
 	.join('; ');
 
-const totalsNote =
+export const totalsNote =
 	"`totals` sums `price x quantity` per line as `subtotal`, before any discount, and states what the discounts took off beside it as `discount_reduction`; VAT is charged per line on the difference, at that line's own rate, and `total` is `subtotal - discount_reduction + vat_amount`. `order_discount_reduction` says how much of that reduction came from an order-wide campaign rather than from the lines' own rules - it is **already inside** `discount_reduction`, stated separately so a reader can see what the campaign was worth, never to be subtracted a second time";
 
 const lineNote = `Each line names a variant and the product it belongs to - the pair is checked before the insert, so a mismatch answers 400 rather than a constraint violation. Prices are the caller's: the order records the figure that was agreed. Discounts are not - the catalog's own rules are resolved over the set as it is saved, clamped against \`product_price.min_price\`, and written to the line as snapshots plus the money they took off. A line carries its own best discount and, stacked on top, its apportioned share of any order-wide campaign, each snapshot stating what it alone was worth; \`discount_reduction\` is their sum and the figure VAT is charged on. \`options\` are \`product_option\` ids: each must belong to the line's product and every question on that product must receive between its \`min_select\` and \`max_select\` answers, or the request answers 400. They are stored as snapshots carrying the option id, today's wording and the delta in the document's currency; \`price\` is the unit figure with those deltas already folded in. Up to ${ORDER_LINES_MAX} lines`;

@@ -8,6 +8,10 @@ import { numericTransformer } from '@/shared/transformers/numeric.transformer';
  * `brand_discount`. `order` is the exception - it takes no targets and applies to the
  * basket as a whole.
  *
+ * `shipping` reduces the price of a delivery or a return rather than the goods. It is resolved in
+ * a pass of its own and may carry `client` targets only: with none it applies to every buyer, with
+ * some it applies to those clients alone.
+ *
  * Country is deliberately absent. It describes the buyer rather than the goods and its key
  * is a string code, so it stays a *condition* in `conditions.applicable_countries`, evaluated
  * after candidates are selected rather than used to select them.
@@ -19,6 +23,7 @@ export const DiscountScopeEnum = {
 	VARIANT: 'variant',
 	CATEGORY: 'category',
 	BRAND: 'brand',
+	SHIPPING: 'shipping',
 } as const;
 
 export type DiscountScope =

@@ -2,7 +2,11 @@ import type { Request, Response } from 'express';
 import { lang } from '@/config/message.setup';
 import type CartEntity from '@/features/cart/cart.entity';
 import { type CartPolicy, cartPolicy } from '@/features/cart/cart.policy';
-import { type CartService, cartService } from '@/features/cart/cart.service';
+import {
+	type CartDeliveryChoice,
+	type CartService,
+	cartService,
+} from '@/features/cart/cart.service';
 import { CartValidator } from '@/features/cart/cart.validator';
 import asyncHandler from '@/helpers/async.handler';
 import { BaseController } from '@/shared/abstracts/controller.abstract';
@@ -96,11 +100,13 @@ class CartPublicController extends BaseController {
 		res: Response,
 		message?: string,
 		clientId?: number | null,
+		delivery?: CartDeliveryChoice | null,
 	): Promise<void> {
 		const data = await this.cartService.withPricing(
 			cart,
 			res.locals.language,
 			clientId,
+			delivery,
 		);
 
 		res.locals.output.data(data);
@@ -133,6 +139,12 @@ class CartPublicController extends BaseController {
 			res,
 			undefined,
 			await this.previewClientId(data.client_id, res),
+			data.delivery_method
+				? {
+						method: data.delivery_method,
+						addressId: data.delivery_address_id ?? null,
+					}
+				: null,
 		);
 	});
 

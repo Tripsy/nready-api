@@ -216,10 +216,23 @@ export class CartValidator extends BaseValidator<typeof validatorMessages> {
 	 * chosen one until the checkout screen. Whether the id is one the caller holds is not a shape
 	 * question and is answered by the controller.
 	 */
+	/**
+	 * `delivery_method` and `delivery_address_id` ask for the delivery to be quoted as well, and are
+	 * only read together with `client_id` - see `CartService.previewDelivery`.
+	 */
 	readonly publicRead = z.object({
 		client_id: this.validateId(this.getMessage('invalid_client_id'), {
 			required: false,
 		}),
+		delivery_method: this.validateEnum(
+			ShippingMethodEnum,
+			this.getMessage('invalid_delivery_method'),
+			{ required: false },
+		),
+		delivery_address_id: this.validateId(
+			this.getMessage('invalid_delivery_address_id'),
+			{ required: false },
+		),
 	});
 
 	/**
