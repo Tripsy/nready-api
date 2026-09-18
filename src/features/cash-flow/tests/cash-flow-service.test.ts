@@ -8,8 +8,6 @@ import {
 	CashFlowDirectionEnum,
 	type CashFlowStatus,
 	CashFlowStatusEnum,
-	type Currency,
-	CurrencyEnum,
 } from '@/features/cash-flow/cash-flow.entity';
 import {
 	cashFlowInputPayloads,
@@ -100,7 +98,7 @@ describe('CashFlowService', () => {
 			serviceCashFlow.checkRefund({
 				category: CashFlowCategoryEnum.CUSTOMER,
 				inputAmount: 2500,
-				currency: Configuration.currency() as Currency,
+				currency: Configuration.currency(),
 				parentEntry: getCashFlowEntityMock(),
 				refundedAmount: 10000,
 			}),
@@ -112,7 +110,7 @@ describe('CashFlowService', () => {
 			serviceCashFlow.checkRefund({
 				category: CashFlowCategoryEnum.REFUND,
 				inputAmount: 2500,
-				currency: Configuration.currency() as Currency,
+				currency: Configuration.currency(),
 				parentEntry: getCashFlowEntityMock({
 					status: CashFlowStatusEnum.CANCELED,
 				}),
@@ -126,9 +124,9 @@ describe('CashFlowService', () => {
 			serviceCashFlow.checkRefund({
 				category: CashFlowCategoryEnum.REFUND,
 				inputAmount: 2500,
-				currency: Configuration.currency() as Currency,
+				currency: Configuration.currency(),
 				parentEntry: getCashFlowEntityMock({
-					currency: CurrencyEnum.EUR,
+					currency: 'EUR',
 				}),
 				refundedAmount: 10000,
 			}),
@@ -140,7 +138,7 @@ describe('CashFlowService', () => {
 			serviceCashFlow.checkRefund({
 				category: CashFlowCategoryEnum.REFUND,
 				inputAmount: 2500,
-				currency: Configuration.currency() as Currency,
+				currency: Configuration.currency(),
 				parentEntry: getCashFlowEntityMock({
 					category_type: CashFlowCategoryTypeEnum.CORRECTION,
 				}),
@@ -156,7 +154,7 @@ describe('CashFlowService', () => {
 			serviceCashFlow.checkRefund({
 				category: CashFlowCategoryEnum.REFUND,
 				inputAmount: 2500,
-				currency: Configuration.currency() as Currency,
+				currency: Configuration.currency(),
 				parentEntry: getCashFlowEntityMock({
 					amount: 1000,
 				}),
@@ -170,7 +168,7 @@ describe('CashFlowService', () => {
 			serviceCashFlow.checkRefund({
 				category: CashFlowCategoryEnum.REFUND,
 				inputAmount: 2500,
-				currency: Configuration.currency() as Currency,
+				currency: Configuration.currency(),
 				parentEntry: getCashFlowEntityMock({
 					amount: 12000,
 				}),
@@ -181,7 +179,7 @@ describe('CashFlowService', () => {
 
 	it('getExchangeRate - should return 1 for default currency', async () => {
 		const result = await serviceCashFlow.getExchangeRate(
-			Configuration.currency() as Currency,
+			Configuration.currency(),
 		);
 
 		expect(result).toBe(1);
@@ -191,9 +189,9 @@ describe('CashFlowService', () => {
 	// rate comes from the parent rather than from whatever is published today
 	it('getExchangeRate - should inherit the rate of a refunded entry', async () => {
 		const result = await serviceCashFlow.getExchangeRate(
-			CurrencyEnum.EUR,
+			'EUR',
 			getCashFlowEntityMock({
-				currency: CurrencyEnum.EUR,
+				currency: 'EUR',
 				exchange_rate: 4.9712,
 			}),
 		);

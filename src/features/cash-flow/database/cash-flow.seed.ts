@@ -1,4 +1,3 @@
-import { Configuration } from '@/config/settings.config';
 import {
 	isDirectRun,
 	type Random,
@@ -14,8 +13,6 @@ import CashFlowEntity, {
 	AMOUNT_DECIMALS,
 	CashFlowMethodEnum,
 	CashFlowStatusEnum,
-	type Currency,
-	CurrencyEnum,
 	getExpectedCategoryType,
 	getExpectedDirection,
 } from '@/features/cash-flow/cash-flow.entity';
@@ -23,6 +20,7 @@ import {
 	type CashFlowCategory,
 	CashFlowCategoryEnum,
 } from '@/features/cash-flow/cash-flow-category.enum';
+import { resolveBaseCurrency } from '@/features/exchange-rate/exchange-rate.entity';
 
 const TARGET = 150;
 
@@ -61,11 +59,14 @@ const AMOUNT_RANGES: Partial<
 
 const VAT_RATES = [0, 5, 9, 19, 21] as const;
 
-/** Rate against the base currency; only a foreign-currency row carries anything but 1. */
-const EXCHANGE_RATES: Record<Currency, number> = {
-	[CurrencyEnum.RON]: 1,
-	[CurrencyEnum.EUR]: 5.08,
-	[CurrencyEnum.USD]: 4.66,
+/**
+ * Rate against the base currency; only a foreign-currency row carries anything but 1. Keyed by
+ * ISO code, so a deployment based on a currency not listed here seeds every row at 1.
+ */
+const EXCHANGE_RATES: Record<string, number> = {
+	RON: 1,
+	EUR: 5.08,
+	USD: 4.66,
 };
 
 /**
@@ -102,7 +103,7 @@ function createdAtForIndex(random: Random, index: number): Date {
 export const cashFlowSeed: SeedDefinition = {
 	name: 'cash-flow',
 	run: async ({ manager, random }): Promise<SeedSummary> => {
-		const baseCurrency = Configuration.currency() as Currency;
+		const baseCurrency = resolveBaseCurrency();
 
 		return topUp({
 			entity: 'cash-flow',
@@ -137,7 +138,7 @@ export const cashFlowSeed: SeedDefinition = {
 					baseCurrency,
 					baseCurrency,
 					baseCurrency,
-					CurrencyEnum.EUR,
+					'EUR',
 				]);
 
 				return {
@@ -170,7 +171,7 @@ export const cashFlowSeed: SeedDefinition = {
 					exchange_rate:
 						currency === baseCurrency
 							? 1
-							: EXCHANGE_RATES[currency],
+							: (EXCHANGE_RATES[currency] ?? 1),
 					external_reference: `SEED-CF-${sequenceLabel(index, 5)}`,
 					parent_id: null,
 					notes: null,

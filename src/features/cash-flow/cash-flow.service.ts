@@ -8,12 +8,10 @@ import CashFlowEntity, {
 	CashFlowCategoryTypeEnum,
 	type CashFlowDirection,
 	type CashFlowStatus,
-	type Currency,
 	getExpectedCategoryType,
 	getExpectedDirection,
 	MUTABLE_STATUSES,
 	REFUNDABLE_STATUSES,
-	resolveCurrency,
 	STATUS_TRANSITIONS,
 } from '@/features/cash-flow/cash-flow.entity';
 import { getCashFlowRepository } from '@/features/cash-flow/cash-flow.repository';
@@ -33,6 +31,7 @@ import {
 } from '@/features/cash-flow/operational-record.entity';
 import { getOperationalRecordRepository } from '@/features/cash-flow/operational-record.repository';
 import { clientService } from '@/features/client/client.service';
+import { resolveBaseCurrency } from '@/features/exchange-rate/exchange-rate.entity';
 import { exchangeRateService } from '@/features/exchange-rate/exchange-rate.service';
 import { vendorService } from '@/features/vendor/vendor.service';
 import { arrayHasValue, pickValuesFromObject } from '@/helpers/objects.helper';
@@ -93,7 +92,7 @@ export class CashFlowService {
 	public async checkRefund(deps: {
 		category: CashFlowCategory;
 		inputAmount: number;
-		currency: Currency;
+		currency: string;
 		parentEntry: CashFlowEntity;
 		refundedAmount: number;
 	}) {
@@ -170,7 +169,7 @@ export class CashFlowService {
 	 * refused instead and the rate is entered by hand or imported first.
 	 */
 	public async getExchangeRate(
-		selectedCurrency: Currency,
+		selectedCurrency: string,
 		parentEntry?: CashFlowEntity | null,
 	): Promise<number> {
 		if (parentEntry) {
@@ -280,7 +279,7 @@ export class CashFlowService {
 		data: ValidatorOutput<CashFlowValidator, 'create'>,
 	): Promise<CashFlowEntity> {
 		const inputAmount = this.inputAmount(data.amount);
-		const currency = resolveCurrency(data.currency);
+		const currency = data.currency ?? resolveBaseCurrency();
 
 		this.checkDirection(data.category_type, data.direction);
 		this.checkCategoryType(data.category_type, data.category);

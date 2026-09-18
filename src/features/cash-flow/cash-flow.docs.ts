@@ -6,7 +6,6 @@ import {
 	CashFlowDirectionEnum,
 	CashFlowMethodEnum,
 	CashFlowStatusEnum,
-	CurrencyEnum,
 	STATUS_TRANSITIONS,
 } from '@/features/cash-flow/cash-flow.entity';
 import {
@@ -59,10 +58,9 @@ const vatRateParam = {
 };
 
 const currencyParam = {
-	type: 'enum' as const,
+	type: 'string' as const,
 	required: false,
-	values: Object.values(CurrencyEnum),
-	condition: `defaults to the deployment currency (${Configuration.currency()}); the exchange rate to it is captured on the row`,
+	condition: `3-letter ISO 4217 code; defaults to the deployment currency (${Configuration.currency()}); the exchange rate to it is captured on the row`,
 };
 
 export const docs: Record<
