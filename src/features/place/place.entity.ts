@@ -43,6 +43,26 @@ export default class PlaceEntity extends EntityAbstract {
 	@Index('IDX_place_code')
 	code!: string | null;
 
+	/**
+	 * ISO 3166-1 alpha-2, on a country and nowhere else - a region or a city has no country code
+	 * of its own.
+	 *
+	 * Separate from `code`, which is the place seed's natural key and links a child to its parent;
+	 * rewriting that to two letters would change the key rows are matched on. This is the
+	 * vocabulary country *rules* are written in - `discount.conditions.applicable_countries`, and
+	 * `article_visibility_rule.allowed_countries`, which is compared against CDN geo headers that
+	 * emit alpha-2 and are not ours to change.
+	 *
+	 * Null on a country nobody has filled in yet, which fails every country condition closed.
+	 */
+	@Column('varchar', {
+		length: 2,
+		nullable: true,
+		comment:
+			'ISO 3166-1 alpha-2, countries only; the vocabulary country rules are matched against',
+	})
+	alpha2_code!: string | null;
+
 	// RELATIONS
 	@ManyToOne(
 		() => PlaceEntity,

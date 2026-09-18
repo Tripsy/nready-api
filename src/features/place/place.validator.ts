@@ -11,6 +11,7 @@ import {
 export const paramsUpdateList: string[] = [
 	'place_type',
 	'code',
+	'alpha2_code',
 	'parent_id',
 	'contents',
 ];
@@ -24,6 +25,12 @@ export const OrderByEnum = {
  * cap belongs here - a value that reaches the write fails as a 500 rather than a field error.
  */
 const CODE_MAX_CHARS = 3;
+
+/**
+ * Width of `alpha2_code` (`varchar(2)`), and the shape of an ISO 3166-1 alpha-2 code - the two
+ * happen to be the same number, which is why the column is that width.
+ */
+const ALPHA2_CODE_CHARS = 2;
 
 const validatorMessages = [
 	...sharedValidatorMessages,
@@ -50,6 +57,10 @@ export class PlaceValidator extends BaseValidator<typeof validatorMessages> {
 		code: this.validateString(this.getMessage('invalid_code'), {
 			required: false,
 			maxChars: CODE_MAX_CHARS,
+		}),
+		alpha2_code: this.validateString(this.getMessage('invalid_code'), {
+			required: false,
+			maxChars: ALPHA2_CODE_CHARS,
 		}),
 		parent_id: this.validateId(this.getMessage('invalid_parent_id'), {
 			required: false,
@@ -85,6 +96,10 @@ export class PlaceValidator extends BaseValidator<typeof validatorMessages> {
 			code: this.validateString(this.getMessage('invalid_code'), {
 				required: false,
 				maxChars: CODE_MAX_CHARS,
+			}),
+			alpha2_code: this.validateString(this.getMessage('invalid_code'), {
+				required: false,
+				maxChars: ALPHA2_CODE_CHARS,
 			}),
 			parent_id: this.validateId(this.getMessage('invalid_parent_id'), {
 				required: false,
@@ -162,5 +177,15 @@ export class PlaceValidator extends BaseValidator<typeof validatorMessages> {
 				{ required: false },
 			).default(false),
 		},
+	});
+
+	/**
+	 * The storefront city search. Only a term: the place type is fixed to city, the page size is
+	 * the controller's, and the language is the request's - none of them is the shopper's to widen.
+	 */
+	readonly publicFind = z.object({
+		term: this.validateString(this.getMessage('invalid_string'), {
+			minChars: Configuration.get('filter.termMinLength'),
+		}),
 	});
 }

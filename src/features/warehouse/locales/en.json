@@ -1,0 +1,29 @@
+{
+	"validation": {
+		"invalid_name": "Invalid name",
+		"invalid_code": "Invalid code",
+		"invalid_address_id": "Invalid address",
+		"invalid_is_default": "Invalid default flag"
+	},
+	"error": {
+		"not_found": "Warehouse not found",
+		"code_taken": "A warehouse with this code already exists",
+		"default_conflict": "Another warehouse is already set as default",
+		"default_missing": "No active default warehouse is configured, so the order cannot be shipped from anywhere"
+	},
+	"success": {
+		"create": "Warehouse created successfully",
+		"update": "Warehouse updated successfully",
+		"delete": "Warehouse deleted successfully",
+		"restore": "Warehouse restored successfully",
+		"status_update": "Warehouse status updated successfully"
+	},
+	"history": {
+		"created": "Warehouse #{{entity_id}} created by user #{{auth_id}}",
+		"updated": "Warehouse #{{entity_id}} updated by user #{{auth_id}}",
+		"deleted": "Warehouse(s) {{entity_ids}} marked as deleted by user #{{auth_id}}",
+		"removed": "Warehouse(s) {{entity_ids}} removed by user #{{auth_id}}",
+		"restored": "Warehouse(s) {{entity_ids}} restored by user #{{auth_id}}",
+		"status": "Warehouse #{{entity_id}} updated from {{oldStatus}} to {{newStatus}} by user #{{auth_id}}"
+	}
+}

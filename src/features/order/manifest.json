@@ -1,14 +1,15 @@
 {
 	"name": "order",
-	"version": "1.2.0",
+	"version": "2.0.0",
 	"relativePath": "/order",
-	"entities": ["order", "order-product"],
-	"depends_on": ["client", "product", "discount", "document-series"],
-	"required_by": [
-		"order-shipping",
-		"invoice",
-		"subscription",
-		"review",
-		"cart"
-	]
+	"entities": ["order", "order-line"],
+	"depends_on": [
+		"client",
+		"client-address",
+		"product",
+		"discount",
+		"document-series",
+		"exchange-rate"
+	],
+	"required_by": ["shipping", "invoice", "subscription", "review", "cart"]
 }

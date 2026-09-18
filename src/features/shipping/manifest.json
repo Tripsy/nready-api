@@ -1,0 +1,16 @@
+{
+	"name": "shipping",
+	"version": "3.0.0",
+	"relativePath": "/shipping",
+	"entities": ["shipping", "shipping-line"],
+	"depends_on": [
+		"address",
+		"carrier",
+		"order",
+		"discount",
+		"warehouse",
+		"client-address",
+		"product"
+	],
+	"required_by": ["cart"]
+}

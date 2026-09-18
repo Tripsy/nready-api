@@ -21,7 +21,7 @@ export type WarehouseMovementType =
 
 export const WarehouseMovementSourceEnum = {
 	GRN_ITEM: 'grn_item',
-	ORDER_SHIPPING_PRODUCT: 'order_shipping_product',
+	SHIPPING_LINE: 'shipping_line',
 	ADJUSTMENT: 'adjustment', // Entered by hand, no document behind it
 } as const;
 
@@ -42,8 +42,8 @@ const ENTITY_TABLE_NAME = 'warehouse_movement';
  * reconciliation job compares the sum of movements per lot against it and reports drift.
  *
  * **Stock leaves on shipment, not on order confirmation.** The source of an outbound sale is an
- * `order_shipping_product`, because a lot cannot be picked before the warehouse shipping it is
- * known - and one order may ship from two. `order_product` carries no lot reference at all.
+ * `shipping_line`, because a lot cannot be picked before the warehouse shipping it is
+ * known - and one order may ship from two. `order_line` carries no lot reference at all.
  *
  * Reservations are deliberately absent. Nothing physical moves when an order is placed, and a
  * ledger that mixes promises with facts stops being either.

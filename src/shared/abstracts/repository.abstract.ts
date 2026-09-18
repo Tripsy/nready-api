@@ -18,7 +18,9 @@ import {
 	type EntityWithCache,
 } from '@/shared/abstracts/service.abstract';
 
-type QueryValue = string | number | (string | number)[] | null;
+// `boolean` is here for flag columns (`is_default`, `is_active`): the driver binds it natively,
+// so a filter on one needs no string that Postgres has to cast back
+type QueryValue = string | number | boolean | (string | number)[] | null;
 type QueryParams = Record<string, QueryValue>;
 
 type FilterByPropsType = {
@@ -430,7 +432,7 @@ abstract class RepositoryAbstract<TEntity extends ObjectLiteral> {
 	// All other operators require scalar
 	filterBy(
 		column: string,
-		value?: string | number | null,
+		value?: string | number | boolean | null,
 		operator?:
 			| '='
 			| '!='

@@ -15,7 +15,8 @@
 		"end_at_must_be_after_start_at": "End date must be after start date"
 	},
 	"error": {
-		"not_found": "Discount not found"
+		"not_found": "Discount not found",
+		"shipping_targets": "A shipping discount can only target clients"
 	},
 	"success": {
 		"create": "Discount created successfully",

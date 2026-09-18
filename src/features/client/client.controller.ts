@@ -143,6 +143,39 @@ class ClientController extends BaseController {
 		res.json(res.locals.output);
 	});
 
+	/**
+	 * Links the client to an account, or unlinks it when the body carries `user_id: null`.
+	 *
+	 * An action of its own rather than a field on `update`: the link is what lets a shopper bill an
+	 * order to this client and what makes a review count as a verified purchase, so it is granted
+	 * deliberately instead of riding along with an edit of the contact details.
+	 */
+	public updateAccount = asyncHandler(async (req: Request, res: Response) => {
+		this.policy.canUpdate(res.locals.auth);
+
+		const data = this.validate(
+			this.validator.updateAccount,
+			{ ...req.body, id: req.params.id },
+			res,
+		);
+
+		const existingEntry = await this.clientService.findById(data.id, false);
+
+		if (existingEntry.user_id !== data.user_id) {
+			await this.clientService.updateAccount(existingEntry, data.user_id);
+		}
+
+		res.locals.output.message(
+			lang(
+				data.user_id === null
+					? 'client.success.unlink_account'
+					: 'client.success.link_account',
+			),
+		);
+
+		res.json(res.locals.output);
+	});
+
 	public statusUpdate = asyncHandler(async (req: Request, res: Response) => {
 		this.policy.canUpdate(res.locals.auth);
 

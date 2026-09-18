@@ -41,6 +41,7 @@ import type { ResolvedBundleItem } from '@/features/product/product-bundle.repos
 import ProductBundleRepository from '@/features/product/product-bundle.repository';
 import ProductBundleGroupEntity from '@/features/product/product-bundle-group.entity';
 import ProductBundleItemEntity from '@/features/product/product-bundle-item.entity';
+import { productBundleSelectionService } from '@/features/product/product-bundle-selection.service';
 import ProductCategoryRepository from '@/features/product/product-category.repository';
 import type ProductCategoryAttributeEntity from '@/features/product/product-category-attribute.entity';
 import {
@@ -61,6 +62,7 @@ import ProductVariantRepository, {
 	type ResolvedVariant,
 } from '@/features/product/product-variant.repository';
 import { pickValuesFromObject } from '@/helpers/objects.helper';
+import { apportion, resolveVatRate, roundMoney } from '@/helpers/shop.helper';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
 import {
 	assertValidStatusTransition,
@@ -120,6 +122,71 @@ export type PublicProductAttribute = ProductAttributeEntity & {
 /** The product's own attributes, named and ordered - see `attachPublicAttributes`. */
 export type WithPublicAttributes<T> = T & {
 	attributes: PublicProductAttribute[];
+};
+
+/**
+ * A choice offered inside a bundle, as the storefront needs it: the prompt resolved into the
+ * served language, and nothing else. The dashboard's own read hands back every translation,
+ * because it edits them all at once; a visitor is served one.
+ */
+export type PublicBundleGroup = {
+	id: number;
+	label_id: number;
+	position: number;
+	label: {
+		id: number;
+		contents: { language: string; value: string }[];
+	} | null;
+};
+
+/**
+ * One component of a bundle, with what a page needs to draw it.
+ *
+ * `variant` and `label` are the reason this projection exists. A component names a variant of
+ * **another** product, so nothing in the bundle's own read can name it - `attachVariants` resolves
+ * the axis wording of this product's variants and has no reach outside it. Without them a chooser
+ * has an id and a delta and no way to say what the customer is choosing between.
+ *
+ * Prices come per currency on both figures, exactly as `attachVariants` hands them over, because
+ * the public read takes no currency: `publicRead` accepts a slug and a language, the payload is
+ * cached under those two alone, and the client picks its own market. Narrowing here would put a
+ * currency in a cache key that has never carried one.
+ *
+ * The timestamps and `item_id` the dashboard's shape carries are dropped, like every other public
+ * projection on this route.
+ */
+export type PublicBundleComponent = {
+	id: number;
+	variant_id: number;
+	quantity: number;
+	group_id: number | null;
+	position: number;
+	is_optional: boolean;
+	is_default: boolean;
+	prices: { currency: string; price_delta: number }[];
+	variant: {
+		id: number;
+		sku: string;
+		prices: {
+			currency: string;
+			sale_price: number | null;
+			reference_price: number | null;
+		}[];
+	} | null;
+	/** The component product's own label, in the served language. */
+	label: string | null;
+	/**
+	 * The component product's VAT rate, in percent. A bundle's price is apportioned across its
+	 * components and each share taxed at its own rate, so a page quoting a configured bundle
+	 * VAT-inclusive needs every component's rate to reach the figure the cart will charge.
+	 */
+	vat_rate: number;
+};
+
+/** A bundle's composition as the storefront reads it - see `attachPublicComposition`. */
+export type WithComposition<T> = T & {
+	bundle_groups: PublicBundleGroup[];
+	bundle_items: PublicBundleComponent[];
 };
 
 /**
@@ -1373,6 +1440,179 @@ export class ProductService {
 	}
 
 	/**
+	 * Adds the VAT-inclusive figures a storefront quotes - `sale_price_gross` and
+	 * `reference_price_gross` - beside the stored prices, which exclude VAT.
+	 *
+	 * Computed here rather than on the client because the client knows neither the rates, which are
+	 * deployment configuration, nor - for a bundle - how the price splits across components taxed
+	 * at different rates.
+	 *
+	 * A simple product is taxed at its own `vat_category`. A bundle's own class is unused
+	 * (`product.md` §8.4): its price is apportioned across the **kit** - the components that are
+	 * always included, plus each group's preselected candidate or, lacking one, its first - pro-rata
+	 * by standalone price in that currency, and each share taxed at its component's rate. That is
+	 * `CartPricingService.buildBundle`'s arithmetic over the configuration the headline price
+	 * describes; optional extras are left out because the headline does not include them. A
+	 * reference price is scaled by the same ratio, having no split of its own.
+	 *
+	 * VAT is rounded per share, as the cart rounds per line, so the gross figure is the one the cart
+	 * will charge. Bundles cost two extra reads for the whole page; a page of simple products costs
+	 * none.
+	 */
+	private async attachGrossPrices<
+		T extends {
+			id: number;
+			composition: ProductComposition;
+			vat_category: Parameters<typeof resolveVatRate>[0];
+			variants: {
+				prices?: {
+					currency: string;
+					sale_price: number | null;
+					reference_price: number | null;
+				}[];
+			}[];
+		},
+	>(entries: T[]): Promise<T[]> {
+		const bundleIds = entries
+			.filter(
+				(entry) => entry.composition === ProductCompositionEnum.BUNDLE,
+			)
+			.map((entry) => entry.id);
+
+		const kits = new Map<number, { variant_id: number; units: number }[]>();
+
+		if (bundleIds.length > 0) {
+			const compositions =
+				await productBundleSelectionService.loadComposition(bundleIds);
+
+			for (const [bundleId, composition] of compositions) {
+				const picked = [...composition.candidatesByGroup.values()]
+					.map(
+						(candidates) =>
+							candidates.find((item) => item.is_default) ??
+							candidates[0],
+					)
+					.filter((item) => item !== undefined);
+
+				kits.set(
+					bundleId,
+					[...composition.mandatory, ...picked].map((item) => ({
+						variant_id: item.variant_id,
+						units: Number(item.quantity),
+					})),
+				);
+			}
+		}
+
+		const componentVariantIds = [
+			...new Set(
+				[...kits.values()].flatMap((kit) =>
+					kit.map((part) => part.variant_id),
+				),
+			),
+		];
+
+		const componentVariants =
+			componentVariantIds.length === 0
+				? []
+				: await dataSource
+						.getRepository(ProductVariantEntity)
+						.createQueryBuilder('variant')
+						.leftJoinAndSelect(
+							'variant.prices',
+							'price',
+							'price.deleted_at IS NULL',
+						)
+						.leftJoinAndSelect('variant.product', 'product')
+						.select([
+							'variant.id',
+							'price.id',
+							'price.currency',
+							'price.sale_price',
+							'product.id',
+							'product.vat_category',
+						])
+						.where('variant.id IN (:...ids)', {
+							ids: componentVariantIds,
+						})
+						.getMany();
+
+		const componentById = new Map(
+			componentVariants.map((variant) => [variant.id, variant]),
+		);
+
+		const grossOf = (entry: T, currency: string, sale: number): number => {
+			const kit = kits.get(entry.id);
+
+			if (!kit || kit.length === 0) {
+				const rate = resolveVatRate(entry.vat_category);
+
+				return roundMoney(sale + roundMoney((sale * rate) / 100));
+			}
+
+			const parts = kit.map((part) => {
+				const component = componentById.get(part.variant_id);
+				const standalone = Number(
+					component?.prices?.find(
+						(price) => price.currency === currency,
+					)?.sale_price ?? 0,
+				);
+
+				return {
+					weight: standalone * part.units,
+					rate: resolveVatRate(
+						component?.product?.vat_category ?? 'standard',
+					),
+				};
+			});
+
+			const shares = apportion(
+				sale,
+				parts.map((part) => part.weight),
+			);
+
+			const vat = shares.reduce(
+				(sum, share, index) =>
+					sum + roundMoney((share * parts[index].rate) / 100),
+				0,
+			);
+
+			return roundMoney(sale + vat);
+		};
+
+		for (const entry of entries) {
+			for (const variant of entry.variants) {
+				for (const price of variant.prices ?? []) {
+					const sale =
+						price.sale_price === null
+							? null
+							: Number(price.sale_price);
+					const reference =
+						price.reference_price === null
+							? null
+							: Number(price.reference_price);
+					const saleGross =
+						sale === null
+							? null
+							: grossOf(entry, price.currency, sale);
+
+					Object.assign(price, {
+						sale_price_gross: saleGross,
+						reference_price_gross:
+							reference === null
+								? null
+								: sale && saleGross !== null
+									? roundMoney((reference * saleGross) / sale)
+									: grossOf(entry, price.currency, reference),
+					});
+				}
+			}
+		}
+
+		return entries;
+	}
+
+	/**
 	 * Replaces the product's own attribute rows with the named, ordered set a spec table is drawn
 	 * from.
 	 *
@@ -1625,9 +1865,8 @@ export class ProductService {
 		 * label of its own, so a page offering a choice between them needs the axis values resolved
 		 * through `term_content`, which the dashboard's read has no use for and does not join.
 		 */
-		const [entryWithVariants] = await this.attachVariants(
-			[entry],
-			language,
+		const [entryWithVariants] = await this.attachGrossPrices(
+			await this.attachVariants([entry], language),
 		);
 
 		const entryWithAttributes = await this.attachPublicAttributes(
@@ -1635,11 +1874,161 @@ export class ProductService {
 			language,
 		);
 
-		const [entryWithCover] = await this.attachCoverImages([
+		/*
+		 * Replaces the rows `attachBranches` left on the entry, the way the variants above are
+		 * replaced and for the same reason: those are the dashboard's shape - every translation of
+		 * every prompt, timestamps, soft-delete columns - and a component there is a bare
+		 * `variant_id` a storefront cannot draw.
+		 */
+		const entryWithComposition = await this.attachPublicComposition(
 			entryWithAttributes,
+			language,
+		);
+
+		const [entryWithCover] = await this.attachCoverImages([
+			entryWithComposition,
 		]);
 
 		return await this.attachPublicGalleries(entryWithCover);
+	}
+
+	/**
+	 * A bundle's composition, projected for the storefront so a page can offer its choices.
+	 *
+	 * Built from what `attachBranches` already loaded rather than read again - the groups, their
+	 * prompts and the per-currency deltas are all on the entry by the time this runs, so the only
+	 * thing missing is what a component *is*: its variant's SKU and prices, and the label of the
+	 * product that variant belongs to. That is one query however many components the bundle has.
+	 *
+	 * A product with no components does none of it. Every simple product takes that path, which is
+	 * nearly all of them, so the cost falls only on the reads that need it.
+	 *
+	 * The prompt is narrowed to the served language here rather than in the join, because the rows
+	 * were loaded for the dashboard's sake with every translation on them; picking one from an
+	 * array already in memory is cheaper than reading them again.
+	 */
+	private async attachPublicComposition<
+		T extends {
+			bundle_groups?: ProductBundleGroupEntity[];
+			bundle_items?: ProductBundleItemEntity[];
+		},
+	>(entry: T, language: string | undefined): Promise<WithComposition<T>> {
+		const groups = entry.bundle_groups ?? [];
+		const items = entry.bundle_items ?? [];
+
+		if (items.length === 0) {
+			return { ...entry, bundle_groups: [], bundle_items: [] };
+		}
+
+		const variantIds = [...new Set(items.map((item) => item.variant_id))];
+
+		const variants = await dataSource
+			.getRepository(ProductVariantEntity)
+			.createQueryBuilder('variant')
+			.leftJoinAndSelect(
+				'variant.prices',
+				'price',
+				'price.deleted_at IS NULL',
+			)
+			.leftJoinAndSelect('variant.product', 'component_product')
+			.leftJoinAndSelect(
+				'component_product.contents',
+				'component_content',
+				'component_content.language = :language',
+			)
+			/*
+			 * Projected like every other public read on this route: `cost_price` and `min_price`
+			 * describe what the business pays and the floor a discount may not cross, and neither
+			 * belongs on a route with no policy. The joined rows' primary keys are selected
+			 * because TypeORM cannot map a narrowed join without them.
+			 */
+			.select([
+				'variant.id',
+				'variant.sku',
+				'variant.product_id',
+
+				'price.id',
+				'price.currency',
+				'price.sale_price',
+				'price.reference_price',
+
+				'component_product.id',
+				'component_product.vat_category',
+				'component_content.id',
+				'component_content.language',
+				'component_content.label',
+			])
+			.where('variant.id IN (:...variantIds)', { variantIds })
+			.setParameter('language', language)
+			.getMany();
+
+		const variantById = new Map(
+			variants.map((variant) => [variant.id, variant]),
+		);
+
+		const publicGroups: PublicBundleGroup[] = groups.map((group) => ({
+			id: group.id,
+			label_id: group.label_id,
+			position: group.position,
+			label: group.label
+				? {
+						id: group.label.id,
+						contents: (group.label.contents ?? [])
+							.filter(
+								(content) =>
+									language === undefined ||
+									content.language === language,
+							)
+							.map((content) => ({
+								language: content.language,
+								value: content.value,
+							})),
+					}
+				: null,
+		}));
+
+		const publicItems: PublicBundleComponent[] = items.map((item) => {
+			const variant = variantById.get(item.variant_id);
+
+			return {
+				id: item.id,
+				variant_id: item.variant_id,
+				// `numeric` with no transformer on this column, so the driver hands it over as a
+				// string - a ceiling compared as text would order 10 before 2.
+				quantity: Number(item.quantity),
+				group_id: item.group_id,
+				position: item.position,
+				is_optional: item.is_optional,
+				is_default: item.is_default,
+				prices: (item.prices ?? []).map((price) => ({
+					currency: price.currency,
+					price_delta: Number(price.price_delta),
+				})),
+				variant: variant
+					? {
+							id: variant.id,
+							sku: variant.sku,
+							prices: (variant.prices ?? []).map((price) => ({
+								currency: price.currency,
+								sale_price: price.sale_price,
+								reference_price: price.reference_price,
+							})),
+						}
+					: null,
+				label: variant?.product?.contents?.[0]?.label ?? null,
+				// An unresolved component falls back to the standard rate, the same way
+				// `resolveVatRate` treats an unknown class: under-quoting VAT is the costly error.
+				vat_rate: resolveVatRate(
+					variant?.product?.vat_category ?? 'standard',
+				),
+			};
+		});
+
+		return {
+			...entry,
+			bundle_groups: publicGroups,
+			bundle_items: publicItems,
+		};
 	}
 
 	/**
@@ -1811,9 +2200,8 @@ export class ProductService {
 			.pagination(data.page, data.limit)
 			.all(true);
 
-		const withVariants = await this.attachVariants(
-			entries,
-			data.filter.language,
+		const withVariants = await this.attachGrossPrices(
+			await this.attachVariants(entries, data.filter.language),
 		);
 
 		return [await this.attachCoverImages(withVariants), total] as const;

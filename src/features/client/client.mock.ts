@@ -33,6 +33,7 @@ export function getClientEntityMock(): ClientEntity {
 		contact_name: 'John',
 		contact_email: 'contact@acme.com',
 		contact_phone: null,
+		user_id: 7,
 		notes: null,
 		created_at: createPastDate(86400),
 		updated_at: null,
@@ -57,6 +58,9 @@ export const clientInputPayloads = {
 		client_type: ClientTypeEnum.COMPANY,
 		company_name: 'Acme Updated',
 		contact_email: 'updated@acme.com',
+	},
+	updateAccount: {
+		user_id: 7,
 	},
 	find: {
 		page: 1,

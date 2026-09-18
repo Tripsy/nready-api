@@ -39,7 +39,15 @@ const placeTypeParam = {
 const codeParam = {
 	type: 'string' as const,
 	required: false,
-	condition: 'an abbreviation, 3 characters at most',
+	condition:
+		'an abbreviation, 3 characters at most; the natural key a seed links parents and children by - alpha-3 on a country',
+};
+
+const alpha2CodeParam = {
+	type: 'string' as const,
+	required: false,
+	condition:
+		'ISO 3166-1 alpha-2, on a country only - the vocabulary country rules are matched against (discount conditions, article visibility). Left empty on a region or a city',
 };
 
 const contentsParam = {
@@ -71,6 +79,7 @@ export const docs: Record<keyof typeof placeController, ApiInputDocumentation> =
 				body: {
 					place_type: placeTypeParam,
 					code: codeParam,
+					alpha2_code: alpha2CodeParam,
 					parent_id: {
 						type: 'number',
 						required: false,
@@ -130,6 +139,7 @@ export const docs: Record<keyof typeof placeController, ApiInputDocumentation> =
 				body: {
 					place_type: { ...placeTypeParam, required: false },
 					code: codeParam,
+					alpha2_code: alpha2CodeParam,
 					parent_id: {
 						type: 'number',
 						required: false,

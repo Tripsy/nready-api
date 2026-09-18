@@ -9,18 +9,22 @@ import { cartSeed } from '@/features/cart/database/cart.seed';
 import { cashFlowSeed } from '@/features/cash-flow/database/cash-flow.seed';
 import { categorySeed } from '@/features/category/database/category.seed';
 import { clientSeed } from '@/features/client/database/client.seed';
+import { clientAddressSeed } from '@/features/client-address/database/client-address.seed';
 import { commentSeed } from '@/features/comment/database/comment.seed';
 import { complaintSeed } from '@/features/complaint/database/complaint.seed';
 import { discountSeed } from '@/features/discount/database/discount.seed';
 import { documentSeriesSeed } from '@/features/document-series/database/document-series.seed';
 import { imageSeed } from '@/features/image/database/image.seed';
+import { orderSeed } from '@/features/order/database/order.seed';
 import { placeSeed } from '@/features/place/database/place.seed';
 import { productSeed } from '@/features/product/database/product.seed';
 import { ratingSeed } from '@/features/rating/database/rating.seed';
 import { reviewSeed } from '@/features/review/database/review.seed';
+import { shippingSeed } from '@/features/shipping/database/shipping.seed';
 import { termSeed } from '@/features/term/database/term.seed';
 import { userSeed } from '@/features/user/database/user.seed';
 import { vendorSeed } from '@/features/vendor/database/vendor.seed';
+import { warehouseSeed } from '@/features/warehouse/database/warehouse.seed';
 
 /**
  * Declaration order is the foreign-key order and is not arbitrary: `place → address`, and
@@ -38,10 +42,15 @@ const seeds: readonly SeedDefinition[] = [
 	addressSeed,
 	brandSeed,
 	carrierSeed,
+	// Reads address ids
+	warehouseSeed,
 	categorySeed,
-	clientSeed,
 	vendorSeed,
 	userSeed,
+	// Reads user ids - most clients are linked to the account that holds them
+	clientSeed,
+	// Reads client and address ids - a client address points at an existing address
+	clientAddressSeed,
 	cashFlowSeed,
 	termSeed,
 	// Reads category, term, brand ids; seeds the category attribute definitions
@@ -56,8 +65,6 @@ const seeds: readonly SeedDefinition[] = [
 	imageSeed,
 	// Reads article and user ids
 	ratingSeed,
-	// Reads product, product variant and user ids
-	reviewSeed,
 	// Reads article and user ids; replies are inserted after the roots they hang from
 	commentSeed,
 	// Reads article, comment and user ids
@@ -65,6 +72,15 @@ const seeds: readonly SeedDefinition[] = [
 	// Reads product variant, product option and user ids; the lines cite variants, so it has to
 	// follow `productSeed`
 	cartSeed,
+	// Reads client ids and priced product variants; allocates its numbers from the `ORD` series,
+	// so it has to follow `documentSeriesSeed` as well
+	orderSeed,
+	// Reads orders with their lines, plus warehouse, carrier and client address ids - so it has to
+	// follow `orderSeed`, `warehouseSeed` and `clientAddressSeed`
+	shippingSeed,
+	// Reads product, product variant and user ids, and the completed orders a verified review
+	// names - so it has to follow `orderSeed`
+	reviewSeed,
 ];
 
 function resolveSeeds(

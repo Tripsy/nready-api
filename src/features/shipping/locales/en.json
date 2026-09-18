@@ -1,0 +1,51 @@
+{
+	"validation": {
+		"invalid_scope": "Invalid movement type",
+		"invalid_order_id": "Invalid order",
+		"invalid_document_ref": "Invalid document",
+		"invalid_pickup_warehouse_id": "Invalid pickup warehouse",
+		"invalid_pickup_client_address_id": "Invalid pickup address",
+		"invalid_destination_warehouse_id": "Invalid destination warehouse",
+		"invalid_destination_client_address_id": "Invalid destination address",
+		"invalid_carrier_id": "Invalid carrier",
+		"invalid_method": "Invalid delivery method",
+		"invalid_tracking_number": "Invalid tracking number",
+		"invalid_tracking_url": "Invalid tracking URL",
+		"invalid_price": "Invalid price",
+		"invalid_operational_cost": "Invalid operational cost",
+		"invalid_vat_rate": "Invalid VAT rate",
+		"invalid_currency": "Invalid currency",
+		"invalid_contact_name": "Invalid contact name",
+		"invalid_contact_phone": "Invalid contact phone",
+		"invalid_contact_email": "Invalid contact email",
+		"invalid_lines": "Invalid movement lines",
+		"invalid_variant_id": "Invalid variant",
+		"invalid_product_id": "Invalid product",
+		"invalid_quantity": "Invalid quantity",
+		"price_needs_vat_rate": "Price and VAT rate go together - state both, or leave both out to use the shipping rates"
+	},
+	"error": {
+		"not_found": "Movement not found",
+		"pickup_required": "A {{scope}} movement must say where the goods are picked up from",
+		"destination_required": "A {{scope}} movement must say where the goods are going",
+		"document_required": "A {{scope}} movement must name the document it belongs to",
+		"ends_locked": "The pickup and destination cannot be changed once the goods have left",
+		"invalid_line": "Variant #{{variant_id}} is not on the order this movement serves",
+		"over_allocated": "Variant #{{variant_id}} has only {{remaining}} left to ship across the order's other movements"
+	},
+	"success": {
+		"create": "Movement created successfully",
+		"update": "Movement updated successfully",
+		"delete": "Movement deleted successfully",
+		"restore": "Movement restored successfully",
+		"status_update": "Movement status updated successfully"
+	},
+	"history": {
+		"created": "Movement #{{entity_id}} created by user #{{auth_id}}",
+		"updated": "Movement #{{entity_id}} updated by user #{{auth_id}}",
+		"deleted": "Movement(s) {{entity_ids}} marked as deleted by user #{{auth_id}}",
+		"removed": "Movement(s) {{entity_ids}} removed by user #{{auth_id}}",
+		"restored": "Movement(s) {{entity_ids}} restored by user #{{auth_id}}",
+		"status": "Movement #{{entity_id}} updated from {{oldStatus}} to {{newStatus}} by user #{{auth_id}}"
+	}
+}

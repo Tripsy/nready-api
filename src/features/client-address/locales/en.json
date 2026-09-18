@@ -1,0 +1,25 @@
+{
+	"validation": {
+		"invalid_client_id": "Invalid client ID (eg: {{name}})",
+		"invalid_address_id": "Invalid address ID (eg: {{name}})",
+		"invalid_type": "Invalid client address type",
+		"invalid_details": "Invalid client address details",
+		"invalid_city_id": "Choose a city",
+		"invalid_street": "Enter the street and number",
+		"invalid_postal_code": "Invalid postal code",
+		"address_conflict": "Choose an existing address or enter a new one, not both"
+	},
+	"error": {
+		"not_found": "Client address not found"
+	},
+	"success": {
+		"create": "Client address added successfully",
+		"update": "Client address updated successfully",
+		"delete": "Client address deleted successfully"
+	},
+	"history": {
+		"created": "Client address #{{entity_id}} created by user #{{auth_id}}",
+		"updated": "Client address #{{entity_id}} updated by user #{{auth_id}}",
+		"removed": "Client address(es) {{entity_ids}} removed by user #{{auth_id}}"
+	}
+}

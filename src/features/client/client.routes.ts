@@ -42,6 +42,11 @@ export default async () => {
 				path: '',
 				method: 'get',
 			},
+			updateAccount: {
+				path: '/:id/account',
+				method: 'patch',
+				handlers: [validateParamsWhenId('id')],
+			},
 			statusUpdate: {
 				path: '/:id/status/:status',
 				method: 'patch',

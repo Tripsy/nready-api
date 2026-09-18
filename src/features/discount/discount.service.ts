@@ -1,10 +1,13 @@
 import type { DeepPartial } from 'typeorm';
-import DiscountEntity from '@/features/discount/discount.entity';
+import DiscountEntity, {
+	DiscountScopeEnum,
+} from '@/features/discount/discount.entity';
 import { getDiscountRepository } from '@/features/discount/discount.repository';
 import {
 	type DiscountValidator,
 	paramsUpdateList,
 } from '@/features/discount/discount.validator';
+import { discountTargetService } from '@/features/discount/discount-target.service';
 import { pickValuesFromObject } from '@/helpers/objects.helper';
 import { cleanEntityCache } from '@/shared/abstracts/service.abstract';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
@@ -55,6 +58,14 @@ export class DiscountService {
 		data: ValidatorOutput<DiscountValidator, 'update'>,
 	) {
 		Object.assign(entry, pickValuesFromObject(data, paramsUpdateList));
+
+		// A discount moved onto `shipping` has to leave behind the target types that scope cannot use
+		if (data.scope === DiscountScopeEnum.SHIPPING) {
+			discountTargetService.assertTargetsFitScope(
+				entry.scope,
+				await discountTargetService.listTargets(entry.id),
+			);
+		}
 
 		return this.update(entry);
 	}

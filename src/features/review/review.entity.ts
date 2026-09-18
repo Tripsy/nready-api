@@ -79,8 +79,8 @@ const ENTITY_TABLE_NAME = 'review';
 })
 @Index('IDX_review_user_status', ['user_id', 'status'])
 // The referencing side of `order_id`, which Postgres does not index on its own - without it every
-// hard delete of an order scans this table. Partial because the column is null on most rows until
-// the wiring in TODO.md item 8 exists, and a lookup by order implies the predicate anyway.
+// hard delete of an order scans this table. Partial because the column is null on every review
+// with no purchase behind it, and a lookup by order implies the predicate anyway.
 @Index('IDX_review_order', ['order_id'], {
 	where: 'order_id IS NOT NULL',
 })
@@ -153,14 +153,14 @@ export default class ReviewEntity extends EntityAbstract {
 	/**
 	 * The order the reviewed purchase was made on, when it is known.
 	 *
-	 * Nothing writes it yet - `ReviewService.create` has no way to reach the buyer's orders, since
-	 * a review names a `user` and an order names a `client` with no column joining the two (see
-	 * TODO.md item 8, which covers this and `is_verified` together). The column is here so the
-	 * provenance has somewhere to land the day that link exists, and so a review written against
-	 * an order can be told from one written from the product page.
+	 * Written once, by `ReviewService.create`, through `OrderService.findLatestPurchase`: the most
+	 * recent `completed` order billed to one of the author's clients (`client.user_id`) carrying a
+	 * line for this product - and this variant, when one is named. Never taken from the request,
+	 * and absent from the public read - the provenance is for the dashboard.
 	 *
-	 * Nullable permanently, not only until then: a review written from a product page, an import,
-	 * or a purchase made off-platform has no order to name.
+	 * Nullable permanently: a review written with no purchase on record, an import, or a purchase
+	 * made off-platform has no order to name. `cli/review-verify-backfill.ts` fills it in for rows
+	 * written before the lookup existed.
 	 */
 	@Column({
 		type: 'int',
@@ -228,6 +228,11 @@ export default class ReviewEntity extends EntityAbstract {
 	})
 	is_pinned!: boolean;
 
+	/**
+	 * Set true on write when `order_id` is found; otherwise false until a moderator ticks it - the
+	 * override for a purchase the lookup cannot see (a phone order, a marketplace, a receipt).
+	 * Nothing derives it back to false, so a moderator's decision is never overwritten.
+	 */
 	@Column({
 		type: 'boolean',
 		default: false,
@@ -269,7 +274,7 @@ export default class ReviewEntity extends EntityAbstract {
 	 * a different product. Postgres skips a MATCH SIMPLE composite key when any of its columns is
 	 * null, which is what leaves `variant_id` free to stay unset.
 	 *
-	 * CASCADE rather than the RESTRICT `order_product` carries: an order line is a financial record
+	 * CASCADE rather than the RESTRICT `order_line` carries: an order line is a financial record
 	 * that has to outlive the catalog, a review is not, and `product_id` above already cascades -
 	 * so a deleted product takes its reviews with it either way. RESTRICT here would additionally
 	 * deadlock that delete, since dropping a product cascades into its variants while the reviews

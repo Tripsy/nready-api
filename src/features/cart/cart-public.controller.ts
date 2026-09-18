@@ -2,7 +2,11 @@ import type { Request, Response } from 'express';
 import { lang } from '@/config/message.setup';
 import type CartEntity from '@/features/cart/cart.entity';
 import { type CartPolicy, cartPolicy } from '@/features/cart/cart.policy';
-import { type CartService, cartService } from '@/features/cart/cart.service';
+import {
+	type CartDeliveryChoice,
+	type CartService,
+	cartService,
+} from '@/features/cart/cart.service';
 import { CartValidator } from '@/features/cart/cart.validator';
 import asyncHandler from '@/helpers/async.handler';
 import { BaseController } from '@/shared/abstracts/controller.abstract';
@@ -14,10 +18,11 @@ export const CART_TOKEN_HEADER = 'x-cart-token';
  * The storefront surface. No permission is checked and no account is required - a guest filling a
  * basket is the case this feature exists for.
  *
- * Authorization is the token: `CartService.findWritable` applies the handle and `status = 'active'`
- * together, so a caller reaches exactly the cart they hold the handle for and nothing else. A
- * signed-in caller is addressed by their account instead, which `UQ_cart_user_active` makes
- * singular - a stale cookie from another device cannot then be used to write past their own cart.
+ * Authorization is the token: `CartService.findWritable` addresses a cart by the handle alone, so a
+ * caller reaches exactly the cart they hold the handle for and nothing else - and a cart that has
+ * checked out is gone, so its old handle answers the same 404 a forged one does. A signed-in
+ * caller is addressed by their account instead, which `UQ_cart_user` makes singular - a stale
+ * cookie from another device cannot then be used to write past their own cart.
  *
  * Every response carries the whole priced cart rather than just the row that changed. The totals
  * move on any write - a discount conditioned on `min_order_value` can switch on when one line is
@@ -67,14 +72,41 @@ class CartPublicController extends BaseController {
 		);
 	}
 
+	/**
+	 * The client a signed-in shopper asked the basket to be priced against, or null.
+	 *
+	 * A guest is answered with null rather than an error: naming a client requires an account, and
+	 * refusing the whole read over an ignorable query parameter would break a basket for the case
+	 * this surface exists for. A signed-in caller naming somebody else's client gets the 404
+	 * `assertOwnClient` raises.
+	 */
+	private async previewClientId(
+		clientId: number | undefined,
+		res: Response,
+	): Promise<number | null> {
+		const userId = this.getUserId(res);
+
+		if (!clientId || userId === null) {
+			return null;
+		}
+
+		await this.cartService.assertOwnClient(clientId, userId);
+
+		return clientId;
+	}
+
 	private async respond(
 		cart: CartEntity,
 		res: Response,
 		message?: string,
+		clientId?: number | null,
+		delivery?: CartDeliveryChoice | null,
 	): Promise<void> {
 		const data = await this.cartService.withPricing(
 			cart,
 			res.locals.language,
+			clientId,
+			delivery,
 		);
 
 		res.locals.output.data(data);
@@ -94,12 +126,26 @@ class CartPublicController extends BaseController {
 	 * catalog at this moment, which is the property a cached copy would destroy.
 	 */
 	public read = asyncHandler(async (req: Request, res: Response) => {
+		// `req.query` alone is correct here: the route's path is `''` and declares no params.
+		const data = this.validate(this.validator.publicRead, req.query, res);
+
 		const cart = await this.cartService.resolve(
 			this.getToken(req),
 			this.getUserId(res),
 		);
 
-		await this.respond(cart, res);
+		await this.respond(
+			cart,
+			res,
+			undefined,
+			await this.previewClientId(data.client_id, res),
+			data.delivery_method
+				? {
+						method: data.delivery_method,
+						addressId: data.delivery_address_id ?? null,
+					}
+				: null,
+		);
 	});
 
 	public addItem = asyncHandler(async (req: Request, res: Response) => {
@@ -164,8 +210,10 @@ class CartPublicController extends BaseController {
 	});
 
 	/**
-	 * Checkout. Requires an account: the order names a `client` to invoice, and choosing one on
-	 * behalf of an anonymous caller is not something this endpoint can do.
+	 * Checkout. Requires an account: the order names a `client` to invoice, and it has to be one
+	 * of the caller's own (`/public/clients`) - a shopper with none creates one there first. The
+	 * delivery choice becomes the order's first `shipping` row and the payment choice is
+	 * recorded on the order.
 	 *
 	 * The cart is terminal afterwards, so the response is the order rather than the basket - there
 	 * is no priced cart left to return.
@@ -179,8 +227,8 @@ class CartPublicController extends BaseController {
 
 		const order = await this.cartService.toOrder(
 			cart,
-			data.client_id,
-			data.notes ?? null,
+			data,
+			this.policy.getId(res.locals.auth) ?? 0,
 			res.locals.language,
 		);
 

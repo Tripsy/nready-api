@@ -1,6 +1,43 @@
 {
+	"validation": {
+		"invalid_client_id": "Invalid client",
+		"invalid_billing_address_id": "Invalid billing address",
+		"invalid_currency": "Invalid currency",
+		"invalid_type": "Invalid order type",
+		"invalid_lines": "Invalid order lines",
+		"invalid_variant_id": "Invalid variant",
+		"invalid_product_id": "Invalid product",
+		"invalid_quantity": "Invalid quantity",
+		"invalid_price": "Invalid price",
+		"invalid_vat_rate": "Invalid VAT rate",
+		"invalid_options": "Invalid product options",
+		"invalid_ref_code": "Invalid series code",
+		"invalid_ref_number": "Invalid document number",
+		"currency_needs_lines": "The currency can only be changed together with the order lines"
+	},
 	"error": {
 		"not_found": "Order not found",
-		"no_lines": "An order must have at least one line"
+		"no_lines": "An order must have at least one line",
+		"invalid_line": "Variant #{{variant_id}} does not exist or does not belong to the product on the same line",
+		"invalid_option": "A chosen option on variant #{{variant_id}} does not belong to its product",
+		"option_selection": "Variant #{{variant_id}}: a question on the product needs between {{min}} and {{max}} answers",
+		"lines_locked": "Only a pending order can have its lines changed",
+		"lines_missing": "The order has no lines to take its currency from",
+		"exchange_rate_unavailable": "No exchange rate is available for {{currency}}; add one or wait for the daily import"
+	},
+	"success": {
+		"create": "Order created successfully",
+		"update": "Order updated successfully",
+		"delete": "Order deleted successfully",
+		"restore": "Order restored successfully",
+		"status_update": "Order status updated successfully"
+	},
+	"history": {
+		"created": "Order #{{entity_id}} created by user #{{auth_id}}",
+		"updated": "Order #{{entity_id}} updated by user #{{auth_id}}",
+		"deleted": "Order(s) {{entity_ids}} marked as deleted by user #{{auth_id}}",
+		"removed": "Order(s) {{entity_ids}} removed by user #{{auth_id}}",
+		"restored": "Order(s) {{entity_ids}} restored by user #{{auth_id}}",
+		"status": "Order #{{entity_id}} updated from {{oldStatus}} to {{newStatus}} by user #{{auth_id}}"
 	}
 }

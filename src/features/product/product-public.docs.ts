@@ -39,7 +39,7 @@ export const docs: Record<
 		},
 		withErrors: [404],
 		request: {
-			notes: 'Only a sellable product is addressable here - a draft, an unreleased or a withdrawn one answers 404 rather than revealing that it exists. The slug is unique per language',
+			notes: "Only a sellable product is addressable here - a draft, an unreleased or a withdrawn one answers 404 rather than revealing that it exists. The slug is unique per language. A product whose `composition` is `bundle` also carries `bundle_groups` and `bundle_items`: a group is a choice taking exactly one of its candidates, and a component is either part of the kit (`group_id` null, `is_optional` false), an independent tick box bounded by its own `quantity`, or a candidate for a group. Each component carries its own `variant` and `label`, since it names a variant of another product, and `prices` holds the signed per-currency delta taking it adds to the bundle - usually negative, and applied to the component's own price rather than the bundle's. Prices come per currency on both figures because this route takes no currency; the client picks its market. `id` is what a cart line names the component by",
 			params: {
 				slug: {
 					type: 'string',

@@ -1,6 +1,5 @@
 import { Configuration } from '@/config/settings.config';
 import type { cartController } from '@/features/cart/cart.controller';
-import { CartStatusEnum } from '@/features/cart/cart.entity';
 import {
 	getCartEntityMock,
 	getCartPricingMock,
@@ -26,11 +25,6 @@ const readSample: Record<string, unknown> = {
 export const PRICING_NOTE =
 	'`pricing` is resolved against the catalog at read time and is stored nowhere - a cart holds references, not prices, so the figures here are what the lines would cost right now rather than what they cost when the shopper added them. A line carrying `issue` cannot be bought and contributes nothing to the totals';
 
-/**
- * The dashboard half: read-only, plus removal. There is no create and no update - a cart is the
- * shopper's own working state, and editing one from the back office would change the record of
- * what they chose.
- */
 export const docs: Record<keyof typeof cartController, ApiInputDocumentation> =
 	{
 		read: helperApiInputDocumentation({
@@ -44,7 +38,7 @@ export const docs: Record<keyof typeof cartController, ApiInputDocumentation> =
 			withAuthErrors: true,
 			withErrors: [404],
 			request: {
-				notes: `Soft-deleted carts are returned only to a caller whose role allows it. ${PRICING_NOTE}`,
+				notes: PRICING_NOTE,
 				params: {
 					id: {
 						type: 'number',
@@ -68,7 +62,7 @@ export const docs: Record<keyof typeof cartController, ApiInputDocumentation> =
 			withAuthErrors: true,
 			withErrors: [422],
 			request: {
-				notes: "The listing carries the rows only - lines are not priced here, since doing it per row would re-read the catalog once per cart on the page. Read one cart for that. `token` is not a filter: it is the guest's credential, and searching by it would turn this into a way to open any cart",
+				notes: "The listing carries the rows only. `token` is not a filter: it is the guest's credential",
 				query: {
 					page: {
 						type: 'number',
@@ -90,25 +84,9 @@ export const docs: Record<keyof typeof cartController, ApiInputDocumentation> =
 						required: false,
 						condition: `one of ${Object.values(OrderDirectionEnum).join(', ')}`,
 					},
-					'filter[status]': {
-						type: 'string',
-						required: false,
-						condition: `one of ${Object.values(CartStatusEnum).join(', ')}`,
-					},
 					'filter[user_id]': {
 						type: 'number',
 						required: false,
-					},
-					'filter[order_id]': {
-						type: 'number',
-						required: false,
-						condition: 'which cart an order came from',
-					},
-					'filter[is_deleted]': {
-						type: 'boolean',
-						required: false,
-						condition:
-							'defaults to false; a role that does not allow deleted rows gets none whatever this says',
 					},
 					'filter[currency]': {
 						type: 'string',
@@ -130,27 +108,7 @@ export const docs: Record<keyof typeof cartController, ApiInputDocumentation> =
 			withAuthErrors: true,
 			withErrors: [404],
 			request: {
-				notes: 'Soft. The lines go with it through the foreign key, and `restore` brings both back',
-				params: {
-					id: {
-						type: 'number',
-						required: true,
-					},
-				},
-			},
-		}),
-
-		restore: helperApiInputDocumentation({
-			description: 'Restore cart',
-			withBearerAuth: true,
-			success: {
-				status: 200,
-				description: 'Cart restored',
-				withMessage: true,
-			},
-			withAuthErrors: true,
-			withErrors: [404],
-			request: {
+				notes: 'Permanent. The lines go with it through the cascade, and nothing brings either back - a cart has no state between live and gone, so the shopper simply starts a new one on their next visit',
 				params: {
 					id: {
 						type: 'number',

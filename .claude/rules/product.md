@@ -1,8 +1,9 @@
 ---
 paths:
   - "src/features/product/**"
-  - "src/features/order/order-product.entity.ts"
+  - "src/features/order/order-line.entity.ts"
   - "src/features/order-shipping/**"
+  - "src/features/cart/**"
 ---
 
 # Product Model Protocol
@@ -53,7 +54,7 @@ something that is not a product.
   against `sale_price` but the dashboard's own warning. `product_variant.cost_price` is a single
   base-currency figure - the books are kept in one currency, a foreign purchase is converted once
   at the receiving day's rate and frozen, and margin settles in base on both sides via
-  `order_product.exchange_rate`. Converting cost at read time would make last month's margin move
+  `order_line.exchange_rate`. Converting cost at read time would make last month's margin move
   with today's rate.
 - **Cost never influences the sale price.** `min_price` is the only floor a discount is clamped to
   (`discount-resolution.service.ts` → `resolveFloor`); `cost_price` feeds reporting and nothing
@@ -168,26 +169,34 @@ Each links to `product_variant_attribute`: label term *Size*, values *25 cm* / *
 ## 5. How an order line resolves
 
 Customer orders **one 32 cm Margherita, stuffed crust, extra mozzarella and prosciutto**. The
-`order_product` row holds:
+`order_line` row holds:
 
 - `variant_id` → `PIZZA-MARG-32`, `product_id` → `PIZZA-MARG`
 - `quantity` = 1
-- **`price` = 45.00** - the variant price *alone*
+- **`price` = 68.00** - the unit price with the option deltas *already folded in*
 - `vat_rate` = 11.00, `currency` = RON
 - `options` = `[ {Stuffed crust, +8.00, RON}, {Extra mozzarella, +6.00, RON}, {Prosciutto, +9.00, RON} ]`
 
 ```
- 45.00  variant price
- +8.00  stuffed crust
- +6.00  extra mozzarella
- +9.00  prosciutto
+ 45.00  variant price      (not stored on the line)
+ +8.00  stuffed crust      ┐
+ +6.00  extra mozzarella   ├ options snapshots - describe, do not add
+ +9.00  prosciutto         ┘
 ──────
- 68.00  × quantity 1  = 68.00 net
-                        75.48 gross (11% VAT)
+ 68.00  price × quantity 1  = 68.00 net, before discounts
+                              75.48 gross (11% VAT)
 ```
 
-**`price` is not the line total and is not meant to be** - the deltas are what reconcile it. Any code
-that treats `price * quantity` as the line total is wrong the moment an option is chosen.
+**`price * quantity` is the line figure before discounts**, and the deltas must never be added to
+it again - `OrderService.computeTotals` and `OrderDiscountService` both read `price` that way. The
+snapshots are there so an invoice can say *why* the figure is 68, not to compute it. The variant
+price alone is recoverable as `price - SUM(options[].price_delta)`, and only as long as nobody
+agreed a different figure: a back-office line's `price` is what the operator agreed, deltas
+included, and may not decompose into the catalog price at all.
+
+Both writers state it the same way - `CartService.toOrder` copies `CartLine.unit_price` (the
+cart's `base_price` is the variant price alone, for display), and `OrderOptionService` records the
+deltas of a back-office line without moving its `price`.
 
 `options` is a snapshot, frozen for the same reason `DiscountSnapshot` is: raise stuffed crust to 10
 RON next week and last month's receipt still reads 8.
@@ -208,7 +217,7 @@ product, and the line has to keep saying what it was.
 | Information | Home | Why not options |
 |---|---|---|
 | Allergens, calories, ingredients | `product_attribute` | Descriptive, not selectable, no price effect |
-| "No onions, extra napkins" | `order_product.notes` | Free text, unbounded, no price effect |
+| "No onions, extra napkins" | `order_line.notes` | Free text, unbounded, no price effect |
 | Happy hour, coupons, loyalty | `discount` + `product_discount` | Conditional on customer or date, applied *on top of* the resolved price |
 | Size, colour, capacity | `product_variant_attribute` | Own SKU, own price, own stock |
 
@@ -349,9 +358,9 @@ A **fixed kit** (gift set) is the same table with more rows.
 
 ### 8.3. Why the order line explodes
 
-A bundle's 55.00 covers food at 11% and a drink at 21%. A single `order_product.vat_rate` cannot
+A bundle's 55.00 covers food at 11% and a drink at 21%. A single `order_line.vat_rate` cannot
 represent that, and getting it wrong is a tax error rather than a display bug. So a bundle becomes
-**one header line plus one child line per component**, linked by `order_product.parent_id`:
+**one header line plus one child line per component**, linked by `order_line.parent_id`:
 
 - **Header** - the bundle variant, quantity, `price = 0`.
 - **Children** - each component's apportioned share of the bundle price, at its *own* `vat_rate`.
@@ -393,6 +402,42 @@ largest share so the parts sum to the charged total exactly.
   out of shipment allocation (§10, invariant 10) - nothing was ever received against the bundle's
   variant, so there are no lots to pick from.
 - **`vat_category` on a bundle product** is unused - the components carry their own.
+
+### 8.5. Not implemented: the purchase path
+
+§8.3 describes the shape an order takes. **Nothing produces it.** The catalog half is built - the
+tables, the entities, the dashboard form, `assertBundleIsComposed`, `assertBundleGroupsAreUsable` -
+and so is the room an order leaves for the result: `order_line.parent_id`, its self-referencing
+foreign key, its partial index, and the `price >= 0` check that lets a header carry no money.
+Between the two there is nothing.
+
+- **The cart holds no composition.** `cart_item` carries `variant_id` and `product_id` and no
+  bundle column, so a bundle is one flat line naming its header variant. Cases 2 and 3 of §8.1 are
+  shopper decisions with nowhere to be recorded.
+- **Nothing checks a shopper's picks.** `CartService.addItem` validates product options through
+  `ProductOptionSelectionService`; there is no bundle analogue of that service. A group's "exactly
+  one candidate" goes unenforced at purchase time, which is what §10.3 means when it says the order
+  flow enforces it "by shape" - that shape does not exist.
+- **`UQ_cart_item_line` cannot separate two configurations.** Its key is
+  `(cart_id, variant_id, options_hash)`, so two differently-composed bundles of the same variant
+  are one row whose quantities sum.
+- **Pricing reads a bundle as a simple product.** `cart-pricing.service.ts` never looks at
+  `composition` or any `product_bundle_*` table, so the line is charged at the headline
+  `product_price` and taxed with the bundle's own `vat_category` - the column §8.4 lists as unused,
+  at the single rate §8.3 exists to avoid. No `CartLineIssueEnum` member reports a bundle whose
+  composition no longer resolves.
+- **Checkout writes one order line per cart line.** `OrderLineInput` is a flat array with no
+  parent, and `OrderService.writeLines` hardcodes `parent_id: null` in a single `save` pass, which
+  could not assign a generated header id even if the input carried the tree.
+
+So which components a customer took is recorded nowhere. The intended record is structural rather
+than a snapshot - the child rows themselves, each naming a real variant at its own rate - which is
+why `order_line` carries no bundle jsonb beside `options` and `discount`.
+
+A bundle can still be sold today: its variant is sellable, priced, in the catalog, and refused at
+no step. Seeds reach it the same way - `order.seed.ts` picks variants without filtering on
+`composition`. That is the shape §8.3 calls a tax error, so treat a bundle reaching a cart line or
+an order line as a bug to design away, not as data to build on.
 
 ## 9. Availability - two different questions
 
@@ -440,7 +485,7 @@ These need the service layer. None of them can be pushed into a constraint.
 3. **`min_select` / `max_select` compliance at checkout.** The bounds are stored on
    `product_option_group`; only the service can count what was submitted. A bundle choice has no
    bounds to check - exactly one candidate, which the order flow enforces by shape (§8.1).
-4. **The line total.** `price` plus the sum of the option deltas, then quantity, then discounts,
+4. **The line total.** `price` (option deltas already in it, §5) times quantity, then discounts,
    then VAT - in that order, since discounts apply to prices excluding VAT.
 5. **A bundle adds up to at least two units.** `SUM(product_bundle_item.quantity)` over the bundle's
    components that are *not* `is_optional` and belong to no group has to reach two once
@@ -450,11 +495,11 @@ These need the service layer. None of them can be pushed into a constraint.
 7. **No nested bundles**, and no bundle that contains one of its own variants.
 8. **Bundle apportionment reconciles to the charged total**, remainder to the largest share (§8.3).
 9. **Shipment allocation must not exceed what was ordered.** The sum of
-   `order_shipping_product.quantity` across every shipment of one `order_product` has to stay
+   `order_shipping_line.quantity` across every shipment of one `order_line` has to stay
    within that line's `quantity`. Nothing stops shipping 15 of an ordered 14 - and with stock
    tracking on, the surplus consumes real lots.
-10. **A bundle is shipped by its children, never its header.** `order_shipping_product` points at
-   `order_product`, and for a bundle the header line carries no variant worth picking - the
+10. **A bundle is shipped by its children, never its header.** `order_shipping_line` points at
+   `order_line`, and for a bundle the header line carries no variant worth picking - the
    component lines hold the real, stockable variants. Allocating the header would leave the stock
    movement with nothing to consume.
 
@@ -467,7 +512,7 @@ These need the service layer. None of them can be pushed into a constraint.
     value already recorded under it, or the stored base figures describe a quantity the form no
     longer shows.
 
-`order_product.variant_id` and `product_id` used to belong on this list. They no longer do: the
+`order_line.variant_id` and `product_id` used to belong on this list. They no longer do: the
 `variant` relation is a composite foreign key over both columns against
 `product_variant (id, product_id)`, so the database rejects the mismatch.
 
@@ -483,8 +528,8 @@ full design is in the README TODO. Two things settled here because they touch th
 
 - **Stock leaves on shipment, not on order confirmation.** `order_shipping` carries the
   `warehouse_id`, so one order can ship from two warehouses, and a lot cannot be picked before the
-  warehouse holding it is known. The movement's source is an `order_shipping_product`;
-  `order_product` carries no lot reference at all, because one line routinely spans several lots.
+  warehouse holding it is known. The movement's source is an `order_shipping_line`;
+  `order_line` carries no lot reference at all, because one line routinely spans several lots.
 - **A damaged return must not go back into its lot.** A customer return normally re-enters the lot
   it was picked from, at the cost it left with - the movement records its source, so the lot is
   known. Damaged goods are the exception: returning them to stock means they get picked and sold
@@ -672,22 +717,3 @@ that category unsavable with no field to satisfy it. The form calls `resolve` fo
 answers against the result on every change - one entry per definition, empties included so a
 required one has something to fail on, and nothing for a label the categories no longer declare,
 which the backend would refuse.
-
-## 13. Deferred, with the decision already made
-
-- **Named menus** - `product_availability` says *when*, but nothing groups windows into a
-  customer-facing "lunch menu", and two products sharing a schedule repeat it row for row.
-- **Order-level currency and totals.** `order_product` and `order_shipping` each carry their own
-  `currency` and `exchange_rate`, and nothing asserts they agree - an order with a RON line and a
-  EUR line is representable today. `invoice` has `base_currency`; `order` has nothing equivalent.
-  A stored order total is worth considering at the same time, since the bundle work made a line
-  total non-trivial (`price`, plus option deltas, plus children) and every listing recomputes it.
-- **Recipes / bill of materials** - a prepared item consumes ingredients, so depleting stock needs a
-  `product_component` layer. Ingredients would be variants with `track_stock = true` that the dish
-  consumes; the dish itself stays untracked. Only worth building once the `grn` behaviour exists.
-
-Full-text search was on this list and has since shipped: `ProductQuery.filterByTerm` runs a
-`to_tsvector` match over `product_content`, backed by the GIN index in
-`1788300000000-product-content-search.ts`, with a `lower(sku) LIKE` prefix branch over the variant
-codes beside it. Both expressions must stay character-identical to their indexes - see that
-migration and the repository's own JSDoc.

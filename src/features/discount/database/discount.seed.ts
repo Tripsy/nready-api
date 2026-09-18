@@ -205,6 +205,8 @@ const DISCOUNTS: readonly DiscountBlueprint[] = [
 		type: DiscountTypeEnum.PERCENT,
 		value: 5,
 		window: WINDOW_SCHEDULED,
+		// PL is not among the seeded places, so this one demonstrates a campaign whose country
+		// list reaches beyond the catalog's own countries
 		buildConditions: () => ({ applicable_countries: ['BG', 'HU', 'PL'] }),
 		notes: null,
 	},

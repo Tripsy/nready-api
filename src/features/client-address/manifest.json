@@ -1,0 +1,8 @@
+{
+	"name": "client-address",
+	"version": "1.2.0",
+	"relativePath": "/client-address",
+	"entities": ["client-address"],
+	"depends_on": ["client", "address", "place"],
+	"required_by": ["cart", "order", "shipping"]
+}

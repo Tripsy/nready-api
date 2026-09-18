@@ -1,5 +1,4 @@
 import type CartEntity from '@/features/cart/cart.entity';
-import { CartStatusEnum } from '@/features/cart/cart.entity';
 import { OrderByEnum } from '@/features/cart/cart.validator';
 import type { CartPricing } from '@/features/cart/cart-pricing.service';
 import { createFutureDate, createPastDate } from '@/helpers/date.helper';
@@ -11,13 +10,10 @@ export function getCartEntityMock(): CartEntity {
 		id: 9,
 		token: '3f1c8b5e-2a44-4f8d-9c11-8d2e6b0a7c34',
 		user_id: 7,
-		status: CartStatusEnum.ACTIVE,
-		order_id: null,
 		currency: 'RON',
 		expires_at: createFutureDate(30 * 24 * 60 * 60),
 		created_at: createPastDate(86400),
 		updated_at: createPastDate(3600),
-		deleted_at: null,
 	} as unknown as CartEntity;
 }
 
@@ -32,13 +28,14 @@ export function getCartEntityMock(): CartEntity {
 export function getCartPricingMock(): CartPricing {
 	return {
 		currency: 'RON',
-		exchange_rate: 1,
 		lines: [
 			{
 				id: 31,
 				variant_id: 41,
 				product_id: 17,
 				sku: 'PIZZA-MARG-30',
+				label: 'Pizza Margherita',
+				slug: 'pizza-margherita',
 				quantity: 2,
 				notes: null,
 				unit_price: 38,
@@ -53,15 +50,19 @@ export function getCartPricingMock(): CartPricing {
 				vat_rate: 11,
 				subtotal: 76,
 				discount_reduction: 7.6,
-				discount: {
-					label: 'Autumn 10%',
-					scope: 'product',
-					reason: null,
-					reference: null,
-					type: 'percent',
-					conditions: null,
-					value: 10,
-				},
+				discount: [
+					{
+						label: 'Autumn 10%',
+						scope: 'product',
+						reason: null,
+						reference: null,
+						type: 'percent',
+						conditions: null,
+						value: 10,
+						discount_id: 4,
+						reduction: 7.6,
+					},
+				],
 				total: 68.4,
 				vat_amount: 7.52,
 				issue: null,
@@ -71,6 +72,8 @@ export function getCartPricingMock(): CartPricing {
 				variant_id: 55,
 				product_id: 21,
 				sku: 'DESSERT-TIRAMISU',
+				label: 'Tiramisu',
+				slug: 'tiramisu',
 				quantity: 1,
 				notes: null,
 				unit_price: 0,
@@ -87,6 +90,8 @@ export function getCartPricingMock(): CartPricing {
 		],
 		subtotal: 76,
 		discount_reduction: 7.6,
+		order_discount: null,
+		order_discount_reduction: 0,
 		vat_amount: 7.52,
 		total: 75.92,
 		has_issues: true,
@@ -107,7 +112,7 @@ export const cartInputPayloads = {
 		order_by: OrderByEnum.UPDATED_AT,
 		direction: OrderDirectionEnum.DESC,
 		filter: {
-			status: CartStatusEnum.ACTIVE,
+			user_id: 7,
 		},
 	},
 };

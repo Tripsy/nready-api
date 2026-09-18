@@ -8,6 +8,7 @@ export function createMockQuery() {
 	return {
 		// Chainable methods
 		select: jest.fn().mockReturnThis(),
+		addSelect: jest.fn().mockReturnThis(),
 		join: jest.fn().mockReturnThis(),
 		joinAndSelect: jest.fn().mockReturnThis(),
 		filterBy: jest.fn().mockReturnThis(),

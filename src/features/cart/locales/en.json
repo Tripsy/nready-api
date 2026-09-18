@@ -6,13 +6,29 @@
 		"invalid_options": "Invalid product options",
 		"invalid_currency": "The currency must be a three-letter code",
 		"invalid_client_id": "Invalid client",
-		"invalid_token": "Invalid cart token"
+		"invalid_token": "Invalid cart token",
+		"invalid_components": "Invalid bundle components",
+		"invalid_component_units": "Invalid number of units for a bundle component",
+		"invalid_delivery_method": "Choose how the order is delivered",
+		"invalid_billing_address_id": "Choose a billing address",
+		"invalid_delivery_address_id": "Choose a delivery address for courier delivery",
+		"invalid_payment_method": "Choose how the order is paid"
 	},
 	"error": {
 		"not_found": "Cart not found",
 		"item_not_found": "That line is no longer in your cart",
 		"empty": "The cart is empty",
-		"has_issues": "Some lines can no longer be bought; review the cart before checking out"
+		"has_issues": "Some lines can no longer be bought; review the cart before checking out",
+		"invalid_option": "A chosen option does not belong to this product",
+		"option_selection": "One of this product's questions needs between {{min}} and {{max}} answers",
+		"not_a_bundle": "This product is not a bundle, so it takes no components",
+		"bundle_component_invalid": "A chosen component does not belong to this bundle",
+		"bundle_component_included": "That component already comes with the bundle and cannot be chosen separately",
+		"bundle_group_unanswered": "One of this bundle's choices has not been answered",
+		"bundle_group_multiple": "A bundle choice takes exactly one option",
+		"bundle_component_ceiling": "That component may be taken at most {{max}} times",
+		"bundle_changed": "This bundle has changed since it was added; remove the line and add it again",
+		"component_locked": "A bundle's components are set when it is added; change the bundle line instead"
 	},
 	"success": {
 		"add_item": "Added to your cart",
@@ -21,7 +37,6 @@
 		"clear": "Cart emptied successfully",
 		"set_currency": "Cart currency updated successfully",
 		"checkout": "Order placed successfully",
-		"delete": "Cart removed successfully",
-		"restore": "Cart restored successfully"
+		"delete": "Cart removed successfully"
 	}
 }

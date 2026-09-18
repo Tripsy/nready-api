@@ -56,7 +56,7 @@ export const docs: Record<
 				conditions: {
 					type: 'object',
 					required: false,
-					format: '{ hour_range?: [number, number]; day_range?: [number, number]; min_order_value?: number; applicable_countries?: string[] }',
+					format: '{ hour_range?: [number, number]; day_range?: [number, number]; min_order_value?: number; applicable_countries?: string[] (ISO 3166-1 alpha-2, e.g. RO) }',
 				},
 				value: {
 					type: 'number',
@@ -143,7 +143,7 @@ export const docs: Record<
 				conditions: {
 					type: 'object',
 					required: false,
-					format: '{ hour_range?: [number, number]; day_range?: [number, number]; min_order_value?: number; applicable_countries?: string[] }',
+					format: '{ hour_range?: [number, number]; day_range?: [number, number]; min_order_value?: number; applicable_countries?: string[] (ISO 3166-1 alpha-2, e.g. RO) }',
 				},
 				value: {
 					type: 'number',
@@ -232,8 +232,9 @@ export const docs: Record<
 			dataSample: { client: [3, 9], category: [12] },
 		},
 		withAuthErrors: true,
-		withErrors: [404, 422],
+		withErrors: [400, 404, 422],
 		request: {
+			notes: 'A discount with scope `shipping` accepts `client` targets only - any other non-empty type answers 400, judged against the set as it will stand after the call. With no targets a shipping discount applies to every buyer; with client targets, to those clients alone',
 			params: {
 				id: {
 					type: 'number',

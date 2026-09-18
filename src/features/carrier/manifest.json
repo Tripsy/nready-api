@@ -4,5 +4,5 @@
 	"relativePath": "/carrier",
 	"entities": ["carrier"],
 	"depends_on": [],
-	"required_by": ["order-shipping"]
+	"required_by": ["shipping"]
 }

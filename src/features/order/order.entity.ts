@@ -7,13 +7,13 @@ import {
 	OneToMany,
 } from 'typeorm';
 import type ClientEntity from '@/features/client/client.entity';
-import type OrderProductEntity from '@/features/order/order-product.entity';
+import type ClientAddressEntity from '@/features/client-address/client-address.entity';
+import type OrderLineEntity from '@/features/order/order-line.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import type { StatusTransitions } from '@/shared/types/common.type';
 
 export const OrderStatusEnum = {
-	DRAFT: 'draft', // Being composed in the back office; the customer has not committed
-	PENDING: 'pending', // Placed and awaiting acceptance
+	PENDING: 'pending', // Placed - by a checkout or from the back office - and awaiting acceptance; lines may still be adjusted
 	CONFIRMED: 'confirmed', // Accepted by the business; shipping may begin
 	COMPLETED: 'completed', // Fulfilled and settled
 	CANCELLED: 'canceled', // Withdrawn before fulfilment
@@ -25,15 +25,16 @@ export type OrderStatus =
 /**
  * Allowed status transition configuration.
  *
- * The line runs one way: an order is composed, placed, accepted, fulfilled. Nothing returns to
- * `draft` - that state is defined by the customer not having committed yet, and a cart checkout
- * enters at `pending` precisely because they have. Reopening a placed order as a draft would let
- * its contents be edited out from under what they agreed to.
+ * The line runs one way: an order is placed, accepted, fulfilled. Every order enters at `pending`,
+ * whether a checkout raised it or an operator typed it up, and `pending` is the one state whose
+ * lines may still be adjusted - quantities corrected, a missing item added - before the business
+ * accepts it. Nothing returns to `pending`: confirming is what fixes the contents, and reopening a
+ * confirmed order would let them be edited out from under that acceptance.
  *
  * **`canceled` stays reachable from `confirmed`**, unlike `grn`, where confirming already moved
  * stock and cancelling has to post reversals. Confirming an order moves nothing: stock leaves on
- * the shipping transition, not here (see `order-shipping.entity.ts`, `warehouse_id`), so an order
- * cancelled before it ships has nothing to undo. A shipment already under way is `order_shipping`'s
+ * the shipping transition, not here (see `shipping.entity.ts`, `warehouse_id`), so an order
+ * canceled before it ships has nothing to undo. A shipment already under way is `shipping`'s
  * own status machine to resolve.
  *
  * **`completed` is terminal.** An order that goes wrong afterwards is corrected on the money, not
@@ -42,10 +43,6 @@ export type OrderStatus =
  * claiming they never were.
  */
 export const STATUS_TRANSITIONS: StatusTransitions<OrderStatus> = {
-	[OrderStatusEnum.DRAFT]: [
-		OrderStatusEnum.PENDING,
-		OrderStatusEnum.CANCELLED,
-	],
 	[OrderStatusEnum.PENDING]: [
 		OrderStatusEnum.CONFIRMED,
 		OrderStatusEnum.CANCELLED,
@@ -68,6 +65,19 @@ export const OrderTypeEnum = {
 } as const;
 
 export type OrderType = (typeof OrderTypeEnum)[keyof typeof OrderTypeEnum];
+
+/**
+ * How the client said they will pay. Recorded as a choice only - nothing here charges, captures or
+ * reconciles a payment; `cash_flow` and `invoice` carry the money once it moves.
+ */
+export const OrderPaymentMethodEnum = {
+	CASH_ON_DELIVERY: 'cash_on_delivery',
+	CARD: 'card',
+	BANK_TRANSFER: 'bank_transfer',
+} as const;
+
+export type OrderPaymentMethod =
+	(typeof OrderPaymentMethodEnum)[keyof typeof OrderPaymentMethodEnum];
 
 const ENTITY_TABLE_NAME = 'order';
 
@@ -106,7 +116,7 @@ export default class OrderEntity extends EntityAbstract {
 	@Column({
 		type: 'enum',
 		enum: OrderStatusEnum,
-		default: OrderStatusEnum.DRAFT,
+		default: OrderStatusEnum.PENDING,
 		nullable: false,
 	})
 	@Index('IDX_order_status')
@@ -119,6 +129,36 @@ export default class OrderEntity extends EntityAbstract {
 		nullable: false,
 	})
 	type!: OrderType;
+
+	/**
+	 * Null on a back-office document: an operator composing an order by phone agrees goods and
+	 * prices, and how it is settled is not always known at that point. A checkout always states one.
+	 */
+	@Column({
+		type: 'enum',
+		enum: OrderPaymentMethodEnum,
+		nullable: true,
+	})
+	payment_method!: OrderPaymentMethod | null;
+
+	/**
+	 * Where the order is billed, named by reference rather than copied.
+	 *
+	 * Null on a back-office document raised before a billing address is agreed, and null again once
+	 * that address is removed - the key is `SET NULL`, so deleting a client address stays possible
+	 * and cannot take the order with it.
+	 *
+	 * The counterparty's own details are not duplicated here either; they are read through
+	 * `client_id`. An invoice raised from the order is where they get frozen, into
+	 * `invoice.billing_details` - the invoice is the document that has to keep saying who was
+	 * billed whatever the client edits afterwards, and an order is still amendable.
+	 */
+	@Column('int', {
+		nullable: true,
+		comment: 'The client address the order is billed to',
+	})
+	@Index('IDX_order_billing_address_id')
+	billing_address_id!: number | null;
 
 	@Column({ type: 'timestamp', nullable: false })
 	@Index('IDX_order_issued_at')
@@ -134,9 +174,17 @@ export default class OrderEntity extends EntityAbstract {
 	@JoinColumn({ name: 'client_id' })
 	client!: ClientEntity;
 
+	// SET NULL rather than RESTRICT: a client address is deleted outright, and an order placed
+	// against it must not be what blocks the client from tidying their address book
+	@ManyToOne('ClientAddressEntity', {
+		onDelete: 'SET NULL',
+	})
+	@JoinColumn({ name: 'billing_address_id' })
+	billing_address?: ClientAddressEntity | null;
+
 	@OneToMany(
-		'OrderProductEntity',
-		(orderProduct: OrderProductEntity) => orderProduct.order,
+		'OrderLineEntity',
+		(orderLine: OrderLineEntity) => orderLine.order,
 	)
-	order_products?: OrderProductEntity[];
+	order_lines?: OrderLineEntity[];
 }

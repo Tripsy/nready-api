@@ -1,6 +1,6 @@
 {
 	"name": "product",
-	"version": "1.1.0",
+	"version": "1.2.0",
 	"relativePath": "/product",
 	"entities": [
 		"product",
@@ -22,5 +22,5 @@
 		"product-variant-attribute"
 	],
 	"depends_on": ["brand", "category", "term"],
-	"required_by": ["order", "grn", "review", "cart"]
+	"required_by": ["order", "grn", "review", "cart", "shipping"]
 }

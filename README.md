@@ -38,7 +38,7 @@ The database is **PostgreSQL**, using **TypeORM** as the ORM layer.
 A ready-to-use Docker environment is provided for quick [setup](#-setup).
 
 This project is still a work in progress, and the next goals are:
-   - Finish the commerce [features](#-features) - products, orders, invoices, stock and subscriptions are entity-only so far
+   - Finish the commerce [features](#-features) - orders, shipping, invoices, goods receipts and subscriptions are entity-only so far
    - Create documentation
 
 Meanwhile, we're open to suggestions / feedback, and if you find this project useful, please consider giving it a star ⭐
@@ -131,6 +131,7 @@ Meanwhile, we're open to suggestions / feedback, and if you find this project us
 - [x] article 
 - [x] brand
 - [x] carrier
+- [x] cart
 - [x] cash-flow
 - [x] category
 - [x] client
@@ -144,13 +145,13 @@ Meanwhile, we're open to suggestions / feedback, and if you find this project us
 - [ ] order
 - [ ] order-shipping
 - [x] place
-- [ ] product
+- [x] product
 - [x] rating
-- [ ] review
+- [x] review
 - [ ] subscription
 - [x] term
 - [x] vendor
-- [ ] warehouse
+- [x] warehouse
 
 # 🛠 Setup
 

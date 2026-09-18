@@ -1,4 +1,5 @@
-import { Column, Entity, Index } from 'typeorm';
+import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
+import type UserEntity from '@/features/user/user.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import type { StatusTransitions } from '@/shared/types/common.type';
 
@@ -116,7 +117,27 @@ export default class ClientEntity extends EntityAbstract {
 	@Column('varchar', { nullable: true })
 	contact_phone!: string | null;
 
+	/**
+	 * The account this client belongs to. One account may hold several clients - a person billing
+	 * privately and through their company - and a client is held by at most one account.
+	 *
+	 * Null on a client typed in from the back office that no account has claimed. Checkout only
+	 * accepts a client the caller holds, and a review counts as a verified purchase only through
+	 * an order placed on one of its author's clients.
+	 */
+	@Column('int', { nullable: true })
+	@Index('IDX_client_user_id', { where: 'user_id IS NOT NULL' })
+	user_id!: number | null;
+
 	// OTHER
 	@Column('text', { nullable: true })
 	notes!: string | null;
+
+	// RELATIONS
+	@ManyToOne('UserEntity', {
+		onDelete: 'SET NULL',
+		nullable: true,
+	})
+	@JoinColumn({ name: 'user_id' })
+	user?: UserEntity | null;
 }

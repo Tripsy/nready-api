@@ -16,8 +16,8 @@ export function getReviewEntityMock(): ReviewEntity {
 		id: 12,
 		product_id: 17,
 		variant_id: 41,
-		// Null on every stored row for now - nothing writes it yet (TODO.md item 8).
-		order_id: null,
+		// The completed order the purchase was found on, which is also what set `is_verified`
+		order_id: 104,
 		rating: {
 			quality: 5,
 			price: 4,

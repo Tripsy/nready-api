@@ -54,6 +54,16 @@ const sharedBody = {
 	notes: { type: 'string' as const, required: false },
 };
 
+/** The account a client belongs to; one account may hold several clients, a client one account. */
+const updateAccountBody = {
+	user_id: {
+		type: 'number' as const,
+		required: true,
+		condition:
+			'the account the client belongs to; null unlinks it. Checkout accepts only a client linked to the caller, and a review counts as a verified purchase only through such a client',
+	},
+};
+
 const identificationNumberCondition =
 	'checked as a CNP, including its control digit; never returned by a read';
 
@@ -116,7 +126,7 @@ export const docs: Record<
 		withAuthErrors: true,
 		withErrors: [404],
 		request: {
-			notes: "Only the branch the client belongs to is returned - the other branch's fields are stripped, and person_identification_number is never selected",
+			notes: "Only the branch the client belongs to is returned - the other branch's fields are stripped, and person_identification_number is never selected. `user` carries the linked account's id, name and email, or null",
 			params: {
 				id: {
 					type: 'number',
@@ -136,7 +146,7 @@ export const docs: Record<
 		withAuthErrors: true,
 		withErrors: [400, 404, 409, 422],
 		request: {
-			notes: `Provide at least one body parameter besides client_type, which falls back to the stored value when omitted - so switching a client between the two branches means sending the target branch's fields with it. ${branchNote}. ${duplicateNote}. status has its own route`,
+			notes: `Provide at least one body parameter besides client_type, which falls back to the stored value when omitted - so switching a client between the two branches means sending the target branch's fields with it. ${branchNote}. ${duplicateNote}. status and the linked account each have their own route`,
 			params: {
 				id: {
 					type: 'number',
@@ -228,7 +238,7 @@ export const docs: Record<
 		withAuthErrors: true,
 		withErrors: [422],
 		request: {
-			notes: 'create_at_start must not be after create_at_end. Ordering is by id or created_at only',
+			notes: 'create_at_start must not be after create_at_end. Ordering is by id or created_at only. Each entry carries `user` with the linked account id, name and email, or null',
 			query: {
 				page: {
 					type: 'number',
@@ -275,6 +285,11 @@ export const docs: Record<
 						required: false,
 						values: Object.values(ClientStatusEnum),
 					},
+					user_id: {
+						type: 'number',
+						required: false,
+						condition: 'the clients linked to one account',
+					},
 					create_at_start: { type: 'string', required: false },
 					create_at_end: { type: 'string', required: false },
 					is_deleted: {
@@ -285,6 +300,28 @@ export const docs: Record<
 				},
 			},
 			sample: clientInputPayloads.find,
+		},
+	}),
+	updateAccount: helperApiInputDocumentation({
+		description: 'Link a client to an account, or unlink it',
+		withBearerAuth: true,
+		success: {
+			status: 200,
+			description: 'Client linked to account successfully',
+			dataSample: entitySample,
+		},
+		withAuthErrors: true,
+		withErrors: [404, 422],
+		request: {
+			notes: 'The account is granted here rather than through update, which no longer accepts user_id. Send null to unlink. An account that does not exist answers 404',
+			params: {
+				id: {
+					type: 'number',
+					required: true,
+				},
+			},
+			body: updateAccountBody,
+			sample: clientInputPayloads.updateAccount,
 		},
 	}),
 	statusUpdate: helperApiInputDocumentation({

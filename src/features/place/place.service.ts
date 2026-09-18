@@ -95,6 +95,7 @@ export class PlaceService {
 			const entry = {
 				place_type: data.place_type,
 				code: data.code,
+				alpha2_code: data.alpha2_code,
 				parent_id: data.parent_id,
 			};
 
@@ -236,6 +237,59 @@ export class PlaceService {
 		}
 
 		return await query.firstOrFail();
+	}
+
+	/**
+	 * @description Used in `find` method from the public controller - the storefront city picker
+	 *
+	 * The same projection the dashboard listing selects, narrowed to cities and one page. The
+	 * parent comes along so a picker can tell two cities of the same name apart by their county.
+	 * Deleted places are never offered.
+	 */
+	public findCities(
+		term: string,
+		language: string,
+		limit: number,
+	): Promise<PlaceEntity[]> {
+		return this.repository
+			.createQuery()
+			.join(
+				'place.contents',
+				'content',
+				'INNER',
+				'content.language = :language',
+				{ language: language },
+			)
+			.join('place.parent', 'parent', 'LEFT')
+			.join(
+				'parent.contents',
+				'parentContent',
+				'LEFT',
+				'parentContent.language = :language',
+				{ language: language },
+			)
+			.select([
+				'place.id',
+				'place.place_type',
+				'place.code',
+
+				'content.language',
+				'content.name',
+				'content.type_label',
+
+				'parent.id',
+				'parent.place_type',
+				'parent.code',
+
+				'parentContent.language',
+				'parentContent.name',
+				'parentContent.type_label',
+			])
+			.filterBy('place.place_type', PlaceTypeEnum.CITY)
+			.filterByTerm(term)
+			.orderBy('id', 'ASC')
+			.pagination(1, limit)
+			.all();
 	}
 
 	public hasChildren(id: number) {

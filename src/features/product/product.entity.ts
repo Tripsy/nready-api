@@ -122,7 +122,7 @@ export const UNITS_BY_TYPE: Record<ProductType, readonly ProductUnit[]> = {
 /**
  * The VAT *class* a product declares. The *rate* it resolves to is a function of jurisdiction and
  * date, so it is worked out when the order line is written and snapshot there
- * (`order_product.vat_rate`).
+ * (`order_line.vat_rate`).
  *
  * Stored as a plain `varchar`, not a Postgres enum, even though the list lives here: the set is
  * jurisdiction-specific and grows, and `ALTER TYPE ... ADD VALUE` cannot run inside a transaction

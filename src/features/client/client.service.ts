@@ -13,6 +13,7 @@ import {
 	type ClientValidator,
 	paramsUpdateList,
 } from '@/features/client/client.validator';
+import { type UserService, userService } from '@/features/user/user.service';
 import { pickValuesFromObject } from '@/helpers/objects.helper';
 import {
 	assertValidStatusTransition,
@@ -21,7 +22,10 @@ import {
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 export class ClientService {
-	constructor(private repository: ReturnType<typeof getClientRepository>) {}
+	constructor(
+		private repository: ReturnType<typeof getClientRepository>,
+		private userService: UserService,
+	) {}
 
 	public async checkDuplicate(data: ClientIdentityData, withoutId?: number) {
 		const query = this.repository
@@ -79,10 +83,18 @@ export class ClientService {
 	}
 
 	/**
-	 * @description Used in `create` method from controller;
+	 * @description Used in `create` method from both controllers
+	 *
+	 * `user_id` is the account the storefront creates the client for - the caller behind the
+	 * request, never a body field. It is taken on trust rather than resolved through
+	 * `userService`: auth has already established that account, so a lookup here would be one
+	 * wasted query per create. This is why it differs from `updateAccount`, where an operator
+	 * names an arbitrary account that may not exist. The dashboard passes nothing and the client
+	 * is stored unclaimed.
 	 */
 	public async create(
 		data: ValidatorOutput<ClientValidator, 'create'>,
+		user_id?: number,
 	): Promise<ClientEntity> {
 		const identityData: ClientIdentityData =
 			data.client_type === ClientTypeEnum.COMPANY
@@ -103,6 +115,7 @@ export class ClientService {
 		const entry = {
 			...data,
 			status: ClientStatusEnum.ACTIVE,
+			user_id: user_id ?? null,
 		};
 
 		return this.repository.save(entry);
@@ -149,6 +162,22 @@ export class ClientService {
 		return this.update(entry);
 	}
 
+	/**
+	 * Links the client to an account, or unlinks it when `user_id` is null.
+	 */
+	public async updateAccount(
+		entry: ClientEntity,
+		user_id: number | null,
+	): Promise<ClientEntity> {
+		if (user_id) {
+			await this.userService.findById(user_id, false);
+		}
+
+		entry.user_id = user_id;
+
+		return this.update(entry);
+	}
+
 	public async updateStatus(
 		entry: ClientEntity,
 		newStatus: ClientStatus,
@@ -180,9 +209,38 @@ export class ClientService {
 			.firstOrFail();
 	}
 
+	/**
+	 * @description Used in `find` method from the public controller - the bill-to choices at checkout
+	 *
+	 * Unpaginated: scoped to one account through `IDX_client_user_id`, and an account holds a
+	 * handful of clients, not a listing's worth.
+	 */
+	public findOwn(user_id: number): Promise<ClientEntity[]> {
+		return this.repository
+			.createQuery()
+			.filterBy('user_id', user_id)
+			.orderBy('id', 'DESC')
+			.all();
+	}
+
+	/**
+	 * A client the given account holds. Somebody else's client answers the same 404 a missing one
+	 * does, so a caller learns nothing about rows they cannot use.
+	 */
+	public findOwnById(id: number, user_id: number): Promise<ClientEntity> {
+		return this.repository
+			.createQuery()
+			.filterById(id)
+			.filterBy('user_id', user_id)
+			.firstOrFail();
+	}
+
 	public async getEntryData(data: { id: number; withDeleted: boolean }) {
 		const entry = await this.repository
 			.createQuery()
+			// The linked account, so the window names it rather than printing an id
+			.join('client.user', 'user', 'LEFT')
+			.addSelect(['user.id', 'user.name', 'user.email'])
 			.filterById(data.id)
 			.withDeleted(data.withDeleted)
 			.firstOrFail();
@@ -205,9 +263,12 @@ export class ClientService {
 	) {
 		return this.repository
 			.createQuery()
+			.join('client.user', 'user', 'LEFT')
+			.addSelect(['user.id', 'user.name', 'user.email'])
 			.filterById(data.filter.id)
 			.filterBy('client_type', data.filter.client_type)
 			.filterByStatus(data.filter.status)
+			.filterBy('user_id', data.filter.user_id)
 			.filterByRange(
 				'created_at',
 				data.filter.create_at_start,
@@ -221,4 +282,7 @@ export class ClientService {
 	}
 }
 
-export const clientService = new ClientService(getClientRepository());
+export const clientService = new ClientService(
+	getClientRepository(),
+	userService,
+);

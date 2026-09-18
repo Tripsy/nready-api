@@ -69,7 +69,7 @@ export const docs: Record<
 		withAuthErrors: true,
 		withErrors: [400, 404, 409, 422],
 		request: {
-			notes: 'Requires an account. Every review lands awaiting moderation - it is a lasting claim about something being sold, so it is not published unread. A second review of the same product answers 409; revise the first one instead',
+			notes: 'Requires an account. Every review lands awaiting moderation - it is a lasting claim about something being sold, so it is not published unread. A second review of the same product answers 409; revise the first one instead. is_verified is set when the caller holds a completed order for the product (and the variant, when named) billed to one of their own clients; it is never taken from the body',
 			body: {
 				product_id: {
 					type: 'number',

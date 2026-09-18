@@ -35,7 +35,7 @@ const ENTITY_TABLE_NAME = 'product_variant';
 		'The purchasable unit of a product; prices and order lines reference this, not the product',
 })
 // Redundant on its own - `id` is already unique - but it is the target a composite foreign key
-// needs. `order_product` points at (variant_id, product_id) together, which is what stops a line
+// needs. `order_line` points at (variant_id, product_id) together, which is what stops a line
 // naming a variant that belongs to a different product
 @Index('IDX_product_variant_id_product_id', ['id', 'product_id'], {
 	unique: true,
@@ -129,7 +129,7 @@ export default class ProductVariantEntity extends EntityAbstract {
 	 * A purchase in another currency is converted once, at the exchange rate of the receiving day,
 	 * and frozen here - never converted again at read time, where a moving rate would make last
 	 * month's margin change. Margin is settled in base currency on both sides:
-	 * `order_product.exchange_rate` brings the sale back to meet this.
+	 * `order_line.exchange_rate` brings the sale back to meet this.
 	 *
 	 * **It never moves what a customer is charged.** Reporting reads it; no pricing or discount
 	 * path does. A floor on a sale is `product_price.min_price` alone - deriving one from cost
