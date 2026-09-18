@@ -22,6 +22,14 @@ const SERIES: readonly SeriesRow[] = [
 		code: 'INV',
 	},
 	{
+		document_type: DocumentTypeEnum.PROFORMA,
+		code: 'PF',
+	},
+	{
+		document_type: DocumentTypeEnum.CREDIT_NOTE,
+		code: 'CN',
+	},
+	{
 		document_type: DocumentTypeEnum.ORDER,
 		code: 'ORD',
 	},

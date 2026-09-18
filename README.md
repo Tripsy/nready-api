@@ -115,7 +115,10 @@ Meanwhile, we're open to suggestions / feedback, and if you find this project us
 
 ### Core features
 
-- [x] account: register, login, removeToken, logout, passwordRecover, passwordRecoverChange, passwordUpdate, emailConfirm, emailUpdate, me, sessions, edit, delete
+- [x] account
+    - register, login, removeToken, logout, passwordRecover, passwordRecoverChange, passwordUpdate, emailConfirm, emailUpdate
+    - me, sessions, edit, delete
+    - orders
 - [x] cron-history
 - [x] log-data
 - [x] log-history
@@ -135,19 +138,21 @@ Meanwhile, we're open to suggestions / feedback, and if you find this project us
 - [x] cash-flow
 - [x] category
 - [x] client
+- [x] client-address
 - [x] comment
 - [x] complaint
 - [x] discount
 - [x] document-series
+- [x] exchange-rate
 - [ ] grn
 - [x] image
 - [ ] invoice
-- [ ] order
-- [ ] order-shipping
+- [x] order
 - [x] place
 - [x] product
 - [x] rating
 - [x] review
+- [x] shipping
 - [ ] subscription
 - [x] term
 - [x] vendor
@@ -231,7 +236,7 @@ $ pnpx tsx cli/feature.ts [feature] upgrade
 > Always check the migrations before run it, sometimes columns are dropped
 
 > **⚠ Warning**
-> A green test run can be a lie - read the test *count*, not just the colour. `bail: 3` stops
+> A green test run can be a lie - read the test *count*, not just the color. `bail: 3` stops
 > the run after 3 failing files, and a SIGKILLed worker drops a whole file while the summary
 > still looks plausible. For a trustworthy full run:
 >

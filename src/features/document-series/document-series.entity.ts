@@ -14,6 +14,8 @@ import {
  */
 export const DocumentTypeEnum = {
 	INVOICE: 'invoice',
+	PROFORMA: 'proforma',
+	CREDIT_NOTE: 'credit_note',
 	ORDER: 'order',
 	GRN: 'grn',
 	SUBSCRIPTION: 'subscription',

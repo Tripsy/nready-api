@@ -41,6 +41,32 @@ export type ClientIdentityData =
 			person_identification_number?: string | null;
 	  };
 
+/**
+ * Who to reach about a document, flattened as the document freezes it. The fields mirror the
+ * `contact_*` columns below, which are where a snapshot is normally taken from.
+ *
+ * Declared here rather than in a shared type file because `client` owns the columns and every
+ * consumer already depends on this feature. Like `AddressSnapshot`, the keys are required and the
+ * values nullable - a snapshot is written whole.
+ */
+export type ContactSnapshot = {
+	contact_name: string | null;
+	contact_email: string | null;
+	contact_phone: string | null;
+};
+
+/**
+ * Where the money goes, flattened as a document freezes it. Either party may carry it - the buyer
+ * from the `iban` / `bank_name` columns below, the seller from configuration - and both print the
+ * same two lines, so one shape serves both.
+ *
+ * Required keys, nullable values, for the reason `AddressSnapshot` gives.
+ */
+export type FinancialSnapshot = {
+	iban: string | null;
+	bank_name: string | null;
+};
+
 const ENTITY_TABLE_NAME = 'client';
 
 @Entity({
