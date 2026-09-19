@@ -21,6 +21,7 @@ export function createMockQuery() {
 		filterByEmail: jest.fn().mockReturnThis(),
 		filterByIdent: jest.fn().mockReturnThis(),
 		filterByBoolean: jest.fn().mockReturnThis(),
+		filterByOverdue: jest.fn().mockReturnThis(),
 		orderBy: jest.fn().mockReturnThis(),
 		pagination: jest.fn().mockReturnThis(),
 		withDeleted: jest.fn().mockReturnThis(),

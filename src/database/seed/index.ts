@@ -15,6 +15,7 @@ import { complaintSeed } from '@/features/complaint/database/complaint.seed';
 import { discountSeed } from '@/features/discount/database/discount.seed';
 import { documentSeriesSeed } from '@/features/document-series/database/document-series.seed';
 import { imageSeed } from '@/features/image/database/image.seed';
+import { invoiceSeed } from '@/features/invoice/database/invoice.seed';
 import { orderSeed } from '@/features/order/database/order.seed';
 import { placeSeed } from '@/features/place/database/place.seed';
 import { productSeed } from '@/features/product/database/product.seed';
@@ -78,6 +79,10 @@ const seeds: readonly SeedDefinition[] = [
 	// Reads orders with their lines, plus warehouse, carrier and client address ids - so it has to
 	// follow `orderSeed`, `warehouseSeed` and `clientAddressSeed`
 	shippingSeed,
+	// Reads the confirmed and completed orders with their lines, plus the client behind each and
+	// the completed incoming movements its allocations settle against - so it follows `orderSeed`
+	// and `cashFlowSeed`; allocates its numbers from the `INV` series
+	invoiceSeed,
 	// Reads product, product variant and user ids, and the completed orders a verified review
 	// names - so it has to follow `orderSeed`
 	reviewSeed,

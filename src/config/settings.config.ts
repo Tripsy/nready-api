@@ -214,6 +214,44 @@ function loadSettings() {
 		 * `operationalCost` is the business's own estimate of carrying one out, written onto the
 		 * shipment as its starting `operational_cost` and replaced once the carrier invoices.
 		 */
+		/*
+		 * Who the business is, as it appears on a document it issues. Frozen onto
+		 * `invoice.seller_details` when an invoice is issued, so a later move of office or change
+		 * of bank does not rewrite a document already handed to a buyer.
+		 *
+		 * `country` is the one field an invoice cannot go out without - it drives VAT treatment
+		 * and has to be on the printed page - so it carries the same alpha-2 vocabulary
+		 * `place.alpha2_code` and `shipping.domesticCountry` hold. Everything else is nullable:
+		 * a sole trader has no `regCom`, a business that never takes a transfer has no `iban`.
+		 */
+		company: {
+			name: process.env.COMPANY_NAME || 'Example SRL',
+			cui: process.env.COMPANY_CUI || null,
+			regCom: process.env.COMPANY_REG_COM || null,
+			iban: process.env.COMPANY_IBAN || null,
+			bankName: process.env.COMPANY_BANK_NAME || null,
+			addressCountry: (
+				process.env.COMPANY_ADDRESS_COUNTRY || 'RO'
+			).toUpperCase(),
+			addressRegion: process.env.COMPANY_ADDRESS_REGION || null,
+			addressCity: process.env.COMPANY_ADDRESS_CITY || null,
+			addressDetails: process.env.COMPANY_ADDRESS_DETAILS || null,
+			postalCode: process.env.COMPANY_POSTAL_CODE || null,
+			contactName: process.env.COMPANY_CONTACT_NAME || null,
+			contactEmail:
+				process.env.COMPANY_CONTACT_EMAIL ||
+				process.env.APP_EMAIL ||
+				null,
+			contactPhone: process.env.COMPANY_CONTACT_PHONE || null,
+		},
+		invoice: {
+			/*
+			 * How long a buyer has to settle, counted from the moment the invoice is issued.
+			 * `due_at` is stamped from it once, so changing this never moves a document already
+			 * out - which is the point: payment terms are part of what was agreed on the day.
+			 */
+			dueDays: Number(process.env.INVOICE_DUE_DAYS ?? 14),
+		},
 		shipping: {
 			domesticCountry: (
 				process.env.SHIPPING_DOMESTIC_COUNTRY || 'RO'

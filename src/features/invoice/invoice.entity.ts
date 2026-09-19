@@ -5,9 +5,14 @@ import type {
 	ContactSnapshot,
 	FinancialSnapshot,
 } from '@/features/client/client.entity';
+import {
+	type DocumentType,
+	DocumentTypeEnum,
+} from '@/features/document-series/document-series.entity';
 import type OrderEntity from '@/features/order/order.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import { numericTransformer } from '@/shared/transformers/numeric.transformer';
+import type { StatusTransitions } from '@/shared/types/common.type';
 
 export const InvoiceStatusEnum = {
 	DRAFT: 'draft', // Being assembled, holds no number yet, still editable
@@ -17,6 +22,33 @@ export const InvoiceStatusEnum = {
 
 export type InvoiceStatus =
 	(typeof InvoiceStatusEnum)[keyof typeof InvoiceStatusEnum];
+
+/**
+ * A document moves one way only. `issued` is where it freezes: the number has been spent, the
+ * buyer holds a copy, and the only move left is to invalidate the whole document.
+ *
+ * Nothing leads back to `draft` - a number cannot be handed back to the series - and `canceled`
+ * is terminal for the same reason. A cancellation that has to undo money already taken is a
+ * credit note plus its own movement, not a way back up this list.
+ */
+export const STATUS_TRANSITIONS: StatusTransitions<InvoiceStatus> = {
+	[InvoiceStatusEnum.DRAFT]: [
+		InvoiceStatusEnum.ISSUED,
+		InvoiceStatusEnum.CANCELLED,
+	],
+
+	[InvoiceStatusEnum.ISSUED]: [InvoiceStatusEnum.CANCELLED],
+
+	[InvoiceStatusEnum.CANCELLED]: [
+		// Allow nothing
+	],
+};
+
+/**
+ * The statuses whose figures may still be rewritten - the lines, the totals, the dates. Only a
+ * draft: an issued document is the record of what was charged, and the buyer has a copy of it.
+ */
+export const MUTABLE_STATUSES = [InvoiceStatusEnum.DRAFT];
 
 /**
  * How far the invoice has been settled - the sum of its `invoice_payment` allocations measured
@@ -76,6 +108,18 @@ export type InvoiceType =
 	(typeof InvoiceTypeEnum)[keyof typeof InvoiceTypeEnum];
 
 /**
+ * Which series a type spends its number from. A map rather than a cast over the two enums: they
+ * agree on three values today, and `document_series` also numbers orders, GRNs and
+ * subscriptions - so a new invoice type has to name its series here rather than silently
+ * resolving to one that happens to share its spelling.
+ */
+export const INVOICE_TYPE_DOCUMENT_TYPE: Record<InvoiceType, DocumentType> = {
+	[InvoiceTypeEnum.CHARGE]: DocumentTypeEnum.INVOICE,
+	[InvoiceTypeEnum.PROFORMA]: DocumentTypeEnum.PROFORMA,
+	[InvoiceTypeEnum.CREDIT_NOTE]: DocumentTypeEnum.CREDIT_NOTE,
+};
+
+/**
  * Everything a frozen party carries on a document apart from what identifies it: the shared
  * address, contact and banking shapes, with a country the invoice cannot go out without. Only the
  * identity fields differ between a person, a company and the seller.
@@ -130,6 +174,15 @@ const ENTITY_TABLE_NAME = 'invoice';
 @Index('IDX_invoice_ref', ['ref_code', 'ref_number'], {
 	unique: true,
 	where: 'deleted_at IS NULL AND ref_number IS NOT NULL',
+})
+/*
+ * What the overdue sweep reads: issued documents past their due date that have not been stamped
+ * yet. The predicate is the sweep's own end state, so the index holds only the rows still to be
+ * looked at and shrinks as they are stamped - the whole table would otherwise be scanned nightly
+ * for the handful that just went late.
+ */
+@Index('IDX_invoice_due_sweep', ['due_at'], {
+	where: "deleted_at IS NULL AND overdue_at IS NULL AND due_at IS NOT NULL AND status = 'issued'",
 })
 @Check(`(total_net >= 0)`)
 @Check(`(total_discount_reduction >= 0)`)

@@ -1,0 +1,64 @@
+{
+	"validation": {
+		"invalid_order_id": "Order ID is invalid",
+		"invalid_type": "Invoice type is invalid",
+		"invalid_status": "Invoice status is invalid",
+		"invalid_payment_status": "Payment status is invalid",
+		"invalid_kind": "Line kind is invalid; only an adjustment line can be added by hand",
+		"invalid_currency": "Currency is invalid",
+		"invalid_quantity": "Quantity must be a positive number with at most 2 decimals",
+		"invalid_unit_price": "Unit price must be a positive number with at most 2 decimals",
+		"invalid_vat_rate": "VAT rate must be a valid number",
+		"invalid_discount_reduction": "Discount reduction must be a positive number",
+		"invalid_label": "Label is invalid",
+		"invalid_amount": "Amount must be a positive number with at most 2 decimals",
+		"invalid_cash_flow_id": "Cash flow ID is invalid",
+		"invalid_line_id": "Invoice line ID is invalid",
+		"invalid_payment_id": "Invoice payment ID is invalid"
+	},
+	"label": {
+		"shipping_delivery": "Delivery",
+		"shipping_return": "Return shipping",
+		"shipping_relocation": "Relocation"
+	},
+	"error": {
+		"not_found": "Invoice not found",
+		"line_not_found": "Invoice line not found",
+		"payment_not_found": "Invoice payment not found",
+		"no_lines": "The invoice has no lines",
+		"update_not_allowed": "Only a draft invoice can be changed",
+		"delete_not_allowed": "Only a draft invoice can be deleted; issued documents are canceled instead",
+		"line_discount_exceeds_value": "The discount is larger than the line value",
+		"credit_note_needs_parent": "A credit note is raised against an issued invoice",
+		"credit_note_parent_type": "Only a charge invoice can be credited",
+		"credit_note_parent_status": "Only an issued invoice can be credited",
+		"cancel_settled": "This invoice has payments allocated against it; issue a credit note instead",
+		"billing_address_required": "The order has no billing address",
+		"billing_country_required": "The billing address has no country",
+		"payment_invoice_status": "Only an issued invoice can be settled",
+		"payment_cash_flow_status": "The cash flow entry status is invalid (e.g.: {{status}})",
+		"payment_currency_mismatch": "The cash flow entry is in {{cash_flow_currency}} and the invoice in {{invoice_currency}}",
+		"payment_direction_mismatch": "This document is settled by a cash flow entry with direction '{{direction}}'",
+		"payment_amount_exceeds_available": "The cash flow entry has only {{available}} left to allocate",
+		"payment_duplicate": "This cash flow entry is already allocated to this invoice"
+	},
+	"success": {
+		"create": "Invoice created successfully",
+		"update": "Invoice updated successfully",
+		"delete": "Invoice deleted successfully",
+		"status_update": "Invoice status updated successfully",
+		"credit_note": "Credit note created successfully",
+		"line_create": "Invoice line added successfully",
+		"line_update": "Invoice line updated successfully",
+		"line_delete": "Invoice line removed successfully",
+		"payment_create": "Payment allocated successfully",
+		"payment_delete": "Payment allocation removed successfully"
+	},
+	"history": {
+		"created": "Invoice #{{entity_id}} created by user #{{auth_id}}",
+		"updated": "Invoice #{{entity_id}} updated by user #{{auth_id}}",
+		"deleted": "Invoice(s) {{entity_ids}} marked as deleted by user #{{auth_id}}",
+		"removed": "Invoice(s) {{entity_ids}} removed by user #{{auth_id}}",
+		"status": "Invoice #{{entity_id}} updated from {{oldStatus}} to {{newStatus}} by user #{{auth_id}}"
+	}
+}
