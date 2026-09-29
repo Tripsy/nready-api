@@ -49,7 +49,7 @@ export const docs: Record<
 					total: 1,
 				},
 				query: {
-					order_by: PublicOrderByEnum.ISSUED_AT,
+					order_by: PublicOrderByEnum.CREATED_AT,
 					direction: OrderDirectionEnum.DESC,
 					limit: Configuration.get('filter.limit'),
 					page: 1,
@@ -72,7 +72,7 @@ export const docs: Record<
 					type: 'enum',
 					required: false,
 					values: Object.values(PublicOrderByEnum),
-					default: PublicOrderByEnum.ISSUED_AT,
+					default: PublicOrderByEnum.CREATED_AT,
 				},
 				direction: {
 					type: 'enum',

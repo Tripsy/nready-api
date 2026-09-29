@@ -6,11 +6,6 @@ import {
 import dataSource from '@/config/data-source.config';
 import { eventEmitter } from '@/config/event.config';
 import { lang } from '@/config/message.setup';
-import {
-	resolveTargetImages,
-	type TargetImage,
-	TargetImageTypeEnum,
-} from '@/config/target-image.config';
 import { CustomError } from '@/exceptions';
 import ArticleEntity, {
 	type ArticleDetails,
@@ -47,6 +42,11 @@ import {
 	cleanEntityCache,
 	cleanEntityCacheMany,
 } from '@/shared/abstracts/service.abstract';
+import {
+	resolveTargetImages,
+	type TargetImage,
+	TargetImageTypeEnum,
+} from '@/shared/registries/target-image.registry';
 import { LogHistoryActionEnum } from '@/shared/types/log-history.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
@@ -822,7 +822,7 @@ export class ArticleService {
 	/**
 	 * Attaches each article's cover image, when the deployment has something to answer with.
 	 *
-	 * Asked of the registry in `target-image.config.ts` rather than of the `image` feature, which
+	 * Asked of the registry in `target-image.registry.ts` rather than of the `image` feature, which
 	 * is optional here. The split of vocabulary is the point: this feature asks for the first
 	 * `gallery` image of an article and calls what comes back a cover; picking which one comes
 	 * first is the storing feature's rule.

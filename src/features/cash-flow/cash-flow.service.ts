@@ -1,4 +1,4 @@
-import type { DeepPartial } from 'typeorm';
+import type { DeepPartial, EntityManager } from 'typeorm';
 import dataSource from '@/config/data-source.config';
 import { lang } from '@/config/message.setup';
 import { BadRequestError, CustomError } from '@/exceptions';
@@ -8,6 +8,7 @@ import CashFlowEntity, {
 	CashFlowCategoryTypeEnum,
 	type CashFlowDirection,
 	type CashFlowStatus,
+	CashFlowStatusEnum,
 	getExpectedCategoryType,
 	getExpectedDirection,
 	MUTABLE_STATUSES,
@@ -17,6 +18,7 @@ import CashFlowEntity, {
 import { getCashFlowRepository } from '@/features/cash-flow/cash-flow.repository';
 import {
 	type CashFlowValidator,
+	paramsRestatingEntry,
 	paramsUpdateList,
 } from '@/features/cash-flow/cash-flow.validator';
 import {
@@ -34,11 +36,16 @@ import { clientService } from '@/features/client/client.service';
 import { resolveBaseCurrency } from '@/features/exchange-rate/exchange-rate.entity';
 import { exchangeRateService } from '@/features/exchange-rate/exchange-rate.service';
 import { vendorService } from '@/features/vendor/vendor.service';
-import { arrayHasValue, pickValuesFromObject } from '@/helpers/objects.helper';
+import {
+	arrayHasValue,
+	hasAtLeastOneValue,
+	pickValuesFromObject,
+} from '@/helpers/objects.helper';
 import {
 	assertValidStatusTransition,
 	cleanEntityCache,
 } from '@/shared/abstracts/service.abstract';
+import { notifyCashFlowSettled } from '@/shared/registries/order-settlement.registry';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 export class CashFlowService {
@@ -245,6 +252,50 @@ export class CashFlowService {
 		}
 	}
 
+	/**
+	 * What an update is allowed to do to the records a movement is filed under.
+	 *
+	 * `create` demands every required type outright, because there is nothing on the row yet. An
+	 * update submits only the types it is changing, so demanding them all again would refuse an
+	 * operator attaching an order to a movement whose client has been on file since checkout.
+	 *
+	 * What is refused instead is the one move that cannot be read as a correction:
+	 * `setupOperationalRecord` treats a type present with no id as an instruction to unlink, and
+	 * unlinking a required type leaves the movement filed under nobody. A category change is not
+	 * handled here - the row then has to satisfy a different set of rules from scratch, which is
+	 * `checkOperationalRecords`' job.
+	 */
+	public checkOperationalRecordsUpdate(
+		category: CashFlowCategory,
+		operationalRecords: ValidatorOutput<
+			CashFlowValidator,
+			'update'
+		>['operational_records'],
+	) {
+		if (!operationalRecords) {
+			return;
+		}
+
+		const operationalRecordOptions = getOperationalRecordOptions(category);
+
+		for (const requiredType of operationalRecordOptions?.required ?? []) {
+			if (
+				requiredType in operationalRecords &&
+				!operationalRecords[requiredType]
+			) {
+				throw new CustomError(
+					409,
+					lang(
+						'cash-flow.validation.required_operational_record_type',
+						{
+							operational_record_type: requiredType,
+						},
+					),
+				);
+			}
+		}
+	}
+
 	public dropInvalidOperationalRecords(
 		category: CashFlowCategory,
 		operationalRecords: ValidatorOutput<
@@ -276,6 +327,26 @@ export class CashFlowService {
 	 * @description Used in `create` method from controller;
 	 */
 	public async create(
+		data: ValidatorOutput<CashFlowValidator, 'create'>,
+	): Promise<CashFlowEntity> {
+		return dataSource.transaction((manager) => {
+			return this.createWithin(manager, data);
+		});
+	}
+
+	/**
+	 * @description Used by a caller that already holds a transaction - a checkout raising the
+	 * payment request for the order it is writing in the same breath
+	 *
+	 * **Takes the caller's `EntityManager` rather than opening its own transaction**, the way
+	 * `OrderService.create` and `ShippingService.createWithin` do: a payment request must not
+	 * outlive a checkout that failed to write the order it was asked for.
+	 *
+	 * Every check `create` runs, runs here - this is where they live, and `create` is the
+	 * transaction wrapper around it.
+	 */
+	public async createWithin(
+		manager: EntityManager,
 		data: ValidatorOutput<CashFlowValidator, 'create'>,
 	): Promise<CashFlowEntity> {
 		const inputAmount = this.inputAmount(data.amount);
@@ -324,27 +395,25 @@ export class CashFlowService {
 			data.operational_records,
 		);
 
-		return dataSource.transaction(async (manager) => {
-			const repository = manager.getRepository(CashFlowEntity);
+		const resultEntry = await manager
+			.getRepository(CashFlowEntity)
+			.save(entry);
 
-			const resultEntry = await repository.save(entry);
+		if (operationalRecords) {
+			await Promise.all(
+				Object.entries(operationalRecords).map(
+					([operational_record_type, entity_id]) =>
+						this.repository.setupOperationalRecord(manager, {
+							cash_flow_id: resultEntry.id,
+							operational_record_type:
+								operational_record_type as OperationalRecordType,
+							entity_id: entity_id,
+						}),
+				),
+			);
+		}
 
-			if (operationalRecords) {
-				await Promise.all(
-					Object.entries(operationalRecords).map(
-						([operational_record_type, entity_id]) =>
-							this.repository.setupOperationalRecord(manager, {
-								cash_flow_id: resultEntry.id,
-								operational_record_type:
-									operational_record_type as OperationalRecordType,
-								entity_id: entity_id,
-							}),
-					),
-				);
-			}
-
-			return resultEntry;
-		});
+		return resultEntry;
 	}
 
 	/**
@@ -371,7 +440,17 @@ export class CashFlowService {
 			data.amount = this.inputAmount(data.amount);
 		}
 
-		if (!arrayHasValue(entry.status, MUTABLE_STATUSES)) {
+		/*
+		 * The status gate covers what the movement *is* - its amount, category, method, currency -
+		 * and not what it is filed under. A captured payment is settled money and may no longer be
+		 * restated, but the order it turns out to belong to is often established afterwards: a
+		 * bank transfer lands unmatched, an operator identifies it, and that link is what lets the
+		 * invoice be raised from the order's own lines.
+		 */
+		if (
+			hasAtLeastOneValue(data, paramsRestatingEntry) &&
+			!arrayHasValue(entry.status, MUTABLE_STATUSES)
+		) {
 			throw new CustomError(
 				409,
 				lang('cash-flow.error.update_not_allowed'),
@@ -399,11 +478,23 @@ export class CashFlowService {
 			);
 		}
 
+		/*
+		 * A category change makes the row answer to a different set of rules with nothing carried
+		 * over, so it is checked the way a create is. Everything else is a correction to records
+		 * already on file.
+		 */
 		if (data.operational_records) {
-			this.checkOperationalRecords(
-				data.category || entry.category,
-				data.operational_records,
-			);
+			if (data.category && data.category !== entry.category) {
+				this.checkOperationalRecords(
+					data.category,
+					data.operational_records,
+				);
+			} else {
+				this.checkOperationalRecordsUpdate(
+					entry.category,
+					data.operational_records,
+				);
+			}
 		}
 
 		let parentEntry: CashFlowEntity | null = null;
@@ -441,6 +532,16 @@ export class CashFlowService {
 			);
 		}
 
+		/*
+		 * Only the types the submitted category allows survive; the rest are dropped rather than
+		 * refused, the same way `create` drops them.
+		 *
+		 * `order` is among them, so an operator can name the document a movement belongs to after
+		 * the fact. `setupOperationalRecord` reads a type present with no id as an instruction to
+		 * unlink, which means a form that renders the order field must omit the key entirely when
+		 * it has nothing to say rather than submit it empty - submitting it empty cuts a captured
+		 * payment loose from the order it confirmed.
+		 */
 		const operationalRecords = this.dropInvalidOperationalRecords(
 			data.category || entry.category,
 			data.operational_records,
@@ -478,6 +579,20 @@ export class CashFlowService {
 		return resultEntry;
 	}
 
+	/**
+	 * Moves a movement along and, when that movement is the money an order was waiting for,
+	 * announces it.
+	 *
+	 * The announcement is made **after the status write has committed** and only for `completed`:
+	 * capture is the one transition that settles anything, and what runs downstream - confirming
+	 * the order, raising and settling its charge - opens transactions of its own. See
+	 * `order-settlement.registry.ts` for why the chain is not held inside one, and for what a failure
+	 * downstream leaves behind.
+	 *
+	 * The order is read off this movement's own `operational_record` rows, so the ledger resolves
+	 * it without knowing what an order is. A movement carrying no such record - a deposit, a
+	 * back-office correction - announces nothing.
+	 */
 	public async updateStatus(
 		entry: CashFlowEntity,
 		newStatus: CashFlowStatus,
@@ -491,6 +606,56 @@ export class CashFlowService {
 		entry.status = newStatus;
 
 		await this.update(entry);
+
+		if (newStatus !== CashFlowStatusEnum.COMPLETED) {
+			return;
+		}
+
+		const orderId = await this.findOrderId(entry.id);
+
+		if (!orderId) {
+			return;
+		}
+
+		await notifyCashFlowSettled({
+			cash_flow_id: entry.id,
+			order_id: orderId,
+		});
+	}
+
+	/**
+	 * The order a movement was raised for, or null when it was raised for nobody's document.
+	 *
+	 * An id and nothing more: the row it points at lives in a table this feature does not import,
+	 * and the unique index over `(cash_flow_id, operational_record_type)` means there is at most
+	 * one of them.
+	 */
+	public findOrderId(cashFlowId: number): Promise<number | null> {
+		return this.findOperationalRecordId(
+			cashFlowId,
+			OperationalRecordTypeEnum.ORDER,
+		);
+	}
+
+	/**
+	 * The row of a given type a movement is filed under, as an id and nothing more.
+	 *
+	 * The unique index over `(cash_flow_id, operational_record_type)` means there is at most one
+	 * of each, so this answers with a value rather than a list. What the id points at is the
+	 * caller's business - `order` in particular lives in a table this feature does not import.
+	 */
+	public async findOperationalRecordId(
+		cashFlowId: number,
+		type: OperationalRecordType,
+	): Promise<number | null> {
+		const record = await getOperationalRecordRepository()
+			.createQuery()
+			.select(['operational_record.entity_id'])
+			.filterBy('cash_flow_id', cashFlowId)
+			.filterBy('operational_record_type', type)
+			.first();
+
+		return record?.entity_id ?? null;
 	}
 
 	public async delete(id: number, force: boolean) {
@@ -551,6 +716,7 @@ export class CashFlowService {
 			.filterBy('category', data.filter.category)
 			.filterBy('method', data.filter.method)
 			.filterBy('status', data.filter.status)
+			.filterBy('currency', data.filter.currency)
 			.filterByRange(
 				'created_at',
 				data.filter.create_at_start,

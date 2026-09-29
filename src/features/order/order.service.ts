@@ -53,6 +53,7 @@ import {
 	assertValidStatusTransition,
 	cleanEntityCache,
 } from '@/shared/abstracts/service.abstract';
+import { notifyOrderConfirmed } from '@/shared/registries/order-settlement.registry';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 /**
@@ -112,8 +113,8 @@ export type OrderCreateInput = {
 	 * Rate to the base currency, following `order_line.exchange_rate`.
 	 *
 	 * Optional: a caller holding no rate - a checkout, which quotes a basket in the shopper's own
-	 * currency and resolves none - leaves it out, and the document resolves its own as of the
-	 * issue date. Stated only by a caller that already froze the money at a known rate.
+	 * currency and resolves none - leaves it out, and the document resolves the current one.
+	 * Stated only by a caller that already froze the money at a known rate.
 	 */
 	exchange_rate?: number;
 	lines: readonly OrderLineInput[];
@@ -129,8 +130,6 @@ export type OrderCreateInput = {
 	 */
 	billing_address_id?: number | null;
 	notes?: string | null;
-	/** Defaults to now. Injectable so a backdated import states its own date. */
-	issued_at?: Date;
 };
 
 /**
@@ -205,7 +204,6 @@ const ENTRY_COLUMNS = [
 	'order.type',
 	'order.payment_method',
 	'order.billing_address_id',
-	'order.issued_at',
 	'order.notes',
 	'order.created_at',
 	'order.updated_at',
@@ -279,9 +277,10 @@ export class OrderService {
 	 * them at, and a figure typed into the payload is one nobody can reconcile against the
 	 * published series later.
 	 *
-	 * Taken **as of the issue date**, not today: a backdated order is converted at what the day
-	 * it was issued was worth, and `getRateAsOf` carries the previous publication forward across
-	 * a weekend or a holiday.
+	 * `asOf` defaults to now, which is the creation date for a new order. A line edit passes the
+	 * order's `created_at`, so a document amended days later still converts at what the day it
+	 * was raised was worth. `getRateAsOf` carries the previous publication forward across a
+	 * weekend or a holiday.
 	 *
 	 * An unpublished currency is refused rather than defaulted to 1, following `cash-flow`: this
 	 * is a financial document, and converting at a made-up rate is worse than declining to write
@@ -292,9 +291,9 @@ export class OrderService {
 	 */
 	public async resolveExchangeRate(
 		currency: string,
-		issuedAt?: Date,
+		asOf?: Date,
 	): Promise<number> {
-		const rate = await exchangeRateService.getRateAsOf(currency, issuedAt);
+		const rate = await exchangeRateService.getRateAsOf(currency, asOf);
 
 		if (rate === null) {
 			throw new BadRequestError(
@@ -367,8 +366,6 @@ export class OrderService {
 			throw new BadRequestError(lang('order.error.no_lines'));
 		}
 
-		const issuedAt = data.issued_at ?? new Date();
-
 		/*
 		 * The rate belongs to the document rather than to whoever raised it. A checkout hands over
 		 * figures in the shopper's currency and no rate at all, so this is the moment the money is
@@ -377,7 +374,7 @@ export class OrderService {
 		 */
 		const exchangeRate =
 			data.exchange_rate ??
-			(await this.resolveExchangeRate(data.currency, issuedAt));
+			(await this.resolveExchangeRate(data.currency));
 
 		const reference = await documentSeriesService.allocate(
 			manager,
@@ -393,7 +390,6 @@ export class OrderService {
 				type: data.type ?? OrderTypeEnum.STANDARD,
 				payment_method: data.payment_method ?? null,
 				billing_address_id: data.billing_address_id ?? null,
-				issued_at: issuedAt,
 				notes: data.notes ?? null,
 			}),
 		);
@@ -497,12 +493,7 @@ export class OrderService {
 		await this.checkClientId(data.client_id);
 		await this.checkLines(data.lines);
 
-		const exchangeRate = await this.resolveExchangeRate(
-			data.currency,
-			data.issued_at ?? undefined,
-		);
-
-		const issuedAt = data.issued_at ?? new Date();
+		const exchangeRate = await this.resolveExchangeRate(data.currency);
 
 		const options = await this.optionService.resolveForLines(
 			data.lines,
@@ -527,7 +518,7 @@ export class OrderService {
 				countryCode: countryCode,
 				currency: data.currency,
 				exchangeRate: exchangeRate,
-				now: issuedAt,
+				now: new Date(),
 			},
 		);
 
@@ -538,7 +529,6 @@ export class OrderService {
 				exchange_rate: exchangeRate,
 				type: data.type,
 				billing_address_id: data.billing_address_id ?? null,
-				issued_at: issuedAt,
 				notes: data.notes ?? null,
 				lines: data.lines.map((line, index) => ({
 					variant_id: line.variant_id,
@@ -570,9 +560,8 @@ export class OrderService {
 	 *
 	 * `currency` rides along with that set - the validator refuses it without one - so it is gated
 	 * by the same 409 and never reaches `pickValuesFromObject`: it is not a column on `order`, it
-	 * belongs to the lines being written. Its rate is looked up rather than accepted, against the
-	 * issue date the document ends the call with, so re-denominating a pending order and
-	 * backdating it in one request converts at the date that was actually saved.
+	 * belongs to the lines being written. Its rate is looked up rather than accepted, as of the
+	 * order's creation.
 	 */
 	public async updateData(
 		entry: OrderEntity,
@@ -631,9 +620,8 @@ export class OrderService {
 	 * incoming prices are taken as quoted in it and written as they are: the validator only accepts
 	 * a currency alongside a full line set, so the operator has just re-stated every price. Nothing
 	 * is converted here - the rate rides along for the accounts to reach base currency with, and
-	 * applying it to prices somebody typed would move figures they agreed. It is looked up against
-	 * the issue date the document ends the call with, so re-denominating a pending order and
-	 * backdating it in one request converts at the date that was actually saved.
+	 * applying it to prices somebody typed would move figures they agreed. It is looked up as of the
+	 * order's creation, the same date the discounts below are resolved against.
 	 *
 	 * The discounts are resolved fresh over the whole set rather than carried across from the rows
 	 * being replaced: a changed quantity, price or currency changes which rule wins and what it is
@@ -652,7 +640,7 @@ export class OrderService {
 
 		const lineCurrency = currency ?? denomination.currency;
 		const exchangeRate = currency
-			? await this.resolveExchangeRate(currency, entry.issued_at)
+			? await this.resolveExchangeRate(currency, entry.created_at)
 			: denomination.exchange_rate;
 
 		const options = await this.optionService.resolveForLines(
@@ -671,7 +659,7 @@ export class OrderService {
 			countryCode: countryCode,
 			currency: lineCurrency,
 			exchangeRate: exchangeRate,
-			now: entry.issued_at,
+			now: entry.created_at,
 		});
 
 		return {
@@ -746,10 +734,23 @@ export class OrderService {
 	 * The cache is dropped after the write rather than by a subscriber: `OrderEntity.HAS_CACHE` is
 	 * true, and a subscriber would fire inside the transaction, where a concurrent reader can
 	 * refill the cache from a snapshot about to be superseded.
+	 *
+	 * When the move is the one that accepts the order, it is announced so the charge is raised.
+	 * `settledByCashFlowId` names the captured payment that caused the confirmation, when one did:
+	 * the invoice raised downstream is settled by that same movement in one step, instead of
+	 * standing `unpaid` beside money already in the bank. It stays null on the back-office path,
+	 * where an operator confirms an order nobody has paid for yet.
+	 *
+	 * The announcement runs **after the write has committed** and is not part of any transaction
+	 * the caller holds - see `order-settlement.registry.ts` for why, and for what a failure to raise
+	 * the document leaves behind. Confirming the order is the part that must not fail: billing details
+	 * an invoice refuses on are the client's to fix, and none of that is a reason to refuse an
+	 * operator the status change or to reject a payment that has already landed.
 	 */
 	public async updateStatus(
 		entry: OrderEntity,
 		newStatus: OrderStatus,
+		settledByCashFlowId: number | null = null,
 	): Promise<OrderEntity> {
 		assertValidStatusTransition(
 			STATUS_TRANSITIONS,
@@ -762,6 +763,13 @@ export class OrderService {
 		const saved = await this.repository.save(entry);
 
 		await cleanEntityCache(OrderEntity, saved.id);
+
+		if (newStatus === OrderStatusEnum.CONFIRMED) {
+			await notifyOrderConfirmed({
+				order_id: saved.id,
+				cash_flow_id: settledByCashFlowId,
+			});
+		}
 
 		return saved;
 	}
@@ -815,7 +823,7 @@ export class OrderService {
 			.filterBy('variant_id', variantId)
 			.filterBy('order.status', OrderStatusEnum.COMPLETED)
 			.filterBy('client.user_id', userId)
-			.orderBy('order.issued_at', OrderDirectionEnum.DESC)
+			.orderBy('order.created_at', OrderDirectionEnum.DESC)
 			.orderBy('order.id', OrderDirectionEnum.DESC)
 			.getQuery()
 			.limit(1)
@@ -1069,14 +1077,20 @@ export class OrderService {
 			.joinAndSelect('order.client', 'client', 'LEFT')
 			.filterById(data.filter.id)
 			.filterByClient(data.filter.client_id)
-			.filterBy('status', data.filter.status)
 			.filterBy('type', data.filter.type)
 			.filterByReference(data.filter.ref_code, data.filter.ref_number)
 			.filterByRange(
-				'issued_at',
-				data.filter.issued_at_start,
-				data.filter.issued_at_end,
+				'created_at',
+				data.filter.create_at_start,
+				data.filter.create_at_end,
 			);
+
+		// One status narrows with `=`, several with `IN` - the filter accepts both
+		if (Array.isArray(data.filter.status)) {
+			query.filterBy('status', data.filter.status, 'IN');
+		} else {
+			query.filterBy('status', data.filter.status);
+		}
 
 		/*
 		 * The term is applied only when neither reference filter is: both reach for `ref_code` and

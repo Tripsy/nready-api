@@ -223,7 +223,7 @@ export const docs: Record<
 				ref_code: 'ORD',
 				ref_number: 1183,
 				status: 'pending',
-				issued_at: new Date().toISOString(),
+				created_at: new Date().toISOString(),
 			},
 			withMessage: true,
 		},

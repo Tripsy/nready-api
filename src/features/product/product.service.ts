@@ -6,12 +6,6 @@ import {
 } from 'typeorm';
 import dataSource from '@/config/data-source.config';
 import { lang } from '@/config/message.setup';
-import {
-	resolveTargetImageLists,
-	resolveTargetImages,
-	type TargetImage,
-	TargetImageTypeEnum,
-} from '@/config/target-image.config';
 import { CustomError } from '@/exceptions';
 import CategoryEntity from '@/features/category/category.entity';
 import ProductEntity, {
@@ -68,6 +62,12 @@ import {
 	assertValidStatusTransition,
 	cleanEntityCache,
 } from '@/shared/abstracts/service.abstract';
+import {
+	resolveTargetImageLists,
+	resolveTargetImages,
+	type TargetImage,
+	TargetImageTypeEnum,
+} from '@/shared/registries/target-image.registry';
 import type { MeasureUnit } from '@/shared/types/measure-unit.type';
 import { toBaseUnit } from '@/shared/types/measure-unit.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
@@ -1757,7 +1757,7 @@ export class ProductService {
 	/**
 	 * Attaches each product's cover image, when the deployment has something to answer with.
 	 *
-	 * Asked of the registry in `target-image.config.ts` rather than of the `image` feature,
+	 * Asked of the registry in `target-image.registry.ts` rather than of the `image` feature,
 	 * which is optional here. With no provider registered - a deployment without `image`, or the
 	 * `test` environment, where bootstrap does not run - every product answers `null`. The key
 	 * stays present either way: a client must not have to tell "no image" apart from "no image

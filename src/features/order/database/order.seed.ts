@@ -13,6 +13,8 @@ import ClientEntity from '@/features/client/client.entity';
 import { DocumentTypeEnum } from '@/features/document-series/document-series.entity';
 import { documentSeriesService } from '@/features/document-series/document-series.service';
 import OrderEntity, {
+	type OrderPaymentMethod,
+	OrderPaymentMethodEnum,
 	type OrderStatus,
 	OrderStatusEnum,
 	OrderTypeEnum,
@@ -28,7 +30,7 @@ const MIN_LINES_PER_ORDER = 1;
 const MAX_LINES_PER_ORDER = 4;
 
 /** How far back the order book stretches, so the date filters have something to narrow. */
-const ISSUED_WITHIN_DAYS = 180;
+const CREATED_WITHIN_DAYS = 180;
 
 /**
  * The mix a live order book settles into: most documents made it through, a few are still moving,
@@ -42,6 +44,23 @@ const STATUSES: readonly OrderStatus[] = [
 	OrderStatusEnum.CONFIRMED,
 	OrderStatusEnum.PENDING,
 	OrderStatusEnum.CANCELLED,
+];
+
+/**
+ * How the buyer said they would pay. Weighted towards card, the way an online shop's mix runs.
+ *
+ * Stated on every seeded order rather than left null: it is what `cashFlowSeed` turns into the
+ * method on the payment request it raises for a pending order, so a null here would seed a shop
+ * whose every request reads as a bank transfer. A back-office order that names none is a real
+ * shape, but it is the exception and not worth the whole demo looking like one.
+ */
+const PAYMENT_METHODS: readonly OrderPaymentMethod[] = [
+	OrderPaymentMethodEnum.CARD,
+	OrderPaymentMethodEnum.CARD,
+	OrderPaymentMethodEnum.CARD,
+	OrderPaymentMethodEnum.CASH_ON_DELIVERY,
+	OrderPaymentMethodEnum.CASH_ON_DELIVERY,
+	OrderPaymentMethodEnum.BANK_TRANSFER,
 ];
 
 type SellableVariant = {
@@ -148,7 +167,8 @@ export const orderSeed: SeedDefinition = {
 					// a `subscription` order with no subscription behind it would be a shape
 					// the application never produces.
 					type: OrderTypeEnum.STANDARD,
-					issued_at: randomPastDate(random, ISSUED_WITHIN_DAYS),
+					payment_method: randomPick(random, PAYMENT_METHODS),
+					created_at: randomPastDate(random, CREATED_WITHIN_DAYS),
 					notes: null,
 				}),
 			);
@@ -182,7 +202,7 @@ export const orderSeed: SeedDefinition = {
 					price: roundMoney(pick.price),
 					currency: currency,
 					// Base currency throughout, so the rate is the identity. A seeded order in
-					// a second currency would need a published rate for its own issue date.
+					// a second currency would need a published rate for its own creation date.
 					exchange_rate: 1,
 					discount: undefined,
 					discount_reduction: 0,

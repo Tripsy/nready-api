@@ -3,16 +3,26 @@ import dataSource from '@/config/data-source.config';
 import { lang } from '@/config/message.setup';
 import { Configuration } from '@/config/settings.config';
 import { BadRequestError, CustomError } from '@/exceptions';
+import type CashFlowEntity from '@/features/cash-flow/cash-flow.entity';
+import {
+	AMOUNT_DECIMALS,
+	CashFlowCategoryTypeEnum,
+	CashFlowStatusEnum,
+} from '@/features/cash-flow/cash-flow.entity';
+import { cashFlowService } from '@/features/cash-flow/cash-flow.service';
+import { OperationalRecordTypeEnum } from '@/features/cash-flow/operational-record.entity';
 import {
 	type ClientType,
 	ClientTypeEnum,
 } from '@/features/client/client.entity';
 import { clientService } from '@/features/client/client.service';
+import type { ClientAddressSnapshot } from '@/features/client-address/client-address.entity';
 import { clientAddressService } from '@/features/client-address/client-address.service';
 import { documentSeriesService } from '@/features/document-series/document-series.service';
 import InvoiceEntity, {
 	type BillingDetails,
 	INVOICE_TYPE_DOCUMENT_TYPE,
+	INVOICEABLE_ORDER_STATUSES,
 	InvoicePaymentStatusEnum,
 	type InvoiceStatus,
 	InvoiceStatusEnum,
@@ -72,6 +82,47 @@ export type InvoiceLineInput = {
 	vat_rate: number;
 	discount_reduction?: number | null;
 };
+
+/**
+ * What a listing reads. Explicit, so the two snapshot columns stay out of it: `billing_details`
+ * and `seller_details` are jsonb blobs that only the detail view has any use for, and a page of
+ * twenty documents would otherwise carry twenty of each.
+ */
+const ENTRY_COLUMNS = [
+	'invoice.id',
+	'invoice.order_id',
+	'invoice.ref_code',
+	'invoice.ref_number',
+	'invoice.status',
+	'invoice.payment_status',
+	'invoice.type',
+	'invoice.parent_invoice_id',
+	'invoice.currency',
+	'invoice.exchange_rate',
+	'invoice.total_net',
+	'invoice.total_discount_reduction',
+	'invoice.total_vat',
+	'invoice.total_gross',
+	'invoice.issued_at',
+	'invoice.due_at',
+	'invoice.overdue_at',
+	'invoice.paid_at',
+	'invoice.notes',
+	'invoice.created_at',
+	'invoice.updated_at',
+	'invoice.deleted_at',
+];
+
+/**
+ * Enough of the order for a listing to name the document it bills - the reference a person reads,
+ * not the id. The dashboard links straight to the order from it.
+ */
+const ORDER_COLUMNS = [
+	'order.id',
+	'order.ref_code',
+	'order.ref_number',
+	'order.status',
+];
 
 export class InvoiceService {
 	constructor(
@@ -249,9 +300,8 @@ export class InvoiceService {
 	 * The document is raised as a `draft` and holds no number: `document_series` counts
 	 * continuously with no release path, so a number is spent only when the document is issued.
 	 *
-	 * No guard against a second invoice for the same order - a proforma, the charge that follows
-	 * it and a credit note against that charge all sit on one order, and a partly shipped order
-	 * is invoiced per parcel.
+	 * No guard against a second invoice for the same order - a charge and a credit note against
+	 * that charge both sit on one order, and a partly shipped order is invoiced per parcel.
 	 */
 	public async create(
 		data: ValidatorOutput<InvoiceValidator, 'create'>,
@@ -265,6 +315,16 @@ export class InvoiceService {
 		}
 
 		const order = await orderService.findById(data.order_id, false);
+
+		if (!arrayHasValue(order.status, INVOICEABLE_ORDER_STATUSES)) {
+			throw new CustomError(
+				409,
+				lang('invoice.error.order_not_invoiceable', {
+					statuses: INVOICEABLE_ORDER_STATUSES.join(', '),
+				}),
+			);
+		}
+
 		const lines = await this.buildLinesFromOrder(order);
 
 		if (lines.length === 0) {
@@ -288,6 +348,191 @@ export class InvoiceService {
 			},
 			lines: lines,
 		});
+	}
+
+	/**
+	 * @description Used by the order-confirmed handler in `invoice.bootstrap.ts`; raises the
+	 * charge an order is confirmed for, with no operator action
+	 *
+	 * `create` carries no guard against a second invoice for an order, and that is right for the
+	 * manual path - a charge and the credit note against it both sit on one `order_id`, and a
+	 * partly shipped order is invoiced per parcel. An automatic caller needs the opposite, so the
+	 * guard lives here: one live charge per order, and a repeated confirm returns `null` rather
+	 * than raising a duplicate.
+	 *
+	 * A canceled charge does not count, which is what makes a failed document recoverable -
+	 * cancel it and confirm again.
+	 *
+	 * Issuing is a second transaction rather than part of `create`'s, so a failure in `issue`
+	 * leaves the draft standing - the billing details it refuses on are the client's to fix, and
+	 * the draft is what the operator issues once they have. That draft is also what the count
+	 * above then finds, so the repair path and the duplicate guard are the same row.
+	 */
+	public async raiseForOrder(orderId: number): Promise<InvoiceEntity | null> {
+		const existing = await this.repository
+			.createQuery()
+			.filterBy('order_id', orderId)
+			.filterBy('type', InvoiceTypeEnum.CHARGE)
+			.filterBy('status', InvoiceStatusEnum.CANCELLED, '!=')
+			.count();
+
+		if (existing > 0) {
+			return null;
+		}
+
+		// `due_at` is left unset so `issue` stamps the term from `invoice.dueDays` against the
+		// issue date it allocates in the same breath
+		const entry = await this.create({
+			order_id: orderId,
+			type: InvoiceTypeEnum.CHARGE,
+			due_at: undefined,
+			notes: undefined,
+		});
+
+		return this.issue(entry);
+	}
+
+	/**
+	 * @description Used in `raiseForCashFlow` method from controller; raises the charge a revenue
+	 * movement is owed a document for
+	 *
+	 * This is the back-office counterpart to the checkout chain. The happy path raises the
+	 * document from the order and settles it with the money that confirmed it; here an operator
+	 * is looking at money already banked and asking for the invoice that accounts for it.
+	 *
+	 * **The movement's `order` record decides what the document itemizes.** With an order named,
+	 * this is `raiseForOrder` - the lines are the order's own lines and its shipping, and the
+	 * duplicate guard there means a second press returns the existing charge's absence rather
+	 * than a second document. With no order, there is nothing in the catalogue to itemize and the
+	 * document carries a single line worth what the movement was worth.
+	 *
+	 * Settling is not done here: the caller allocates, because only it knows whether the operator
+	 * asked for that. See `InvoicePaymentService.settleFromCashFlow`.
+	 */
+	public async raiseForCashFlow(
+		cashFlowId: number,
+	): Promise<InvoiceEntity | null> {
+		const cashFlow = await cashFlowService.findById(cashFlowId, false);
+
+		if (cashFlow.category_type !== CashFlowCategoryTypeEnum.REVENUE) {
+			throw new CustomError(
+				409,
+				lang('invoice.error.cash_flow_not_revenue'),
+			);
+		}
+
+		const orderId = await cashFlowService.findOrderId(cashFlowId);
+
+		if (orderId) {
+			return this.raiseForOrder(orderId);
+		}
+
+		return this.raiseForBareCashFlow(cashFlow);
+	}
+
+	/**
+	 * A charge for money that names no order.
+	 *
+	 * Two conditions the order-backed path does not have. The movement must be `completed`,
+	 * because a document itemizing nothing but the payment itself is justified by the payment
+	 * having landed - and nothing else here could be checked against. And it must not have been
+	 * allocated yet: with no `order_id` to count charges against, what a second press would
+	 * otherwise duplicate, the allocation left by the first is the only record that this movement
+	 * has already been accounted for.
+	 *
+	 * The buyer is frozen onto the row now rather than at issue time - a bare movement names a
+	 * client and nothing else, so there is no order to resolve an address from later.
+	 *
+	 * The line is `adjustment`: `product` and `shipping` lines name the row they were raised
+	 * from, and there is none. Its figure is the movement's net amount, which carries four
+	 * decimals against a document's two - a movement whose fifth significant figure is not zero
+	 * is invoiced for the rounded amount, and the few hundredths left over stay unallocated on
+	 * the movement.
+	 */
+	private async raiseForBareCashFlow(
+		cashFlow: CashFlowEntity,
+	): Promise<InvoiceEntity | null> {
+		if (cashFlow.status !== CashFlowStatusEnum.COMPLETED) {
+			throw new CustomError(
+				409,
+				lang('invoice.error.cash_flow_not_completed', {
+					status: CashFlowStatusEnum.COMPLETED,
+				}),
+			);
+		}
+
+		const allocations = await this.paymentRepository
+			.createQuery()
+			.filterBy('cash_flow_id', cashFlow.id)
+			.count();
+
+		if (allocations > 0) {
+			return null;
+		}
+
+		const clientId = await cashFlowService.findOperationalRecordId(
+			cashFlow.id,
+			OperationalRecordTypeEnum.CLIENT,
+		);
+
+		if (!clientId) {
+			throw new CustomError(
+				409,
+				lang('invoice.error.cash_flow_no_client'),
+			);
+		}
+
+		const address =
+			await clientAddressService.getBillingSnapshotForClient(clientId);
+
+		// Its own message rather than `billing_address_required`, which speaks of the order: there
+		// is none here, and the address that is missing is the client's own
+		if (!address) {
+			throw new CustomError(
+				409,
+				lang('invoice.error.cash_flow_client_no_address'),
+			);
+		}
+
+		const label = lang('invoice.label.cash_flow', {
+			reference: cashFlow.external_reference ?? `#${cashFlow.id}`,
+		});
+
+		const unitPrice = roundMoney(
+			Number(cashFlow.amount) / 10 ** AMOUNT_DECIMALS,
+		);
+
+		const entry = await this.persist({
+			entry: {
+				order_id: null,
+				type: InvoiceTypeEnum.CHARGE,
+				status: InvoiceStatusEnum.DRAFT,
+				currency: cashFlow.currency,
+				exchange_rate: cashFlow.exchange_rate,
+				billing_details: await this.buildBillingDetails(
+					clientId,
+					address,
+				),
+				notes: cashFlow.notes ?? null,
+			},
+			lines: [
+				{
+					kind: InvoiceLineKindEnum.ADJUSTMENT,
+					label: label,
+					quantity: 1,
+					unit_price: unitPrice,
+					vat_rate: Number(cashFlow.vat_rate),
+					...this.computeLine({
+						label: label,
+						quantity: 1,
+						unit_price: unitPrice,
+						vat_rate: Number(cashFlow.vat_rate),
+					}),
+				},
+			],
+		});
+
+		return this.issue(entry);
 	}
 
 	/**
@@ -499,9 +744,25 @@ export class InvoiceService {
 			throw new CustomError(409, lang('invoice.error.no_lines'));
 		}
 
-		const order = await orderService.findById(entry.order_id, false);
+		/*
+		 * An order-backed document resolves the buyer now, so an address corrected between
+		 * raising and issuing is the one that goes out. A document with no order behind it was
+		 * given its buyer when it was raised - there is nothing left to resolve them from - so
+		 * what is already on the row stands.
+		 */
+		const billingDetails = entry.order_id
+			? await this.buildBillingDetailsForOrder(
+					await orderService.findById(entry.order_id, false),
+				)
+			: entry.billing_details;
 
-		const billingDetails = await this.buildBillingDetails(order);
+		if (!billingDetails) {
+			throw new CustomError(
+				409,
+				lang('invoice.error.billing_address_required'),
+			);
+		}
+
 		const sellerDetails = this.buildSellerDetails();
 
 		const issuedAt = new Date();
@@ -627,6 +888,8 @@ export class InvoiceService {
 	) {
 		const query = this.repository
 			.createQuery()
+			.select([...ENTRY_COLUMNS, ...ORDER_COLUMNS])
+			.joinAndSelect('invoice.order', 'order', 'LEFT')
 			.filterById(data.filter.id)
 			.filterByTerm(data.filter.term)
 			.filterBy('order_id', data.filter.order_id)
@@ -693,11 +956,23 @@ export class InvoiceService {
 	 * order's: an order names its counterparty by reference and stays amendable, and this is the
 	 * copy that has to keep saying who was billed whatever is edited afterwards.
 	 *
-	 * Both refusals are the caller's to fix before issuing: a document with no billing address
-	 * has nowhere to be sent, and one with no country cannot state its VAT treatment - which is
-	 * why `AddressSnapshotRequiredCountry` makes that one field non-nullable.
+	 * A document with no country cannot state its VAT treatment, which is why
+	 * `AddressSnapshotRequiredCountry` makes that one field non-nullable and why the refusal is
+	 * the caller's to fix before issuing.
+	 *
+	 * The address is handed in rather than resolved here: an order names the one the buyer chose
+	 * at checkout, and a document raised from a bare movement falls back to the client's own
+	 * billing address - see `buildBillingDetailsForOrder` and `raiseForCashFlow`.
 	 */
-	private async buildBillingDetails(
+	/**
+	 * The buyer as the order names them: their own client columns, and the address they chose to
+	 * be billed at.
+	 *
+	 * A billing address deleted between checkout and issuing leaves `order.billing_address_id`
+	 * null - the key is `ON DELETE SET NULL` and `client_address` has no soft delete - and the
+	 * document has nowhere to be sent, so it is refused until the client is fixed.
+	 */
+	private async buildBillingDetailsForOrder(
 		order: OrderEntity,
 	): Promise<BillingDetails> {
 		if (!order.billing_address_id) {
@@ -707,10 +982,19 @@ export class InvoiceService {
 			);
 		}
 
-		const [client, address] = await Promise.all([
-			clientService.findById(order.client_id, false),
-			clientAddressService.getSnapshotById(order.billing_address_id),
-		]);
+		return this.buildBillingDetails(
+			order.client_id,
+			await clientAddressService.getSnapshotById(
+				order.billing_address_id,
+			),
+		);
+	}
+
+	private async buildBillingDetails(
+		clientId: number,
+		address: ClientAddressSnapshot,
+	): Promise<BillingDetails> {
+		const client = await clientService.findById(clientId, false);
 
 		if (!address.address_country) {
 			throw new CustomError(

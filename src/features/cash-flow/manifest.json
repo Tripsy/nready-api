@@ -1,8 +1,8 @@
 {
 	"name": "cash-flow",
-	"version": "1.1.0",
+	"version": "1.2.0",
 	"relativePath": "/cash-flow",
 	"entities": ["cash-flow", "operational-record"],
 	"depends_on": ["client", "exchange-rate", "vendor"],
-	"required_by": ["invoice", "stats"]
+	"required_by": ["invoice", "stats", "cart"]
 }

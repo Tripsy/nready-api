@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { lang } from '@/config/message.setup';
+import { CustomError } from '@/exceptions';
 import InvoiceEntity from '@/features/invoice/invoice.entity';
 import {
 	type InvoicePolicy,
@@ -159,6 +160,51 @@ class InvoiceController extends BaseController {
 
 		res.json(res.locals.output);
 	});
+
+	/**
+	 * Raises the charge a revenue movement is owed a document for, and settles it with that same
+	 * movement.
+	 *
+	 * Gated by `canCreate` - it writes a document - and the settlement follows it here rather than
+	 * inside `raiseForCashFlow` because pressing this is the operator saying both should happen.
+	 * It is a no-op for a movement not yet captured, which leaves the document `unpaid` for the
+	 * capture to settle later.
+	 */
+	public raiseForCashFlow = asyncHandler(
+		async (req: Request, res: Response) => {
+			this.policy.canCreate(res.locals.auth);
+
+			const data = this.validate(
+				this.validator.raiseForCashFlow,
+				req.params,
+				res,
+			);
+
+			const entry = await this.invoiceService.raiseForCashFlow(
+				data.cash_flow_id,
+			);
+
+			// Null when a live charge already stands for the movement's order, or when the
+			// movement has already been allocated - there is a document for this money somewhere
+			// and raising a second one is not this route's call
+			if (!entry) {
+				throw new CustomError(
+					409,
+					lang('invoice.error.cash_flow_already_invoiced'),
+				);
+			}
+
+			await this.invoicePaymentService.settleFromCashFlow(
+				entry,
+				data.cash_flow_id,
+			);
+
+			res.locals.output.data(entry);
+			res.locals.output.message(lang('invoice.success.create'));
+
+			res.status(201).json(res.locals.output);
+		},
+	);
 
 	public creditNote = asyncHandler(async (req: Request, res: Response) => {
 		this.policy.canCreate(res.locals.auth);

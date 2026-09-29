@@ -47,6 +47,11 @@ export default async () => {
 					}),
 				],
 			},
+			raiseForCashFlow: {
+				path: '/from-cash-flow/:cash_flow_id',
+				method: 'post',
+				handlers: [validateParamsWhenId('cash_flow_id')],
+			},
 			creditNote: {
 				path: '/:id/credit-note',
 				method: 'post',

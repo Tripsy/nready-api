@@ -15,6 +15,7 @@ import {
 import ClientAddressEntity, {
 	type ClientAddressSnapshot,
 	type ClientAddressType,
+	ClientAddressTypeEnum,
 } from '@/features/client-address/client-address.entity';
 import { getClientAddressRepository } from '@/features/client-address/client-address.repository';
 import {
@@ -344,6 +345,29 @@ export class ClientAddressService {
 			.firstOrFail();
 
 		return this.toSnapshot(entry);
+	}
+
+	/**
+	 * @description Used in `raiseForCashFlow` method from `InvoiceService`; where to bill a client
+	 * when no order named an address
+	 *
+	 * The oldest billing address the client holds, which is the one they registered with. A client
+	 * keeping several is an ambiguity nothing on a bare movement resolves - the caller that needs
+	 * a specific one names an order instead, and `getOrderSnapshot` reads it from there.
+	 *
+	 * Null rather than a throw: the caller states what a missing address means for the document it
+	 * is building.
+	 */
+	public async getBillingSnapshotForClient(
+		clientId: number,
+	): Promise<ClientAddressSnapshot | null> {
+		const entry = await this.createPlaceQuery(Configuration.language())
+			.filterBy('client_address.client_id', clientId)
+			.filterBy('client_address.type', ClientAddressTypeEnum.BILLING)
+			.orderBy('id')
+			.first();
+
+		return entry ? this.toSnapshot(entry) : null;
 	}
 
 	/**

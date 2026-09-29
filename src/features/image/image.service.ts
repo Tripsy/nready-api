@@ -1,6 +1,5 @@
 import type { DeepPartial } from 'typeorm';
 import dataSource from '@/config/data-source.config';
-import type { TargetImage } from '@/config/target-image.config';
 import { BadRequestError, NotFoundError } from '@/exceptions';
 import ImageEntity, {
 	type ImageSection,
@@ -18,6 +17,7 @@ import {
 	cleanEntityCache,
 	cleanEntityCacheMany,
 } from '@/shared/abstracts/service.abstract';
+import type { TargetImage } from '@/shared/registries/target-image.registry';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 export class ImageService {

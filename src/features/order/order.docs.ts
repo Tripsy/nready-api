@@ -24,7 +24,6 @@ export const orderSample: Record<string, unknown> = {
 	ref_number: 1183,
 	status: OrderStatusEnum.CONFIRMED,
 	type: OrderTypeEnum.STANDARD,
-	issued_at: '2026-08-14T11:32:00.000Z',
 	notes: null,
 	created_at: '2026-08-14T11:32:00.000Z',
 	updated_at: null,
@@ -108,7 +107,7 @@ export const docs: Record<keyof typeof orderController, ApiInputDocumentation> =
 			withAuthErrors: true,
 			withErrors: [400, 404, 422],
 			request: {
-				notes: `The order starts as \`${OrderStatusEnum.PENDING}\`, exactly as a checkout's order does, and is given its reference straight away, allocated from the \`ORD\` series - an order canceled before confirmation leaves that number spent. A \`client_id\` that resolves to nothing answers 404. The exchange rate is not a field: it is read from the published \`exchange-rate\` series as of \`issued_at\`, and a currency with no rate published answers 400. ${lineNote}`,
+				notes: `The order starts as \`${OrderStatusEnum.PENDING}\`, exactly as a checkout's order does, and is given its reference straight away, allocated from the \`ORD\` series - an order canceled before confirmation leaves that number spent. A \`client_id\` that resolves to nothing answers 404. The exchange rate is not a field: it is read from the published \`exchange-rate\` series as of now, and a currency with no rate published answers 400. ${lineNote}`,
 				body: {
 					client_id: {
 						type: 'number',
@@ -126,12 +125,6 @@ export const docs: Record<keyof typeof orderController, ApiInputDocumentation> =
 						required: false,
 						values: Object.values(OrderTypeEnum),
 						default: OrderTypeEnum.STANDARD,
-					},
-					issued_at: {
-						type: 'string',
-						required: false,
-						condition:
-							'ISO date; defaults to now, backdating is allowed',
 					},
 					notes: { type: 'string', required: false },
 					lines: {
@@ -187,7 +180,7 @@ export const docs: Record<keyof typeof orderController, ApiInputDocumentation> =
 			withAuthErrors: true,
 			withErrors: [400, 404, 409, 422],
 			request: {
-				notes: `Provide at least one of client_id, currency, type, issued_at, notes or lines. A \`status\` in the body is ignored - it has its own route. **\`lines\` replaces the whole set and is accepted only while the order is \`${OrderStatusEnum.PENDING}\`** - checkout orders included; on any other status it answers 409, because the business has accepted what the document says. Every line re-states its \`options\` as ids and they are re-resolved from the catalog, so a checkout line keeps its options only when they are sent back. \`currency\` is refused without \`lines\`: no order row holds a currency - each line carries its own - so re-denominating a document means re-stating its prices in the new one, and nothing here converts a figure. Its rate is read from the published \`exchange-rate\` series as of the order's \`issued_at\`, never taken from the body`,
+				notes: `Provide at least one of client_id, currency, type, notes or lines. A \`status\` in the body is ignored - it has its own route. **\`lines\` replaces the whole set and is accepted only while the order is \`${OrderStatusEnum.PENDING}\`** - checkout orders included; on any other status it answers 409, because the business has accepted what the document says. Every line re-states its \`options\` as ids and they are re-resolved from the catalog, so a checkout line keeps its options only when they are sent back. \`currency\` is refused without \`lines\`: no order row holds a currency - each line carries its own - so re-denominating a document means re-stating its prices in the new one, and nothing here converts a figure. Its rate is read from the published \`exchange-rate\` series as of the order's \`created_at\`, never taken from the body`,
 				params: {
 					id: {
 						type: 'number',
@@ -207,7 +200,6 @@ export const docs: Record<keyof typeof orderController, ApiInputDocumentation> =
 						required: false,
 						values: Object.values(OrderTypeEnum),
 					},
-					issued_at: { type: 'string', required: false },
 					notes: { type: 'string', required: false },
 					lines: {
 						type: 'array',
@@ -271,7 +263,7 @@ export const docs: Record<keyof typeof orderController, ApiInputDocumentation> =
 						total: 0,
 					},
 					query: {
-						order_by: OrderByEnum.ISSUED_AT,
+						order_by: OrderByEnum.CREATED_AT,
 						direction: OrderDirectionEnum.DESC,
 						limit: 5,
 						page: 1,
@@ -302,7 +294,7 @@ export const docs: Record<keyof typeof orderController, ApiInputDocumentation> =
 						type: 'enum',
 						required: false,
 						values: Object.values(OrderByEnum),
-						default: OrderByEnum.ISSUED_AT,
+						default: OrderByEnum.CREATED_AT,
 					},
 					direction: {
 						type: 'enum',
@@ -331,8 +323,8 @@ export const docs: Record<keyof typeof orderController, ApiInputDocumentation> =
 							required: false,
 							values: Object.values(OrderTypeEnum),
 						},
-						issued_at_start: { type: 'string', required: false },
-						issued_at_end: { type: 'string', required: false },
+						create_at_start: { type: 'string', required: false },
+						create_at_end: { type: 'string', required: false },
 						is_deleted: {
 							type: 'boolean',
 							required: false,

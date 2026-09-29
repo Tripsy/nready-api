@@ -29,6 +29,7 @@ import InvoiceLineEntity, {
 import InvoicePaymentEntity from '@/features/invoice/invoice-payment.entity';
 import OrderEntity, { OrderStatusEnum } from '@/features/order/order.entity';
 import OrderLineEntity from '@/features/order/order-line.entity';
+import ProductContentEntity from '@/features/product/product-content.entity';
 import { createFutureDate, createPastDate } from '@/helpers/date.helper';
 import { roundMoney } from '@/helpers/shop.helper';
 
@@ -43,7 +44,6 @@ const DUE_DAYS = Configuration.get('invoice.dueDays');
 type OrderWithClient = {
 	id: number;
 	client_id: number;
-	issued_at: Date;
 };
 
 type SettleableMovement = {
@@ -133,11 +133,7 @@ export const invoiceSeed: SeedDefinition = {
 		const orders = (await manager
 			.getRepository(OrderEntity)
 			.createQueryBuilder('order')
-			.select([
-				'order.id AS id',
-				'order.client_id AS client_id',
-				'order.issued_at AS issued_at',
-			])
+			.select(['order.id AS id', 'order.client_id AS client_id'])
 			.where('order.deleted_at IS NULL')
 			.andWhere('order.status IN (:...statuses)', {
 				statuses: [
@@ -167,6 +163,32 @@ export const invoiceSeed: SeedDefinition = {
 		const clientById = new Map(
 			clients.map((client) => [client.id, client]),
 		);
+
+		/*
+		 * What each line is called - the same label `OrderService.getLines` hands the invoice
+		 * service, so a seeded document reads like one the application raised rather than
+		 * showing a product id.
+		 *
+		 * The deployment's own language wins, but any other is taken over nothing: the product
+		 * seed writes some catalog entries in one language only, and a document naming
+		 * `#12` is worse than one naming the product in the wrong language.
+		 */
+		const contents = await manager
+			.getRepository(ProductContentEntity)
+			.find({
+				select: { product_id: true, label: true, language: true },
+				withDeleted: true,
+			});
+
+		const labelByProduct = new Map<number, string>();
+
+		for (const content of contents) {
+			const isPreferred = content.language === Configuration.language();
+
+			if (isPreferred || !labelByProduct.has(content.product_id)) {
+				labelByProduct.set(content.product_id, content.label);
+			}
+		}
 
 		/*
 		 * What a seeded allocation may draw on: money that actually moved, in and from a client.
@@ -269,7 +291,9 @@ export const invoiceSeed: SeedDefinition = {
 					order_line_id: orderLine.id,
 					product_id: orderLine.product_id,
 					variant_id: orderLine.variant_id,
-					label: `Product #${orderLine.product_id}`,
+					label:
+						labelByProduct.get(orderLine.product_id) ??
+						`Product #${orderLine.product_id}`,
 					quantity: Number(orderLine.quantity),
 					unit_price: Number(orderLine.price),
 					vat_rate: Number(orderLine.vat_rate),

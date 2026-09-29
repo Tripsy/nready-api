@@ -74,7 +74,7 @@ export const docs: Record<
 				type: {
 					type: 'enum',
 					required: false,
-					values: [InvoiceTypeEnum.CHARGE, InvoiceTypeEnum.PROFORMA],
+					values: [InvoiceTypeEnum.CHARGE],
 					condition: `defaults to ${InvoiceTypeEnum.CHARGE}; each type draws its number from its own series`,
 				},
 				due_at: {
@@ -241,6 +241,28 @@ export const docs: Record<
 					type: 'enum',
 					required: true,
 					values: Object.values(InvoiceStatusEnum),
+				},
+			},
+		},
+	}),
+
+	raiseForCashFlow: helperApiInputDocumentation({
+		description: 'Raise and issue the charge a revenue movement is owed',
+		withBearerAuth: true,
+		success: {
+			status: 201,
+			description: 'Invoice raised and issued successfully',
+			dataSample: entitySample,
+		},
+		withAuthErrors: true,
+		withErrors: [404, 409, 422],
+		request: {
+			notes: "The movement's order record decides what the document itemizes: with an order named, the order's own lines and its shipping; with none, a single line worth what the movement was worth, billed to the client's billing address. The movement is then allocated against the document, unless it has not been captured yet - in which case the document stands unpaid until it is. Refused with 409 when a live charge already stands for the order, or when a movement with no order has already been allocated",
+			params: {
+				cash_flow_id: {
+					type: 'number' as const,
+					required: true,
+					condition: 'the cash flow id',
 				},
 			},
 		},

@@ -38,14 +38,14 @@ const statusTransitionNote = Object.entries(STATUS_TRANSITIONS)
  * otherwise reach the database and fail there.
  */
 const consistencyNote =
-	'category decides the pair: customer -> revenue/in; vendor, insurance and taxes -> expense/out; refund -> correction, either direction';
+	'category decides the pair: sale -> revenue/in; vendor, insurance and taxes -> expense/out; refund -> correction, either direction';
 
 const amountNote = `amount is stored as a positive integer scaled by 10^${AMOUNT_DECIMALS}, so the sign is dropped and anything past the ${AMOUNT_DECIMALS}th decimal with it; gross and net are derived from it and vat_rate on read`;
 
 const operationalRecordsFormat = `{ ${Object.values(OperationalRecordTypeEnum).join('?: number; ')}?: number }`;
 
 const operationalRecordsCondition =
-	'customer requires client; vendor, insurance and taxes require vendor. A type the category does not allow is dropped silently rather than refused';
+	'sale requires client and optionally takes order - the document the payment was raised for, which confirms itself once the movement is captured; vendor, insurance and taxes require vendor. A type the category does not allow is dropped silently rather than refused. Records may be rewritten in any status, so an operator can attach the order to a movement already captured; a required type may not be unlinked';
 
 const amountParam = {
 	type: 'number' as const,

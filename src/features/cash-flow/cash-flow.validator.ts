@@ -31,6 +31,18 @@ export const paramsUpdateList: string[] = [
 	'operational_records',
 ];
 
+/**
+ * The subset of `paramsUpdateList` that restates the movement itself, and so is refused once the
+ * entry has left `MUTABLE_STATUSES`.
+ *
+ * `operational_records` is deliberately absent: what a movement is filed under is bookkeeping
+ * rather than money, and an operator matching a captured payment to the order it turns out to
+ * belong to must not be blocked by the status that capture put it in. See `updateData`.
+ */
+export const paramsRestatingEntry: string[] = paramsUpdateList.filter(
+	(param) => param !== 'operational_records',
+);
+
 export const OrderByEnum = {
 	ID: 'id',
 	CATEGORY: 'category',
@@ -74,6 +86,10 @@ export class CashFlowValidator extends BaseValidator<typeof validatorMessages> {
 				{ required: false },
 			),
 			[OperationalRecordTypeEnum.VENDOR]: this.validateId(
+				this.getMessage('invalid_number'),
+				{ required: false },
+			),
+			[OperationalRecordTypeEnum.ORDER]: this.validateId(
 				this.getMessage('invalid_number'),
 				{ required: false },
 			),
@@ -226,6 +242,7 @@ export class CashFlowValidator extends BaseValidator<typeof validatorMessages> {
 				this.getMessage('invalid_status'),
 				{ required: false },
 			),
+			currency: this.currencySchema().optional(),
 			create_at_start: this.validateDate(
 				{
 					invalid_date: this.getMessage('invalid_date'),

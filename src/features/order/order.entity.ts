@@ -160,10 +160,6 @@ export default class OrderEntity extends EntityAbstract {
 	@Index('IDX_order_billing_address_id')
 	billing_address_id!: number | null;
 
-	@Column({ type: 'timestamp', nullable: false })
-	@Index('IDX_order_issued_at')
-	issued_at!: Date;
-
 	@Column('text', { nullable: true })
 	notes!: string | null;
 

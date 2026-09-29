@@ -52,7 +52,6 @@ const seeds: readonly SeedDefinition[] = [
 	clientSeed,
 	// Reads client and address ids - a client address points at an existing address
 	clientAddressSeed,
-	cashFlowSeed,
 	termSeed,
 	// Reads category, term, brand ids; seeds the category attribute definitions
 	// its products answer to before the products themselves
@@ -79,6 +78,10 @@ const seeds: readonly SeedDefinition[] = [
 	// Reads orders with their lines, plus warehouse, carrier and client address ids - so it has to
 	// follow `orderSeed`, `warehouseSeed` and `clientAddressSeed`
 	shippingSeed,
+	// Its general movements have no parents, but the payment request it raises per pending order
+	// is priced off that order's lines *and* its delivery - so it follows `orderSeed` and
+	// `shippingSeed`, and still precedes the `invoiceSeed` that settles against its movements
+	cashFlowSeed,
 	// Reads the confirmed and completed orders with their lines, plus the client behind each and
 	// the completed incoming movements its allocations settle against - so it follows `orderSeed`
 	// and `cashFlowSeed`; allocates its numbers from the `INV` series

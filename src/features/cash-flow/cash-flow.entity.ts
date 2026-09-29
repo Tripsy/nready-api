@@ -39,7 +39,7 @@ export type CashFlowCategoryType =
 export const getExpectedCategoryType = (
 	category: CashFlowCategory,
 ): CashFlowCategoryType => {
-	const revenueCategories = [CashFlowCategoryEnum.CUSTOMER];
+	const revenueCategories = [CashFlowCategoryEnum.SALE];
 	const expenseCategories = [
 		CashFlowCategoryEnum.VENDOR,
 		CashFlowCategoryEnum.INSURANCE,
@@ -259,7 +259,7 @@ export default class CashFlowEntity extends EntityAbstract {
 	@Column({
 		type: 'enum',
 		enum: CashFlowCategoryEnum,
-		default: CashFlowCategoryEnum.CUSTOMER,
+		default: CashFlowCategoryEnum.SALE,
 		nullable: false,
 	})
 	category!: CashFlowCategory;

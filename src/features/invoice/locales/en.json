@@ -19,13 +19,15 @@
 	"label": {
 		"shipping_delivery": "Delivery",
 		"shipping_return": "Return shipping",
-		"shipping_relocation": "Relocation"
+		"shipping_relocation": "Relocation",
+		"cash_flow": "Payment {{reference}}"
 	},
 	"error": {
 		"not_found": "Invoice not found",
 		"line_not_found": "Invoice line not found",
 		"payment_not_found": "Invoice payment not found",
 		"no_lines": "The invoice has no lines",
+		"order_not_invoiceable": "Only an order in one of these statuses can be invoiced: {{statuses}}",
 		"update_not_allowed": "Only a draft invoice can be changed",
 		"delete_not_allowed": "Only a draft invoice can be deleted; issued documents are canceled instead",
 		"line_discount_exceeds_value": "The discount is larger than the line value",
@@ -40,7 +42,12 @@
 		"payment_currency_mismatch": "The cash flow entry is in {{cash_flow_currency}} and the invoice in {{invoice_currency}}",
 		"payment_direction_mismatch": "This document is settled by a cash flow entry with direction '{{direction}}'",
 		"payment_amount_exceeds_available": "The cash flow entry has only {{available}} left to allocate",
-		"payment_duplicate": "This cash flow entry is already allocated to this invoice"
+		"payment_duplicate": "This cash flow entry is already allocated to this invoice",
+		"cash_flow_not_revenue": "Only a revenue cash flow entry can be invoiced",
+		"cash_flow_not_completed": "A cash flow entry with no order behind it can only be invoiced once it is {{status}}",
+		"cash_flow_no_client": "The cash flow entry names no client to bill",
+		"cash_flow_already_invoiced": "This cash flow entry is already accounted for by an invoice",
+		"cash_flow_client_no_address": "The client has no billing address on file"
 	},
 	"success": {
 		"create": "Invoice created successfully",

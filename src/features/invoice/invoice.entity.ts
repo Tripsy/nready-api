@@ -10,6 +10,7 @@ import {
 	DocumentTypeEnum,
 } from '@/features/document-series/document-series.entity';
 import type OrderEntity from '@/features/order/order.entity';
+import { OrderStatusEnum } from '@/features/order/order.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import { numericTransformer } from '@/shared/transformers/numeric.transformer';
 import type { StatusTransitions } from '@/shared/types/common.type';
@@ -95,12 +96,11 @@ export const resolvePaymentStatus = (
 };
 
 /**
- * Each type draws its number from its own `document_series`: a proforma is not a fiscal document
+ * Each type draws its number from its own `document_series`: a credit note is its own document
  * and must not spend a number out of the invoice series.
  */
 export const InvoiceTypeEnum = {
 	CHARGE: 'charge',
-	PROFORMA: 'proforma',
 	CREDIT_NOTE: 'credit_note', // Reduces the amount the buyer owes from a previous order
 } as const;
 
@@ -108,16 +108,25 @@ export type InvoiceType =
 	(typeof InvoiceTypeEnum)[keyof typeof InvoiceTypeEnum];
 
 /**
- * Which series a type spends its number from. A map rather than a cast over the two enums: they
- * agree on three values today, and `document_series` also numbers orders, GRNs and
- * subscriptions - so a new invoice type has to name its series here rather than silently
- * resolving to one that happens to share its spelling.
+ * Which series a type spends its number from. A map rather than a cast over the two enums: the
+ * names do not line up (`charge` draws from the `invoice` series), and `document_series` also
+ * numbers orders, GRNs and subscriptions - so a new invoice type has to name its series here
+ * rather than silently resolving to one that happens to share its spelling.
  */
 export const INVOICE_TYPE_DOCUMENT_TYPE: Record<InvoiceType, DocumentType> = {
 	[InvoiceTypeEnum.CHARGE]: DocumentTypeEnum.INVOICE,
-	[InvoiceTypeEnum.PROFORMA]: DocumentTypeEnum.PROFORMA,
 	[InvoiceTypeEnum.CREDIT_NOTE]: DocumentTypeEnum.CREDIT_NOTE,
 };
+
+/**
+ * The order states a document may be raised from: one the business has agreed to, and one it has
+ * fulfilled. A `pending` order is still being amended - its lines would be frozen onto a document
+ * before they settled - and a `canceled` one was never charged at all.
+ */
+export const INVOICEABLE_ORDER_STATUSES = [
+	OrderStatusEnum.CONFIRMED,
+	OrderStatusEnum.COMPLETED,
+];
 
 /**
  * Everything a frozen party carries on a document apart from what identifies it: the shared
@@ -192,13 +201,22 @@ export default class InvoiceEntity extends EntityAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
 
-	@Column('int', { nullable: false })
+	/**
+	 * The order this document bills, or null when there is no order behind it.
+	 *
+	 * Nullable because a revenue movement may be invoiced on its own: money banked against a
+	 * client with nothing in the catalogue to itemize - a deposit, a service agreed off-system -
+	 * still has to be charged for. Such a document carries a single line built from the movement
+	 * itself, and `billing_details` is frozen onto it when it is raised rather than resolved from
+	 * an order at issue time.
+	 */
+	@Column('int', { nullable: true })
 	@Index('IDX_invoice_order_id')
-	order_id!: number;
+	order_id!: number | null;
 
 	/**
-	 * Not unique: an order may carry a proforma, the charge that follows it and a credit note
-	 * against that charge, and a partly shipped order is invoiced per parcel.
+	 * Not unique: an order may carry a charge and a credit note against that charge, and a
+	 * partly shipped order is invoiced per parcel.
 	 */
 	@Column('varchar', {
 		length: 10,
@@ -371,9 +389,10 @@ export default class InvoiceEntity extends EntityAbstract {
 	// RELATIONS
 	@ManyToOne('OrderEntity', {
 		onDelete: 'RESTRICT',
+		nullable: true,
 	})
 	@JoinColumn({ name: 'order_id' })
-	order!: OrderEntity;
+	order!: OrderEntity | null;
 
 	@ManyToOne('InvoiceEntity', {
 		onDelete: 'RESTRICT',

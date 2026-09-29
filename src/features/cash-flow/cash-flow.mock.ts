@@ -22,7 +22,7 @@ export function getCashFlowEntityMock(
 		id: 1,
 		direction: CashFlowDirectionEnum.IN,
 		category_type: CashFlowCategoryTypeEnum.REVENUE,
-		category: CashFlowCategoryEnum.CUSTOMER,
+		category: CashFlowCategoryEnum.SALE,
 		method: CashFlowMethodEnum.CASH,
 		status: CashFlowStatusEnum.COMPLETED,
 		amount: 10000, // $100.00 in cents
@@ -77,7 +77,7 @@ export const cashFlowInputPayloads = {
 	create: {
 		direction: CashFlowDirectionEnum.IN,
 		category_type: CashFlowCategoryTypeEnum.REVENUE,
-		category: CashFlowCategoryEnum.CUSTOMER,
+		category: CashFlowCategoryEnum.SALE,
 		method: CashFlowMethodEnum.CASH,
 		amount: 10000,
 		vat_rate: 19.0,
@@ -88,14 +88,14 @@ export const cashFlowInputPayloads = {
 		operational_records: {
 			client: 1,
 			vendor: null,
-			employee: null,
+			order: null,
 		},
 	},
 	update: {
 		id: 1,
 		direction: CashFlowDirectionEnum.IN,
 		category_type: CashFlowCategoryTypeEnum.REVENUE,
-		category: CashFlowCategoryEnum.CUSTOMER,
+		category: CashFlowCategoryEnum.SALE,
 		method: CashFlowMethodEnum.CREDIT_CARD,
 		amount: 120000000,
 		vat_rate: 19.0,
@@ -115,7 +115,7 @@ export const cashFlowInputPayloads = {
 			id: 1,
 			direction: CashFlowDirectionEnum.IN,
 			category_type: CashFlowCategoryTypeEnum.REVENUE,
-			category: CashFlowCategoryEnum.CUSTOMER,
+			category: CashFlowCategoryEnum.SALE,
 			method: CashFlowMethodEnum.CASH,
 			status: CashFlowStatusEnum.COMPLETED,
 			create_at_start: formatDate(createPastDate(30000)),

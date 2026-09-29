@@ -22,6 +22,10 @@ import { CashFlowService } from '@/features/cash-flow/cash-flow.service';
 import type { CashFlowValidator } from '@/features/cash-flow/cash-flow.validator';
 import { CashFlowCategoryEnum } from '@/features/cash-flow/cash-flow-category.enum';
 import {
+	type CashFlowSettledPayload,
+	registerCashFlowSettledHandler,
+} from '@/shared/registries/order-settlement.registry';
+import {
 	createMockRepository,
 	setupTransactionMock,
 	testServiceFindByFilter,
@@ -70,7 +74,7 @@ describe('CashFlowService', () => {
 		expect(() =>
 			serviceCashFlow.checkCategoryType(
 				CashFlowCategoryTypeEnum.REVENUE,
-				CashFlowCategoryEnum.CUSTOMER,
+				CashFlowCategoryEnum.SALE,
 			),
 		).not.toThrow(BadRequestError);
 	});
@@ -79,7 +83,7 @@ describe('CashFlowService', () => {
 		expect(() =>
 			serviceCashFlow.checkCategoryType(
 				CashFlowCategoryTypeEnum.EXPENSE,
-				CashFlowCategoryEnum.CUSTOMER,
+				CashFlowCategoryEnum.SALE,
 			),
 		).toThrow();
 	});
@@ -96,7 +100,7 @@ describe('CashFlowService', () => {
 	it('checkRefund - should throw when invalid category is set', async () => {
 		await expect(() =>
 			serviceCashFlow.checkRefund({
-				category: CashFlowCategoryEnum.CUSTOMER,
+				category: CashFlowCategoryEnum.SALE,
 				inputAmount: 2500,
 				currency: Configuration.currency(),
 				parentEntry: getCashFlowEntityMock(),
@@ -303,11 +307,68 @@ describe('CashFlowService', () => {
 
 		jest.spyOn(serviceCashFlow, 'findById').mockResolvedValue(entry);
 
+		// Capture is the one transition that looks for an order to settle. Nothing is registered
+		// with `order-settlement.registry.ts` here - `bootstrap.setup.ts` is skipped in the test
+		// environment - so the lookup is all there is to stub
+		jest.spyOn(serviceCashFlow, 'findOrderId').mockResolvedValue(null);
+
 		mockCashFlow.repository.save.mockResolvedValue(entry);
 
 		await serviceCashFlow.updateStatus(entry, CashFlowStatusEnum.COMPLETED);
 
 		expect(mockCashFlow.repository.save).toHaveBeenCalled();
+	});
+
+	/*
+	 * The handover the shop's happy path runs on: a captured payment is what confirms the order it
+	 * was raised for. What the handler does with it is `order`'s to test - this covers that the
+	 * ledger announces it, and only for the transition that moved money.
+	 */
+	it('announces a captured payment to the order it was raised for', async () => {
+		const entry = getCashFlowEntityMock({
+			status: CashFlowStatusEnum.PENDING,
+		});
+
+		const settled = jest
+			.fn<(payload: CashFlowSettledPayload) => Promise<void>>()
+			.mockResolvedValue();
+
+		registerCashFlowSettledHandler(settled);
+
+		jest.spyOn(serviceCashFlow, 'findById').mockResolvedValue(entry);
+		jest.spyOn(serviceCashFlow, 'findOrderId').mockResolvedValue(42);
+
+		mockCashFlow.repository.save.mockResolvedValue(entry);
+
+		await serviceCashFlow.updateStatus(entry, CashFlowStatusEnum.COMPLETED);
+
+		expect(settled).toHaveBeenCalledWith({
+			cash_flow_id: entry.id,
+			order_id: 42,
+		});
+	});
+
+	it('announces nothing when a payment is canceled rather than captured', async () => {
+		const entry = getCashFlowEntityMock({
+			status: CashFlowStatusEnum.PENDING,
+		});
+
+		const settled = jest
+			.fn<(payload: CashFlowSettledPayload) => Promise<void>>()
+			.mockResolvedValue();
+
+		registerCashFlowSettledHandler(settled);
+
+		const findOrderId = jest.spyOn(serviceCashFlow, 'findOrderId');
+
+		jest.spyOn(serviceCashFlow, 'findById').mockResolvedValue(entry);
+
+		mockCashFlow.repository.save.mockResolvedValue(entry);
+
+		await serviceCashFlow.updateStatus(entry, CashFlowStatusEnum.CANCELED);
+
+		expect(findOrderId).not.toHaveBeenCalled();
+		expect(settled).not.toHaveBeenCalled();
 	});
 
 	it('should delete by id', async () => {

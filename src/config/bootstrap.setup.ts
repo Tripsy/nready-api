@@ -6,7 +6,7 @@ import { runFeatureModules } from '@/config/feature-modules.setup';
  * What belongs here is registration into a shared registry: something another feature will look
  * up by name without importing the feature that owns it. `article.bootstrap.ts` is the reference
  * - it registers what an article accepts from its readers with
- * `target-participation.config.ts`, so `comment`, `rating` and `complaint` can refuse a write
+ * `target-participation.registry.ts`, so `comment`, `rating` and `complaint` can refuse a write
  * against a closed article while still knowing nothing about articles.
  *
  * Not for event handlers (`*.listener.ts` owns those), and not for work: this runs before the

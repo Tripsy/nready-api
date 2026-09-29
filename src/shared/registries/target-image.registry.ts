@@ -8,20 +8,9 @@
  * dependency. A project should be able to take `article`, `brand` or `category` and leave the
  * image library behind.
  *
- * **The direction is the opposite of `target-participation.config.ts`.** There the *target*
- * registers an answer about its own rows and the writing feature asks. Here the *provider*
- * registers: which image comes first, and what one looks like, is the storing feature's own rule.
- * The features rendering a page ask by their own table name.
- *
  * **One provider, not one per section.** Participation keys its map by target because each target
  * owns its own switch. Every section's images live in one table owned by one feature, so a second
  * slot would invent a plurality that does not exist.
- *
- * **With nothing registered, nothing has an image.** That is what an uninstalled `image` looks
- * like, and it is the state of every request under `test`, where `bootstrap.setup.ts` skips the
- * registration pass. A consumer renders that as an explicit `null` and never as a missing field: a
- * client must not have to tell "this row has no image" apart from "this deployment has no image
- * feature".
  *
  * The vocabulary here is deliberately the *storing* feature's - an image and its type - not the
  * role a page casts it in. What an article calls its `cover_image` is article's word for the first

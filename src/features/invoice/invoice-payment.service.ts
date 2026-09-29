@@ -171,6 +171,53 @@ export class InvoicePaymentService {
 	}
 
 	/**
+	 * @description Used by the order-confirmed handler in `invoice.bootstrap.ts` and by
+	 * `raiseForCashFlow` in the controller; allocates a captured movement against a charge just
+	 * raised from it
+	 *
+	 * The figure is the smaller of what the document asks for and what the movement has left to
+	 * give, so the two ordinary mismatches both land somewhere defensible: a buyer who paid more
+	 * than the order came to leaves the surplus unallocated, for a refund or a later document, and
+	 * one who paid less leaves the invoice `partial` for dunning to chase. Allocating the full
+	 * `total_gross` regardless would be refused outright by the ceiling check in `create` and
+	 * settle nothing at all.
+	 *
+	 * Does nothing when the movement is already spent, or when it has not been captured yet. The
+	 * caller is settling on the strength of having just raised a document, not on the movement
+	 * having anything to give - an order invoiced up front is charged before its payment lands,
+	 * and the document simply stands `unpaid` until the capture announces itself and comes back
+	 * through here. `create` would refuse both cases outright, which would mean answering a
+	 * request whose document is already issued and committed with a 409.
+	 */
+	public async settleFromCashFlow(
+		invoice: InvoiceEntity,
+		cashFlowId: number,
+	): Promise<void> {
+		const cashFlow = await cashFlowService.findById(cashFlowId, false);
+
+		if (cashFlow.status !== CashFlowStatusEnum.COMPLETED) {
+			return;
+		}
+
+		const ceiling = await this.getCeiling(cashFlow);
+
+		const amount = roundMoney(
+			Math.min(ceiling.available, Number(invoice.total_gross)),
+		);
+
+		if (amount <= 0) {
+			return;
+		}
+
+		await this.create(invoice, {
+			id: invoice.id,
+			cash_flow_id: cashFlowId,
+			amount: amount,
+			notes: undefined,
+		});
+	}
+
+	/**
 	 * @description Used in `paymentDelete` method from controller
 	 *
 	 * A hard delete: the pair is unique over live rows only, so a soft-deleted allocation would

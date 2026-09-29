@@ -242,6 +242,15 @@ export class InvoiceValidator extends BaseValidator<typeof validatorMessages> {
 		),
 	});
 
+	/**
+	 * The movement to raise a charge for. `cash_flow_id` rather than `id`, because the route's
+	 * `:id` names a row in another feature's table and reading it as an invoice id is exactly the
+	 * mix-up that would otherwise go unnoticed.
+	 */
+	readonly raiseForCashFlow = z.object({
+		cash_flow_id: this.validateId(this.getMessage('invalid_cash_flow_id')),
+	});
+
 	readonly creditNote = z.object({
 		id: this.validateId(this.getMessage('invalid_id', { name: 'id' })),
 		notes: this.validateString(this.getMessage('invalid_notes'), {

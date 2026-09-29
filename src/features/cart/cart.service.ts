@@ -18,6 +18,18 @@ import {
 	cartPricingService,
 } from '@/features/cart/cart-pricing.service';
 import {
+	CashFlowCategoryTypeEnum,
+	CashFlowDirectionEnum,
+	type CashFlowMethod,
+	CashFlowMethodEnum,
+} from '@/features/cash-flow/cash-flow.entity';
+import {
+	type CashFlowService,
+	cashFlowService,
+} from '@/features/cash-flow/cash-flow.service';
+import { CashFlowCategoryEnum } from '@/features/cash-flow/cash-flow-category.enum';
+import { OperationalRecordTypeEnum } from '@/features/cash-flow/operational-record.entity';
+import {
 	type ClientService,
 	clientService,
 } from '@/features/client/client.service';
@@ -27,6 +39,10 @@ import {
 	clientAddressService,
 } from '@/features/client-address/client-address.service';
 import type OrderEntity from '@/features/order/order.entity';
+import {
+	type OrderPaymentMethod,
+	OrderPaymentMethodEnum,
+} from '@/features/order/order.entity';
 import {
 	type OrderLineInput,
 	type OrderService,
@@ -66,6 +82,7 @@ import {
 	warehouseService,
 } from '@/features/warehouse/warehouse.service';
 import { createFutureDate } from '@/helpers/date.helper';
+import { roundMoney } from '@/helpers/shop.helper';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
@@ -274,6 +291,24 @@ function toShippingLines(
 	return [...byVariant.values()];
 }
 
+/**
+ * How a shopper's stated intent becomes a movement on the ledger.
+ *
+ * The two enums are deliberately not the same list: `order.payment_method` is what a checkout
+ * screen offers, while `cash_flow.method` is how the money actually arrived, and the ledger knows
+ * instruments the checkout does not name. A card is recorded as `credit_card` because the checkout
+ * cannot tell the two kinds apart; a gateway that later reports otherwise corrects the movement
+ * while it is still `pending`, which `MUTABLE_STATUSES` allows.
+ */
+const CASH_FLOW_METHOD_BY_PAYMENT_METHOD: Record<
+	OrderPaymentMethod,
+	CashFlowMethod
+> = {
+	[OrderPaymentMethodEnum.CASH_ON_DELIVERY]: CashFlowMethodEnum.CASH,
+	[OrderPaymentMethodEnum.CARD]: CashFlowMethodEnum.CREDIT_CARD,
+	[OrderPaymentMethodEnum.BANK_TRANSFER]: CashFlowMethodEnum.BANK_TRANSFER,
+};
+
 export class CartService {
 	constructor(
 		private repository: ReturnType<typeof getCartRepository>,
@@ -287,6 +322,7 @@ export class CartService {
 		private clientAddressService: ClientAddressService,
 		private shippingService: ShippingService,
 		private shippingRateService: ShippingRateService,
+		private cashFlowService: CashFlowService,
 	) {}
 
 	/**
@@ -1132,11 +1168,18 @@ export class CartService {
 					)
 				: null;
 
+		// What the buyer is asked for: the basket gross plus the delivery gross, the two figures
+		// the checkout screen last showed. Both are already VAT-inclusive
+		const payableTotal = roundMoney(
+			pricing.total + (deliveryPricing?.total ?? 0),
+		);
+
 		return dataSource.transaction(async (manager) => {
 			/*
 			 * The manager is handed over so the whole thing is one transaction: the series
 			 * number `OrderService` allocates rolls back with the cart delete below, and a cart
-			 * can never disappear beside an order that failed to write.
+			 * can never disappear beside an order that failed to write, nor an order beside the
+			 * payment request that was never raised for it.
 			 */
 			const order = await this.orderService.create(manager, {
 				client_id: client.id,
@@ -1176,6 +1219,37 @@ export class CartService {
 					lines: shippingLines,
 				});
 			}
+
+			/*
+			 * The money is asked for before the business commits to anything: the order is left
+			 * `pending` and this movement is what confirms it, once it is captured - see
+			 * `order-settlement.registry.ts` for the chain that runs from there. A cash-on-delivery
+			 * checkout raises the same request; it simply stays `pending` until the courier
+			 * settles, and the operator confirms the order in the meantime.
+			 */
+			await this.cashFlowService.createWithin(manager, {
+				direction: CashFlowDirectionEnum.IN,
+				category_type: CashFlowCategoryTypeEnum.REVENUE,
+				category: CashFlowCategoryEnum.SALE,
+				method: CASH_FLOW_METHOD_BY_PAYMENT_METHOD[data.payment_method],
+				amount: payableTotal,
+				/*
+				 * Zero, and `amount` is what the buyer owes gross. A movement carries a single
+				 * rate while an order mixes them across its lines and its delivery, so there is no
+				 * honest figure to put here - the VAT breakdown is the invoice's to state, and
+				 * this row records money moving, not what the tax authority is owed.
+				 */
+				vat_rate: 0,
+				currency: pricing.currency,
+				external_reference: undefined,
+				parent_id: undefined,
+				notes: undefined,
+				operational_records: {
+					[OperationalRecordTypeEnum.CLIENT]: client.id,
+					[OperationalRecordTypeEnum.ORDER]: order.id,
+					[OperationalRecordTypeEnum.VENDOR]: undefined,
+				},
+			});
 
 			// By id rather than by entity: `remove` would strip the id off the object the caller
 			// still holds, and the lines go through the `cart_item.cart_id` cascade either way.
@@ -1238,14 +1312,24 @@ export class CartService {
 		return this.repository.createQuery().filterById(id).firstOrFail();
 	}
 
-	/** @description Used in `read` method from controller; this will return a custom shape */
+	/**
+	 * @description Used in `read` method from controller; this will return a custom shape
+	 *
+	 * The timestamps are added here rather than in `withPricing`, which also builds the
+	 * storefront's payload: the back office reads `updated_at` as the cart's last activity, the
+	 * shopper has no use for either.
+	 */
 	public async getEntryData(data: { id: number }) {
 		const cart = await this.repository
 			.createQuery()
 			.filterById(data.id)
 			.firstOrFail();
 
-		return this.withPricing(cart as CartEntity);
+		return {
+			...(await this.withPricing(cart as CartEntity)),
+			created_at: cart.created_at,
+			updated_at: cart.updated_at,
+		};
 	}
 
 	public findByFilter(data: ValidatorOutput<CartValidator, 'find'>) {
@@ -1281,4 +1365,5 @@ export const cartService = new CartService(
 	clientAddressService,
 	shippingService,
 	shippingRateService,
+	cashFlowService,
 );

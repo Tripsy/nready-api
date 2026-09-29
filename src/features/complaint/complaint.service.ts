@@ -1,9 +1,5 @@
 import { eventEmitter } from '@/config/event.config';
 import { lang } from '@/config/message.setup';
-import {
-	isParticipationAllowed,
-	ParticipationEnum,
-} from '@/config/target-participation.config';
 import { BadRequestError, CustomError, NotFoundError } from '@/exceptions';
 import type ComplaintEntity from '@/features/complaint/complaint.entity';
 import type { ComplaintEntityType } from '@/features/complaint/complaint.entity';
@@ -11,6 +7,10 @@ import { getComplaintRepository } from '@/features/complaint/complaint.repositor
 import type { ComplaintValidator } from '@/features/complaint/complaint.validator';
 import { createCurrentDate } from '@/helpers/date.helper';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
+import {
+	isParticipationAllowed,
+	ParticipationEnum,
+} from '@/shared/registries/target-participation.registry';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 /** The columns a reporter may see of their own complaint. The moderation trail is not among them. */

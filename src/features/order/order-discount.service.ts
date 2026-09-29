@@ -56,8 +56,8 @@ export type OrderDiscountContext = {
 	 */
 	countryCode?: string | null;
 	/**
-	 * The moment the discounts are asked about - the document's issue date, so a backdated order
-	 * gets the campaign that was running the day it was issued rather than today's.
+	 * The moment the discounts are asked about - the document's creation, so a line edit made
+	 * later gets the campaign that was running the day the order was raised rather than today's.
 	 */
 	now: Date;
 };

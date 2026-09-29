@@ -21,23 +21,21 @@ export const paramsUpdateList: string[] = [
 	'client_id',
 	'billing_address_id',
 	'type',
-	'issued_at',
 	'notes',
 ];
 
 /**
- * What a buyer may sort their own orders by. Narrower than the dashboard's: the row id and the
- * creation stamp say nothing the issue date does not.
+ * What a buyer may sort their own orders by. Narrower than the dashboard's: the row id says
+ * nothing the creation stamp does not.
  */
 export const PublicOrderByEnum = {
-	ISSUED_AT: 'issued_at',
+	CREATED_AT: 'created_at',
 	REF_NUMBER: 'ref_number',
 } as const;
 
 export const OrderByEnum = {
 	ID: 'id',
 	REF_NUMBER: 'ref_number',
-	ISSUED_AT: 'issued_at',
 	STATUS: 'status',
 	CREATED_AT: 'created_at',
 } as const;
@@ -148,20 +146,6 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 	}
 
 	/**
-	 * The date the document is issued on. Backdating is allowed - a phone order typed up the next
-	 * morning is issued the day it was taken - and the default is now, applied by the service.
-	 */
-	private issuedAtSchema() {
-		return this.validateDate(
-			{
-				invalid_date: this.getMessage('invalid_date'),
-				invalid_date_format: this.getMessage('invalid_date_format'),
-			},
-			{ required: false, requireTime: false },
-		);
-	}
-
-	/**
 	 * One line of a back-office document.
 	 *
 	 * **The price is the caller's**, as it is for every other writer of an order: the operator
@@ -237,7 +221,6 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 				required: false,
 			},
 		),
-		issued_at: this.issuedAtSchema(),
 		notes: this.notesSchema(),
 		lines: this.linesSchema(),
 	});
@@ -260,7 +243,7 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 	 * either.
 	 *
 	 * The rate is not a payload field on either action - `OrderService` reads it from
-	 * `exchange_rate` for the document's own issue date.
+	 * `exchange_rate` as of the document's creation.
 	 */
 	readonly update = z
 		.object({
@@ -278,7 +261,6 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 				this.getMessage('invalid_type'),
 				{ required: false },
 			),
-			issued_at: this.issuedAtSchema(),
 			notes: this.notesSchema(),
 			lines: this.linesSchema().optional(),
 		})
@@ -316,7 +298,7 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 
 	readonly find = this.validateFind({
 		orderByEnum: OrderByEnum,
-		defaultOrderBy: OrderByEnum.ISSUED_AT,
+		defaultOrderBy: OrderByEnum.CREATED_AT,
 
 		directionEnum: OrderDirectionEnum,
 		defaultDirection: OrderDirectionEnum.DESC,
@@ -331,11 +313,24 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 			client_id: this.validateId(this.getMessage('invalid_client_id'), {
 				required: false,
 			}),
-			status: this.validateEnum(
-				OrderStatusEnum,
-				this.getMessage('invalid_status'),
-				{ required: false },
-			),
+			/*
+			 * One status or several: `qs` reads `filter[status][]=` back as an array, and a
+			 * caller narrowing to the states an order can be invoiced in needs two of them.
+			 */
+			status: z
+				.union([
+					this.validateEnum(
+						OrderStatusEnum,
+						this.getMessage('invalid_status'),
+					),
+					z.array(
+						this.validateEnum(
+							OrderStatusEnum,
+							this.getMessage('invalid_status'),
+						),
+					),
+				])
+				.optional(),
 			type: this.validateEnum(
 				OrderTypeEnum,
 				this.getMessage('invalid_type'),
@@ -354,14 +349,14 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 				this.getMessage('invalid_ref_number'),
 				{ required: false, onlyPositive: true },
 			),
-			issued_at_start: this.validateDate(
+			create_at_start: this.validateDate(
 				{
 					invalid_date: this.getMessage('invalid_date'),
 					invalid_date_format: this.getMessage('invalid_date_format'),
 				},
 				{ required: false },
 			),
-			issued_at_end: this.validateDate(
+			create_at_end: this.validateDate(
 				{
 					invalid_date: this.getMessage('invalid_date'),
 					invalid_date_format: this.getMessage('invalid_date_format'),
@@ -386,7 +381,7 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 	 */
 	readonly publicFind = this.validateFind({
 		orderByEnum: PublicOrderByEnum,
-		defaultOrderBy: PublicOrderByEnum.ISSUED_AT,
+		defaultOrderBy: PublicOrderByEnum.CREATED_AT,
 
 		directionEnum: OrderDirectionEnum,
 		defaultDirection: OrderDirectionEnum.DESC,

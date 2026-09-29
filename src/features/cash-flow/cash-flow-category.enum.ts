@@ -1,6 +1,6 @@
 export const CashFlowCategoryEnum = {
 	// Revenue
-	CUSTOMER: 'customer', // When company receive money from customer (invoice based)
+	SALE: 'sale', // When company receives money for something it sold
 
 	// Business Expenses
 	VENDOR: 'vendor', // Third-party services

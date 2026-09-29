@@ -237,7 +237,7 @@ class CartPublicController extends BaseController {
 			ref_code: order.ref_code,
 			ref_number: order.ref_number,
 			status: order.status,
-			issued_at: order.issued_at,
+			created_at: order.created_at,
 		});
 		res.locals.output.message(lang('cart.success.checkout'));
 
