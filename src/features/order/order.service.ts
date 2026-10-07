@@ -27,6 +27,10 @@ import OrderEntity, {
 	STATUS_TRANSITIONS,
 } from '@/features/order/order.entity';
 import {
+	isOrderInvoiced,
+	notifyOrderConfirmed,
+} from '@/features/order/order.hooks';
+import {
 	getOrderLineRepository,
 	getOrderRepository,
 } from '@/features/order/order.repository';
@@ -53,10 +57,6 @@ import {
 	assertValidStatusTransition,
 	cleanEntityCache,
 } from '@/shared/abstracts/service.abstract';
-import {
-	isOrderInvoiced,
-	notifyOrderConfirmed,
-} from '@/shared/registries/order-settlement.registry';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 /**
@@ -749,7 +749,7 @@ export class OrderService {
 	 * which billed it when it was placed. Settled documents confirm an order through here too.
 	 *
 	 * The announcement runs **after the write has committed** and is not part of any transaction
-	 * the caller holds - see `order-settlement.registry.ts` for why, and for what a failure to raise
+	 * the caller holds - see `invoice.hooks.ts` for why, and for what a failure to raise
 	 * the document leaves behind. Confirming the order is the part that must not fail: billing details
 	 * an invoice refuses on are the client's to fix, and none of that is a reason to refuse an
 	 * operator the status change.

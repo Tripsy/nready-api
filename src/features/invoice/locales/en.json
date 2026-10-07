@@ -40,7 +40,10 @@
 	"label": {
 		"cash_flow": "Payment {{reference}}",
 		"value_reversal": "{{label}} - value correction",
-		"reversal_refund": "Refund for reversal {{reference}}"
+		"reversal_refund": "Refund for reversal {{reference}}",
+		"shipping_delivery": "Delivery",
+		"shipping_return": "Return shipping",
+		"shipping_relocation": "Relocation"
 	},
 	"error": {
 		"not_found": "Invoice not found",

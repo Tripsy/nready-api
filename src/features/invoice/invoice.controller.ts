@@ -4,6 +4,7 @@ import { CustomError } from '@/exceptions';
 import InvoiceEntity, {
 	InvoiceStatusEnum,
 } from '@/features/invoice/invoice.entity';
+import { notifyOrderStateChanged } from '@/features/invoice/invoice.hooks';
 import {
 	type InvoicePolicy,
 	invoicePolicy,
@@ -28,7 +29,6 @@ import {
 import asyncHandler from '@/helpers/async.handler';
 import { type CacheProvider, cacheProvider } from '@/providers/cache.provider';
 import { BaseController } from '@/shared/abstracts/controller.abstract';
-import { notifyOrderStateChanged } from '@/shared/registries/order-settlement.registry';
 
 class InvoiceController extends BaseController {
 	constructor(

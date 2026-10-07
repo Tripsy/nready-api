@@ -38,6 +38,10 @@ import InvoiceEntity, {
 	type SellerDetails,
 	STATUS_TRANSITIONS,
 } from '@/features/invoice/invoice.entity';
+import {
+	type BillableSource,
+	getBillableSourceProvider,
+} from '@/features/invoice/invoice.hooks';
 import { getInvoiceRepository } from '@/features/invoice/invoice.repository';
 import {
 	type InvoiceValidator,
@@ -63,16 +67,12 @@ import {
 	cleanEntityCache,
 	cleanEntityCacheMany,
 } from '@/shared/abstracts/service.abstract';
-import {
-	type BillableSource,
-	getBillableSourceProvider,
-} from '@/shared/registries/billable-source.registry';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 /**
  * The rows other features own that bill on a document of their own, each with the document scope
- * billing it. Each source type is billed through the provider its feature registers in
- * `billable-source.registry.ts`; the order is billed by this feature itself.
+ * billing it. Each source type is billed through the provider registered for it in
+ * `invoice.hooks.ts`; the order is billed by this feature itself.
  */
 const SOURCE_INVOICE_SCOPES = {
 	[InvoiceSourceTypeEnum.SHIPPING]: InvoiceScopeEnum.SHIPPING,

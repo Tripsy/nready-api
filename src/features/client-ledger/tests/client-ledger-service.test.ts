@@ -4,15 +4,15 @@ import {
 	CashFlowDirectionEnum,
 	CashFlowStatusEnum,
 } from '@/features/cash-flow/cash-flow.entity';
-import { cashFlowService } from '@/features/cash-flow/cash-flow.service';
-import registerClientLedgerBootstrap from '@/features/client-ledger/client-ledger.bootstrap';
-import { ClientLedgerEntryTypeEnum } from '@/features/client-ledger/client-ledger.entity';
-import { clientLedgerService } from '@/features/client-ledger/client-ledger.service';
 import {
 	type LedgerMovement,
 	recordLedgerMovement,
 	registerClientLedgerRecorder,
-} from '@/shared/registries/client-ledger.registry';
+} from '@/features/cash-flow/cash-flow.hooks';
+import { cashFlowService } from '@/features/cash-flow/cash-flow.service';
+import registerClientLedgerBootstrap from '@/features/client-ledger/client-ledger.bootstrap';
+import { ClientLedgerEntryTypeEnum } from '@/features/client-ledger/client-ledger.entity';
+import { clientLedgerService } from '@/features/client-ledger/client-ledger.service';
 
 describe('client ledger', () => {
 	const movement = (

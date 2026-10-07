@@ -15,6 +15,11 @@ import InvoiceEntity, {
 	type InvoiceWithSources,
 } from '@/features/invoice/invoice.entity';
 import {
+	type BillableSource,
+	type BillableSourceProvider,
+	registerBillableSourceProvider,
+} from '@/features/invoice/invoice.hooks';
+import {
 	getInvoiceEntityMock,
 	getInvoiceLineEntityMock,
 	invoiceOutputPayloads,
@@ -33,11 +38,6 @@ import { OrderStatusEnum } from '@/features/order/order.entity';
 import { orderService } from '@/features/order/order.service';
 import { roundMoney } from '@/helpers/shop.helper';
 import {
-	type BillableSource,
-	type BillableSourceProvider,
-	registerBillableSourceProvider,
-} from '@/shared/registries/billable-source.registry';
-import {
 	createMockRepository,
 	setupTransactionMock,
 	testServiceFindByFilter,
@@ -45,7 +45,7 @@ import {
 	testServiceUpdate,
 } from '@/tests/jest-service.setup';
 
-/** A stand-in for the provider `shipping.bootstrap.ts` registers, billing the given movements. */
+/** A stand-in for `sources/shipping.source.ts`, billing the given movements. */
 function registerShippingProvider(
 	sources: BillableSource[],
 ): BillableSourceProvider {
@@ -1260,9 +1260,7 @@ describe('InvoiceService', () => {
 
 			const withOutstanding = (
 				invoiceService as unknown as {
-					withOutstanding: (
-						entries: InvoiceEntity[],
-					) => Promise<
+					withOutstanding: (entries: InvoiceEntity[]) => Promise<
 						(InvoiceEntity & {
 							amount_outstanding: number | null;
 						})[]

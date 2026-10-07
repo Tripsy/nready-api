@@ -1,3 +1,5 @@
+import { createQuery } from '@/helpers/hook.helper';
+
 /**
  * The image a feature shows for one of its own rows, looked up without importing the feature that
  * stores images.
@@ -99,37 +101,36 @@ export type TargetImageListProvider = (
 	entityIds: number[],
 ) => Promise<Map<number, TargetImage[]>>;
 
-let targetImageProvider: TargetImageProvider | null = null;
-let targetImageListProvider: TargetImageListProvider | null = null;
+const targetImageProvider = createQuery<
+	Parameters<TargetImageProvider>,
+	Map<number, TargetImage>
+>(() => new Map());
+
+const targetImageListProvider = createQuery<
+	Parameters<TargetImageListProvider>,
+	Map<number, TargetImage[]>
+>(() => new Map());
 
 /**
  * Called from the providing feature's `*.bootstrap.ts`. Registering twice replaces the previous
  * provider rather than adding a second opinion - a reload, not a second source of images.
  */
-export const registerTargetImageProvider = (
-	provider: TargetImageProvider,
-): void => {
-	targetImageProvider = provider;
-};
+export const registerTargetImageProvider = targetImageProvider.register;
 
 export const resolveTargetImages = async (
 	section: string,
 	imageType: TargetImageType,
 	entityIds: number[],
 ): Promise<Map<number, TargetImage>> => {
-	if (!targetImageProvider || entityIds.length === 0) {
+	if (entityIds.length === 0) {
 		return new Map();
 	}
 
-	return targetImageProvider(section, imageType, entityIds);
+	return targetImageProvider.ask(section, imageType, entityIds);
 };
 
 /** Called from the providing feature's `*.bootstrap.ts`, like the primary one above. */
-export const registerTargetImageListProvider = (
-	provider: TargetImageListProvider,
-): void => {
-	targetImageListProvider = provider;
-};
+export const registerTargetImageListProvider = targetImageListProvider.register;
 
 /**
  * Every image each named target carries, keyed by entity id; a target with none is absent from
@@ -143,9 +144,9 @@ export const resolveTargetImageLists = async (
 	imageType: TargetImageType,
 	entityIds: number[],
 ): Promise<Map<number, TargetImage[]>> => {
-	if (!targetImageListProvider || entityIds.length === 0) {
+	if (entityIds.length === 0) {
 		return new Map();
 	}
 
-	return targetImageListProvider(section, imageType, entityIds);
+	return targetImageListProvider.ask(section, imageType, entityIds);
 };

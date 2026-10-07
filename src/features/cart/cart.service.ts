@@ -43,6 +43,7 @@ import {
 	type OrderPaymentMethod,
 	OrderPaymentMethodEnum,
 } from '@/features/order/order.entity';
+import { notifyOrderPlaced } from '@/features/order/order.hooks';
 import {
 	type OrderLineInput,
 	type OrderService,
@@ -84,7 +85,6 @@ import {
 import { createFutureDate } from '@/helpers/date.helper';
 import { roundMoney } from '@/helpers/shop.helper';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
-import { notifyOrderPlaced } from '@/shared/registries/order-settlement.registry';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 /**
@@ -1224,7 +1224,7 @@ export class CartService {
 			/*
 			 * The money is asked for before the business commits to anything: the order is left
 			 * `pending`, billed once this transaction commits, and confirmed once its documents are
-			 * paid - see `order-settlement.registry.ts` for the chain that runs from there. A
+			 * paid - see `invoice.hooks.ts` for the chain that runs from there. A
 			 * cash-on-delivery checkout raises the same request; it simply stays `pending` until
 			 * the courier settles, and the operator confirms the order in the meantime.
 			 */

@@ -1,6 +1,6 @@
 import dataSource from '@/config/data-source.config';
+import { registerBillableSourceProvider } from '@/features/invoice/invoice.hooks';
 import SubscriptionEntity from '@/features/subscription/subscription.entity';
-import { registerBillableSourceProvider } from '@/shared/registries/billable-source.registry';
 
 /**
  * Registers a subscription as something billed on a document of its own, raised by hand: nothing

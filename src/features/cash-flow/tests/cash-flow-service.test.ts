@@ -10,6 +10,12 @@ import {
 	CashFlowStatusEnum,
 } from '@/features/cash-flow/cash-flow.entity';
 import {
+	type CashFlowCompletedPayload,
+	type LedgerMovement,
+	registerCashFlowCompletedHandler,
+	registerClientLedgerRecorder,
+} from '@/features/cash-flow/cash-flow.hooks';
+import {
 	cashFlowInputPayloads,
 	cashFlowOutputPayloads,
 	getCashFlowEntityMock,
@@ -21,14 +27,6 @@ import type {
 import { CashFlowService } from '@/features/cash-flow/cash-flow.service';
 import type { CashFlowValidator } from '@/features/cash-flow/cash-flow.validator';
 import { CashFlowCategoryEnum } from '@/features/cash-flow/cash-flow-category.enum';
-import {
-	type LedgerMovement,
-	registerClientLedgerRecorder,
-} from '@/shared/registries/client-ledger.registry';
-import {
-	type CashFlowCompletedPayload,
-	registerCashFlowCompletedHandler,
-} from '@/shared/registries/order-settlement.registry';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 import {
 	createMockRepository,
@@ -370,7 +368,7 @@ describe('CashFlowService', () => {
 		jest.spyOn(serviceCashFlow, 'findById').mockResolvedValue(entry);
 
 		// Capture is the one transition that is announced. Nothing is registered with
-		// `order-settlement.registry.ts` here - `bootstrap.setup.ts` is skipped in the test
+		// `cash-flow.hooks.ts` here - `bootstrap.setup.ts` is skipped in the test
 		// environment - so the announcement goes nowhere
 		const save = jest.fn(async (row: unknown) => row);
 

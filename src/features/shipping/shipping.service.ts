@@ -32,6 +32,7 @@ import ShippingEntity, {
 	ShippingStatusEnum,
 	STATUS_TRANSITIONS,
 } from '@/features/shipping/shipping.entity';
+import { notifyShippingChanged } from '@/features/shipping/shipping.hooks';
 import { getShippingRepository } from '@/features/shipping/shipping.repository';
 import {
 	paramsUpdateList,
@@ -52,7 +53,6 @@ import {
 	assertValidStatusTransition,
 	cleanEntityCache,
 } from '@/shared/abstracts/service.abstract';
-import { notifyShippingChanged } from '@/shared/registries/order-settlement.registry';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 const ENTRY_COLUMNS = [
@@ -504,7 +504,7 @@ export class ShippingService {
 	 * what is in it is not one anybody can pick.
 	 *
 	 * Announced once committed, so a priced movement added to an order that is already billed gets
-	 * a document of its own - see `order-settlement.registry.ts`. A checkout's first delivery goes
+	 * a document of its own - see `invoice.hooks.ts`. A checkout's first delivery goes
 	 * through `createWithin` and is not announced: the order it belongs to is billed whole once
 	 * the checkout commits.
 	 */
@@ -825,7 +825,7 @@ export class ShippingService {
 	}
 
 	/**
-	 * @description Used by the billable-source provider in `shipping.bootstrap.ts`
+	 * @description Used by the billable-source provider in `invoice/sources/shipping.source.ts`
 	 *
 	 * The movements billable at all, of one order or by id: every one except a failed movement,
 	 * and only one carrying a price - a free movement has nothing to bill.
@@ -854,7 +854,7 @@ export class ShippingService {
 	}
 
 	/**
-	 * @description Used by the billable-source provider in `shipping.bootstrap.ts`
+	 * @description Used by the billable-source provider in `invoice/sources/shipping.source.ts`
 	 *
 	 * The fee of each movement, deleted ones included: a document already billing a movement keeps
 	 * its ceiling after the row goes.

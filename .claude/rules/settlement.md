@@ -6,15 +6,15 @@ paths:
   - "src/features/cash-flow/**"
   - "src/features/shipping/**"
   - "src/features/cart/cart.service.ts"
-  - "src/shared/registries/order-settlement.registry.ts"
   - "src/features/client-ledger/**"
-  - "src/shared/registries/client-ledger.registry.ts"
 ---
 
 # Order Settlement Protocol
 
-**Order, invoice, payment and ledger run one way, through
-`src/shared/registries/order-settlement.registry.ts`.** Two features register:
+**Order, invoice, payment and ledger run one way, through hooks each writer declares for its own
+rows** - `order.hooks.ts`, `cash-flow.hooks.ts`, `shipping.hooks.ts`, `invoice.hooks.ts` (built on
+`helpers/hook.helper.ts`; the chain's design notes are in `invoice.hooks.ts`). Two features
+register:
 
 - **`invoice` - billing.** `invoice.bootstrap.ts` owns order placed / confirmed, cash flow
   completed and shipping changed: it raises documents and spreads money over them
@@ -60,9 +60,11 @@ paths:
   stops a hard delete of an invoiced order since the `RESTRICT` went with the column.
 - An `order` document carries `product` lines only - every movement is billed on its own
   `shipping` document, whose `shipping` source and one `shipping` line name the same movement.
-- **Billable sources other than the order go through `shared/registries/billable-source.registry.ts`.**
-  The owning feature registers a provider from its own bootstrap (`shipping.bootstrap.ts`,
-  `subscription.bootstrap.ts`): `billedOnce`, `listBillable(orderId)` (auto-raised rows),
+- **Billable sources other than the order go through the keyed provider in `invoice.hooks.ts`.**
+  A feature depending on `invoice` registers its provider from its own bootstrap
+  (`subscription.bootstrap.ts`); one `invoice` depends on cannot import back, so `invoice`
+  registers it itself from `sources/` (`sources/shipping.source.ts`, labels under
+  `invoice.label.shipping_*`). A provider has: `billedOnce`, `listBillable(orderId)` (auto-raised rows),
   `findBillable(id)` (null = not billable), `getLineCaps(ids)`. `invoice` keeps the generic side:
   `getBilledSourceIds`, `getUnbilledSources`, `buildLinesForSource`, `raiseForSource(type, id)`.
   No provider → the type is never auto-raised and a manual create is refused
@@ -106,7 +108,7 @@ paths:
   write nothing - what a client was charged or owes is read from their invoices. `amount <> 0`;
   one entry per movement (unique `cash_flow_id`).
 - **Its own, optional feature** (`src/features/client-ledger/`, depends on `client`, `cash-flow`).
-  `cash-flow` books through `shared/registries/client-ledger.registry.ts`
+  `cash-flow` books through `cash-flow.hooks.ts`
   (`recordLedgerMovement`) from `cashFlowService.completeWithin`, **inside the transaction that
   completes the movement** - `updateStatus` and a reversal's refund both complete through it.
   `client-ledger.bootstrap.ts` registers the recorder; feature absent → no-op. Never write

@@ -33,7 +33,7 @@ context yet. Read the relevant one *before* proposing an approach in that area, 
 | `discount.md` | Discount scopes and targets, the two resolution passes and how they stack, the gross `min_order_value` base, order-wide apportionment, where the money sits on a line | `src/features/discount/**`, `cart-pricing.service.ts`, `order-discount.service.ts` |
 | `error-handling.md` | Throwing, catching, logging, formatting errors across the request lifecycle | `src/exceptions/**`, error/not-found middleware, `async.handler.ts` |
 | `feature-installer.md` | Feature packaging, the `manifest.json` contract, `depends_on`/`required_by` version ranges, install/remove/upgrade checks | `cli/feature.ts`, `cli/helpers/version.ts`, `**/manifest.json` |
-| `settlement.md` | Typed invoices, the invoice-first order → invoice → payment chain, FIFO allocation by client, the client ledger | `order`/`invoice`/`order-settlement`/`cash-flow`/`shipping` features, `cart.service.ts`, the settlement registry |
+| `settlement.md` | Typed invoices, the invoice-first order → invoice → payment chain, FIFO allocation by client, the client ledger | `order`/`invoice`/`order-settlement`/`cash-flow`/`shipping` features, `cart.service.ts`, the `*.hooks.ts` chain |
 | `ui-contract.md` | Keeping `../nready-ui` services and mirrored enums in step with the API | `*.controller.ts`, `*.routes.ts`, `*.entity.ts`, `*.enum.ts` |
 | `product.md` | The product / variant / option / bundle split, availability windows, order-line arithmetic | `src/features/product/**`, `order-line.entity.ts`, `order-shipping/**` |
 | `validation.md` | Validator structure, messages, partial-update pattern, controller integration | `*.validator.ts`, feature/shared `locales/*.json` |
@@ -173,32 +173,35 @@ suffix and a file is picked up automatically:
   default export to register handlers on the shared emitter (`src/config/event.config.ts`).
 - **Feature bootstrap** - `src/config/bootstrap.setup.ts` finds `*.bootstrap.{ts|js}` (features
   only) and calls each default export before the server listens. This is where a feature
-  *registers itself* with a shared registry so another feature can reach it by name without
-  importing it - `article.bootstrap.ts` registers what an article accepts from its readers with
-  `target-participation.registry.ts`, and `image.bootstrap.ts` registers where the image standing
-  for a row comes from with `target-image.registry.ts`. **The two run in opposite directions**: the
-  first is a target answering about its own rows for other features to read, the second a provider
-  others consume. `order-settlement.registry.ts` is a third shape - a one-way notification, where
-  `invoice.bootstrap.ts` registers the billing steps that run after a checkout, a capture, an
-  order confirm or a shipping change commits, and the optional `order-settlement` feature
-  registers the step that moves the order's status (see `rules/settlement.md`).
-  `client-ledger.registry.ts` is a fourth - an optional recorder that runs **inside the caller's
-  transaction**: `cash-flow` hands it its `EntityManager` from `completeWithin` and awaits it, so a
-  movement is never completed without its ledger entry. Keep it in-transaction; with
-  `client-ledger` absent it no-ops.
-  `billable-source.registry.ts` is keyed providers: `shipping` / `subscription` register, per
-  `invoice_source.source_type`, what of an order they bill and with which lines; `invoice` does
-  the bookkeeping (see `rules/settlement.md`).
-  Not for fire-and-forget event handlers - those go in `*.listener.ts` on the shared emitter.
-  A handler the caller awaits, with one owner per step (`order-settlement.registry.ts`), is
-  registered from bootstrap. And not for work: it is startup latency on every deployment.
+  *plugs into another* without being imported by it: it registers a handler or provider into a
+  slot the other declares. Not for fire-and-forget event handlers - those go in `*.listener.ts`
+  on the shared emitter. A handler the caller awaits, with one owner per step, is registered from
+  bootstrap. And not for work: it is startup latency on every deployment.
 
-Registries live in `src/shared/registries/` (`*.registry.ts`), not in a feature: each is the neutral
-point two features meet at without importing each other, so it can only move into a feature that
-every participant already depends on.
-
-Both of the last two run through `runFeatureModules()` (`src/config/feature-modules.setup.ts`),
+Listeners and bootstraps both run through `runFeatureModules()` (`src/config/feature-modules.setup.ts`),
 which owns the scan, the import, the "no default export" error and the one-line-per-pass logging.
+
+**Where a slot lives decides the dependency direction.** Slots are built with the domain-free
+factories in `helpers/hook.helper.ts` - `createNotification` (after commit, logs and swallows),
+`createQuery` (propagates, fallback when empty; also the in-transaction shape),
+`createKeyedProvider` (one per key).
+
+- **`<feature>.hooks.ts` - the default.** A slot lives in the feature that *raises* it, and the
+  answering feature - which already depends on it - registers from its bootstrap. The coupling
+  then runs along a manifest edge and vanishes with the answering feature. `order.hooks.ts`
+  (placed, confirmed, `isOrderInvoiced`), `shipping.hooks.ts` (changed) and `cash-flow.hooks.ts`
+  (completed after commit; `recordLedgerMovement` **inside the caller's transaction**, answered
+  by `client-ledger` - keep it in-transaction) are answered by `invoice`; `invoice.hooks.ts`
+  (`notifyOrderStateChanged`, answered by the optional `order-settlement`; billable-source
+  providers keyed by `invoice_source.source_type`) holds the chain's design notes. See
+  `rules/settlement.md`.
+- **A provider the raiser itself depends on cannot register** (it would import back): the raiser
+  registers it from its own subfolder - `invoice/sources/shipping.source.ts`.
+- **`src/shared/registries/` - polymorphic slots only**, asked by several features of one optional
+  answerer (or the reverse), so no feature can own them: `target-participation.registry.ts`
+  (`comment` / `rating` / `complaint` ask, `article` answers about its own rows) and
+  `target-image.registry.ts` (`article` / `product` ask, `image` provides). Don't add a registry
+  here when one feature raises the hook - give it a `.hooks.ts`.
 
 The dev/prod file extension is resolved by `Configuration.resolveExtension()` (`ts` in dev, `js` in
 production), so discovery works against built output too.

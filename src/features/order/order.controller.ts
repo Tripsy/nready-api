@@ -150,7 +150,7 @@ class OrderController extends BaseController {
 		const existingEntry = await this.orderService.findById(data.id, false);
 
 		// Confirming also raises the charge, through the handler `invoice.bootstrap.ts` registers
-		// with `order-settlement.registry.ts` - the same one a captured payment goes through. Nothing is
+		// with `order.hooks.ts` - the same chain a captured payment goes through. Nothing is
 		// reported about it here: the document is raised after this write commits and may be
 		// refused over the buyer's own details, and neither outcome changes the status update
 		await this.orderService.updateStatus(existingEntry, data.status);

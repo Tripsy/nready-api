@@ -1,9 +1,9 @@
 import { CashFlowDirectionEnum } from '@/features/cash-flow/cash-flow.entity';
 import { cashFlowService } from '@/features/cash-flow/cash-flow.service';
 import type { InvoiceWithSources } from '@/features/invoice/invoice.entity';
+import { notifyOrderStateChanged } from '@/features/invoice/invoice.hooks';
 import { invoiceService } from '@/features/invoice/invoice.service';
 import { invoicePaymentService } from '@/features/invoice/invoice-payment.service';
-import { notifyOrderStateChanged } from '@/shared/registries/order-settlement.registry';
 
 /** Order ids of the documents that name one, once each. */
 const orderIdsOf = (invoices: readonly InvoiceWithSources[]): number[] => [

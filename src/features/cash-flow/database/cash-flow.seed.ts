@@ -192,7 +192,7 @@ const orderPaymentReference = (orderId: number): string => {
  * gross, recorded against both the client and the order.
  *
  * This is the shape the shop's happy path starts from - capturing one of these confirms its order
- * and raises the charge (see `order-settlement.registry.ts`). Every one is left `pending` on
+ * and raises the charge (see `invoice.hooks.ts`). Every one is left `pending` on
  * purpose: a captured movement against an order still `pending` is a state the chain never produces, and
  * seeding one would misrepresent the flow for anyone reading the demo data.
  *
@@ -329,7 +329,7 @@ const ORDER_SHARE = 3;
  *
  * **Only a captured sale is matched to an order**, and only to one the shop has accepted. That is
  * the pairing the chain actually produces: the money lands, which confirms the order (see
- * `order-settlement.registry.ts`). A completed movement against a `pending` order, or a pending
+ * `invoice.hooks.ts`). A completed movement against a `pending` order, or a pending
  * movement against a `confirmed` one, are states nothing in the app reaches, and seeding them would
  * misrepresent the flow for anyone reading the demo data - the same reason `seedOrderPayments`
  * leaves every one of its rows `pending`.

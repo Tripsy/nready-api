@@ -6,6 +6,7 @@ import CashFlowEntity, {
 	CashFlowStatusEnum,
 	toGrossAmount,
 } from '@/features/cash-flow/cash-flow.entity';
+import type { LedgerMovement } from '@/features/cash-flow/cash-flow.hooks';
 import { cashFlowService } from '@/features/cash-flow/cash-flow.service';
 import { OperationalRecordTypeEnum } from '@/features/cash-flow/operational-record.entity';
 import ClientLedgerEntity, {
@@ -14,7 +15,6 @@ import ClientLedgerEntity, {
 import { getClientLedgerRepository } from '@/features/client-ledger/client-ledger.repository';
 import type { ClientLedgerValidator } from '@/features/client-ledger/client-ledger.validator';
 import { roundMoney } from '@/helpers/shop.helper';
-import type { LedgerMovement } from '@/shared/registries/client-ledger.registry';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 /** The money that moved with a client in one currency. */
@@ -32,7 +32,7 @@ export class ClientLedgerService {
 	) {}
 
 	/**
-	 * @description Used through `client-ledger.registry.ts` by `cashFlowService` when a movement
+	 * @description Used through `cash-flow.hooks.ts` by `cashFlowService` when a movement
 	 * completes - inside that transaction - and by `reconcile`
 	 *
 	 * Books money that moved with a client: a completed movement filed under one (a refund names

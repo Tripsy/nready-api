@@ -1,28 +1,37 @@
+import {
+	type CashFlowCompletedPayload,
+	registerCashFlowCompletedHandler,
+} from '@/features/cash-flow/cash-flow.hooks';
+import {
+	notifyOrderStateChanged,
+	registerBillableSourceProvider,
+} from '@/features/invoice/invoice.hooks';
 import { invoiceService } from '@/features/invoice/invoice.service';
 import { invoiceSettlementService } from '@/features/invoice/invoice-settlement.service';
 import { InvoiceSourceTypeEnum } from '@/features/invoice/invoice-source.entity';
+import { shippingBillableSource } from '@/features/invoice/sources/shipping.source';
 import {
-	type CashFlowCompletedPayload,
-	notifyOrderStateChanged,
 	type OrderConfirmedPayload,
 	type OrderPlacedPayload,
-	registerCashFlowCompletedHandler,
 	registerOrderConfirmedHandler,
 	registerOrderInvoicedResolver,
 	registerOrderPlacedHandler,
+} from '@/features/order/order.hooks';
+import {
 	registerShippingChangedHandler,
 	type ShippingChangedPayload,
-} from '@/shared/registries/order-settlement.registry';
+} from '@/features/shipping/shipping.hooks';
 
 /**
- * Bills orders and spreads the money clients pay over their documents - the billing half of
- * `order-settlement.registry.ts`, which says the direction the chain runs in and what a failure
- * leaves behind.
+ * Bills orders and spreads the money clients pay over their documents - the billing half of the
+ * chain `invoice.hooks.ts` describes, with the direction it runs in and what a failure leaves
+ * behind.
  *
- * Registered rather than called: `invoice` already imports `order` and `cash-flow`, so neither
- * can import back without closing a cycle; a movement is billed through the provider `shipping`
- * registers in `billable-source.registry.ts`. Every handler ends by announcing the orders it
- * touched (`notifyOrderStateChanged`), for `order-settlement` to move along when installed.
+ * Registered rather than called: `invoice` already imports `order`, `cash-flow` and `shipping`,
+ * so none of them can import back without closing a cycle - each raises its hook from its own
+ * `*.hooks.ts`, and this answers it. A movement is billed through `sources/shipping.source.ts`.
+ * Every handler ends by announcing the orders it touched (`notifyOrderStateChanged`), for
+ * `order-settlement` to move along when installed.
  *
  * - **Order placed** (checkout) - the goods and the delivery are billed at once, and whatever the
  *   client already holds with the business is spread over them.
@@ -38,6 +47,11 @@ import {
  * the client is fixed.
  */
 export default function registerInvoiceBootstrap() {
+	registerBillableSourceProvider(
+		InvoiceSourceTypeEnum.SHIPPING,
+		shippingBillableSource,
+	);
+
 	registerOrderInvoicedResolver((orderId: number) =>
 		invoiceService.hasLiveOrderInvoice(orderId),
 	);

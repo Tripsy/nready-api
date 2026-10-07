@@ -15,6 +15,10 @@ import CashFlowEntity, {
 	REFUNDABLE_STATUSES,
 	STATUS_TRANSITIONS,
 } from '@/features/cash-flow/cash-flow.entity';
+import {
+	notifyCashFlowCompleted,
+	recordLedgerMovement,
+} from '@/features/cash-flow/cash-flow.hooks';
 import { getCashFlowRepository } from '@/features/cash-flow/cash-flow.repository';
 import {
 	type CashFlowValidator,
@@ -45,8 +49,6 @@ import {
 	assertValidStatusTransition,
 	cleanEntityCache,
 } from '@/shared/abstracts/service.abstract';
-import { recordLedgerMovement } from '@/shared/registries/client-ledger.registry';
-import { notifyCashFlowCompleted } from '@/shared/registries/order-settlement.registry';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 export class CashFlowService {
@@ -589,7 +591,7 @@ export class CashFlowService {
 	 * transaction as the status - a movement is never completed without it. The announcement is
 	 * made **after that commit**: what runs downstream - allocating the money to the client's open
 	 * documents, moving their orders along - opens transactions of its own. See
-	 * `order-settlement.registry.ts` for why that chain is not held inside one, and for what a
+	 * `invoice.hooks.ts` for why that chain is not held inside one, and for what a
 	 * failure downstream leaves behind.
 	 */
 	public async updateStatus(

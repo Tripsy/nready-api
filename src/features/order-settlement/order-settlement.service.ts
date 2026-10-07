@@ -46,7 +46,7 @@ export type OrderSettlementState = {
  * arrived is completed. Nothing here moves an order back - a document raised later, a payment
  * removed - and nothing touches a `canceled` order. Those are an operator's to resolve.
  *
- * Its own feature, reached only through `order-settlement.registry.ts`: `invoice` announces the
+ * Its own feature, reached only through `invoice.hooks.ts`: `invoice` announces the
  * orders its billing and allocation touched (`notifyOrderStateChanged`), and this feature's
  * bootstrap re-reads them. It reads invoices, order lines, products and deliveries, and moves the
  * order through `order`'s own service. Optional - without it orders are billed and paid the same,
