@@ -271,6 +271,9 @@ export class CashFlowValidator extends BaseValidator<typeof validatorMessages> {
 			vendor_id: this.validateId(this.getMessage('invalid_number'), {
 				required: false,
 			}),
+			order_id: this.validateId(this.getMessage('invalid_number'), {
+				required: false,
+			}),
 			is_deleted: this.validateBoolean(
 				this.getMessage('invalid_boolean'),
 				{ required: false },

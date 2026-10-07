@@ -847,6 +847,23 @@ export class CashFlowService {
 				);
 		}
 
+		if (data.filter.order_id) {
+			query
+				.joinAndSelect(
+					'cash_flow.operational_records',
+					'operational_records_order',
+					'INNER',
+				)
+				.filterBy(
+					'operational_records_order.entity_id',
+					data.filter.order_id,
+				)
+				.filterBy(
+					'operational_records_order.operational_record_type',
+					'order',
+				);
+		}
+
 		query
 			.withDeleted(withDeleted && data.filter.is_deleted)
 			.orderBy(data.order_by, data.direction)

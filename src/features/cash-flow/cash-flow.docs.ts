@@ -248,7 +248,7 @@ export const docs: Record<
 		},
 		withAuthErrors: true,
 		request: {
-			notes: 'client_id and vendor_id filter through the operational records, so an entry with no record of that type is not returned',
+			notes: 'client_id, vendor_id and order_id filter through the operational records, so an entry with no record of that type is not returned',
 			query: {
 				page: {
 					type: 'number',
@@ -313,6 +313,7 @@ export const docs: Record<
 					},
 					client_id: { type: 'number', required: false },
 					vendor_id: { type: 'number', required: false },
+					order_id: { type: 'number', required: false },
 					is_deleted: {
 						type: 'boolean',
 						required: false,
