@@ -16,9 +16,9 @@ import { invoiceService } from '@/features/invoice/invoice.service';
 import type { InvoiceValidator } from '@/features/invoice/invoice.validator';
 import { invoiceLineService } from '@/features/invoice/invoice-line.service';
 import { invoicePaymentService } from '@/features/invoice/invoice-payment.service';
+import { invoiceSettlementService } from '@/features/invoice/invoice-settlement.service';
 import {
 	testControllerCreate,
-	testControllerDeleteSingle,
 	testControllerFind,
 	testControllerRead,
 	testControllerStatusUpdate,
@@ -35,6 +35,10 @@ beforeAll(async () => {
 
 beforeEach(() => {
 	jest.restoreAllMocks();
+
+	// What runs after a write - settling the client's money, moving orders along - reads the
+	// database across several features; it has its own tests in `order-settlement.test.ts`
+	jest.spyOn(invoiceSettlementService, 'afterIssued').mockResolvedValue();
 });
 
 const controller = 'InvoiceController';
@@ -66,13 +70,6 @@ testControllerUpdate<InvoiceEntity, InvoiceValidator>({
 	updateData: invoiceInputPayloads.update,
 });
 
-testControllerDeleteSingle({
-	controller: controller,
-	route: `${basePath}/${entityMock.id}`,
-	policy: invoicePolicy,
-	service: invoiceService,
-});
-
 testControllerFind<InvoiceEntity, InvoiceValidator>({
 	controller: controller,
 	route: basePath,
@@ -94,8 +91,8 @@ testControllerStatusUpdate<InvoiceEntity>({
  * The actions beyond CRUD, which no shared builder covers: each carries the document id in its
  * path and delegates to a service of its own, so the standard triad is written out per action.
  */
-describe(`${controller} - creditNote`, () => {
-	const route = `${basePath}/${entityMock.id}/credit-note`;
+describe(`${controller} - reverse`, () => {
+	const route = `${basePath}/${entityMock.id}/reverse`;
 
 	it('should fail if not authenticated', async () => {
 		const response = await request(app).post(route).send();
@@ -118,18 +115,24 @@ describe(`${controller} - creditNote`, () => {
 	it('should return success', async () => {
 		authorizedSpy(invoicePolicy);
 
-		const creditNote = getInvoiceEntityMock({ id: 2 });
+		const reversal = getInvoiceEntityMock({
+			id: 2,
+			is_reversal: true,
+			parent_invoice_id: entityMock.id,
+		});
 
 		jest.spyOn(invoiceService, 'findById').mockResolvedValue(entityMock);
-		jest.spyOn(invoiceService, 'createCreditNote').mockResolvedValue(
-			creditNote,
+		jest.spyOn(invoiceService, 'createReversal').mockResolvedValue(
+			reversal,
 		);
 
-		const response = await request(app).post(route).send({});
+		const response = await request(app)
+			.post(route)
+			.send({ lines: [{ invoice_line_id: 1, quantity: 1 }] });
 
 		withDebugResponse(() => {
 			expect(response.status).toBe(201);
-			expect(response.body.data).toHaveProperty('id', creditNote.id);
+			expect(response.body.data).toHaveProperty('id', reversal.id);
 		}, response);
 	});
 });
@@ -275,6 +278,35 @@ describe(`${controller} - paymentCreate`, () => {
 		withDebugResponse(() => {
 			expect(response.status).toBe(201);
 			expect(response.body.data).toHaveProperty('id', payment.id);
+		}, response);
+	});
+});
+
+describe(`${controller} - paymentClear`, () => {
+	const route = `${basePath}/${entityMock.id}/payments`;
+
+	it('should fail if not authenticated', async () => {
+		const response = await request(app).delete(route).send();
+
+		withDebugResponse(() => {
+			expect(response.status).toBe(401);
+		}, response);
+	});
+
+	it('should return success', async () => {
+		authorizedSpy(invoicePolicy);
+
+		jest.spyOn(invoiceService, 'findById').mockResolvedValue(entityMock);
+		const clear = jest
+			.spyOn(invoicePaymentService, 'clear')
+			.mockResolvedValue(2);
+
+		const response = await request(app).delete(route).send();
+
+		withDebugResponse(() => {
+			expect(response.status).toBe(200);
+			expect(response.body).toHaveProperty('success', true);
+			expect(clear).toHaveBeenCalledWith(entityMock);
 		}, response);
 	});
 });

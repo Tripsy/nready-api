@@ -1,7 +1,9 @@
 import type { Request, Response } from 'express';
 import { lang } from '@/config/message.setup';
 import { CustomError } from '@/exceptions';
-import InvoiceEntity from '@/features/invoice/invoice.entity';
+import InvoiceEntity, {
+	InvoiceStatusEnum,
+} from '@/features/invoice/invoice.entity';
 import {
 	type InvoicePolicy,
 	invoicePolicy,
@@ -19,9 +21,14 @@ import {
 	type InvoicePaymentService,
 	invoicePaymentService,
 } from '@/features/invoice/invoice-payment.service';
+import {
+	type InvoiceSettlementService,
+	invoiceSettlementService,
+} from '@/features/invoice/invoice-settlement.service';
 import asyncHandler from '@/helpers/async.handler';
 import { type CacheProvider, cacheProvider } from '@/providers/cache.provider';
 import { BaseController } from '@/shared/abstracts/controller.abstract';
+import { notifyOrderStateChanged } from '@/shared/registries/order-settlement.registry';
 
 class InvoiceController extends BaseController {
 	constructor(
@@ -31,6 +38,7 @@ class InvoiceController extends BaseController {
 		private invoiceService: InvoiceService,
 		private invoiceLineService: InvoiceLineService,
 		private invoicePaymentService: InvoicePaymentService,
+		private invoiceSettlementService: InvoiceSettlementService,
 	) {
 		super();
 	}
@@ -48,25 +56,32 @@ class InvoiceController extends BaseController {
 		res.status(201).json(res.locals.output);
 	});
 
+	public createCustom = asyncHandler(async (req: Request, res: Response) => {
+		this.policy.canCreate(res.locals.auth);
+
+		const data = this.validate(this.validator.createCustom, req.body, res);
+
+		const entry = await this.invoiceService.createCustom(data);
+
+		res.locals.output.data(entry);
+		res.locals.output.message(lang('invoice.success.create'));
+
+		res.status(201).json(res.locals.output);
+	});
+
 	public read = asyncHandler(async (req: Request, res: Response) => {
 		this.policy.canRead(res.locals.auth);
 
 		const data = this.validate(this.validator.read, req.params, res);
 
-		const withDeleted = this.policy.allowDeleted(res.locals.auth);
-
 		const cacheKey = this.cache.buildKey(
 			InvoiceEntity.NAME,
 			data.id.toString(),
-			withDeleted ? 'with-deleted' : 'non-deleted',
 			'read',
 		);
 
 		const cacheGetResults = await this.cache.get(cacheKey, () =>
-			this.invoiceService.getEntryData({
-				id: data.id,
-				withDeleted: withDeleted,
-			}),
+			this.invoiceService.getEntryData({ id: data.id }),
 		);
 
 		res.locals.output.meta(cacheGetResults.isCached, 'isCached');
@@ -100,27 +115,12 @@ class InvoiceController extends BaseController {
 		res.json(res.locals.output);
 	});
 
-	public delete = asyncHandler(async (req: Request, res: Response) => {
-		this.policy.canDelete(res.locals.auth);
-
-		const data = this.validate(this.validator.delete, req.params, res);
-
-		await this.invoiceService.delete(data.id);
-
-		res.locals.output.message(lang('invoice.success.delete'));
-
-		res.json(res.locals.output);
-	});
-
 	public find = asyncHandler(async (req: Request, res: Response) => {
 		this.policy.canFind(res.locals.auth);
 
 		const data = this.validate(this.validator.find, req.query, res);
 
-		const [entries, total] = await this.invoiceService.findByFilter(
-			data,
-			this.policy.allowDeleted(res.locals.auth),
-		);
+		const [entries, total] = await this.invoiceService.findByFilter(data);
 
 		res.locals.output.data({
 			entries: entries,
@@ -139,6 +139,10 @@ class InvoiceController extends BaseController {
 	 * Both moves a document can make. `issued` spends a number from `document_series` and freezes
 	 * the parties onto the row; `canceled` invalidates it. The service decides which, behind the
 	 * one transition check, so `STATUS_TRANSITIONS` stays the only thing saying what is allowed.
+	 *
+	 * An issued document is offered whatever money the client already holds, and either move can
+	 * settle the order behind it - a reversal taking the last of a document back, a cancel
+	 * removing the one unpaid draft.
 	 */
 	public statusUpdate = asyncHandler(async (req: Request, res: Response) => {
 		this.policy.canUpdate(res.locals.auth);
@@ -156,19 +160,28 @@ class InvoiceController extends BaseController {
 
 		await this.invoiceService.updateStatus(existingEntry, data.status);
 
+		if (data.status === InvoiceStatusEnum.ISSUED) {
+			await this.invoiceSettlementService.afterIssued([existingEntry]);
+		} else {
+			await notifyOrderStateChanged({
+				order_ids: existingEntry.order_id
+					? [existingEntry.order_id]
+					: [],
+			});
+		}
+
 		res.locals.output.message(lang('invoice.success.status_update'));
 
 		res.json(res.locals.output);
 	});
 
 	/**
-	 * Raises the charge a revenue movement is owed a document for, and settles it with that same
-	 * movement.
+	 * Raises the document a revenue movement is owed, then settles the client's money against
+	 * their open documents.
 	 *
-	 * Gated by `canCreate` - it writes a document - and the settlement follows it here rather than
-	 * inside `raiseForCashFlow` because pressing this is the operator saying both should happen.
-	 * It is a no-op for a movement not yet captured, which leaves the document `unpaid` for the
-	 * capture to settle later.
+	 * Gated by `canCreate` - it writes a document. Settling runs the client's FIFO like every
+	 * other path, so the movement settles the new document only if nothing older is still open;
+	 * a movement not yet captured settles nothing until its capture announces itself.
 	 */
 	public raiseForCashFlow = asyncHandler(
 		async (req: Request, res: Response) => {
@@ -184,9 +197,9 @@ class InvoiceController extends BaseController {
 				data.cash_flow_id,
 			);
 
-			// Null when a live charge already stands for the movement's order, or when the
-			// movement has already been allocated - there is a document for this money somewhere
-			// and raising a second one is not this route's call
+			// Null when the movement's order is already billed in full, or when the movement has
+			// already been allocated - there is a document for this money somewhere and raising
+			// a second one is not this route's call
 			if (!entry) {
 				throw new CustomError(
 					409,
@@ -194,10 +207,7 @@ class InvoiceController extends BaseController {
 				);
 			}
 
-			await this.invoicePaymentService.settleFromCashFlow(
-				entry,
-				data.cash_flow_id,
-			);
+			await this.invoiceSettlementService.afterIssued([entry]);
 
 			res.locals.output.data(entry);
 			res.locals.output.message(lang('invoice.success.create'));
@@ -206,11 +216,15 @@ class InvoiceController extends BaseController {
 		},
 	);
 
-	public creditNote = asyncHandler(async (req: Request, res: Response) => {
+	/**
+	 * Raises a reversal against an issued document, as a draft of the same scope - issued, and
+	 * numbered from the same series, like any other document.
+	 */
+	public reverse = asyncHandler(async (req: Request, res: Response) => {
 		this.policy.canCreate(res.locals.auth);
 
 		const data = this.validate(
-			this.validator.creditNote,
+			this.validator.reverse,
 			{
 				...req.body,
 				id: req.params.id,
@@ -220,13 +234,13 @@ class InvoiceController extends BaseController {
 
 		const parentEntry = await this.invoiceService.findById(data.id, false);
 
-		const entry = await this.invoiceService.createCreditNote(
+		const entry = await this.invoiceService.createReversal(
 			parentEntry,
 			data,
 		);
 
 		res.locals.output.data(entry);
-		res.locals.output.message(lang('invoice.success.credit_note'));
+		res.locals.output.message(lang('invoice.success.reverse'));
 
 		res.status(201).json(res.locals.output);
 	});
@@ -305,10 +319,39 @@ class InvoiceController extends BaseController {
 
 		const entry = await this.invoicePaymentService.create(invoice, data);
 
+		await notifyOrderStateChanged({
+			order_ids: invoice.order_id ? [invoice.order_id] : [],
+		});
+
 		res.locals.output.data(entry);
 		res.locals.output.message(lang('invoice.success.payment_create'));
 
 		res.status(201).json(res.locals.output);
+	});
+
+	/**
+	 * Takes every allocation off a document, so the money can be allocated to another of the
+	 * client's documents. Nothing is re-spread and the order is not re-read - see
+	 * `InvoicePaymentService.release`.
+	 */
+	public paymentClear = asyncHandler(async (req: Request, res: Response) => {
+		this.policy.canUpdate(res.locals.auth);
+
+		const data = this.validate(
+			this.validator.paymentClear,
+			req.params,
+			res,
+		);
+
+		const invoice = await this.invoiceService.findById(data.id, false);
+
+		const count = await this.invoicePaymentService.clear(invoice);
+
+		res.locals.output.message(
+			lang('invoice.success.payment_clear', { count: String(count) }),
+		);
+
+		res.json(res.locals.output);
 	});
 
 	public paymentDelete = asyncHandler(async (req: Request, res: Response) => {
@@ -337,4 +380,5 @@ export const invoiceController = new InvoiceController(
 	invoiceService,
 	invoiceLineService,
 	invoicePaymentService,
+	invoiceSettlementService,
 );

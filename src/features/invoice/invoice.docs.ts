@@ -2,8 +2,8 @@ import { Configuration } from '@/config/settings.config';
 import type { invoiceController } from '@/features/invoice/invoice.controller';
 import {
 	InvoicePaymentStatusEnum,
+	InvoiceScopeEnum,
 	InvoiceStatusEnum,
-	InvoiceTypeEnum,
 	STATUS_TRANSITIONS,
 } from '@/features/invoice/invoice.entity';
 import {
@@ -42,7 +42,7 @@ const statusTransitionNote = Object.entries(STATUS_TRANSITIONS)
 const documentNote = `a document is raised as a draft and holds no number; the number is allocated from document_series when it moves to ${InvoiceStatusEnum.ISSUED}, which also freezes the billing and seller details onto the row`;
 
 const mutableNote =
-	'only a draft can be changed or deleted; an issued invoice leaves service through the canceled status';
+	'only a draft can be changed or canceled; an issued invoice is taken back by a reversal';
 
 const idParam = {
 	type: 'number' as const,
@@ -55,7 +55,7 @@ export const docs: Record<
 	ApiInputDocumentation
 > = {
 	create: helperApiInputDocumentation({
-		description: 'Create a draft invoice from an order',
+		description: 'Create a draft order, shipping or subscription invoice',
 		withBearerAuth: true,
 		success: {
 			status: 201,
@@ -65,17 +65,66 @@ export const docs: Record<
 		withAuthErrors: true,
 		withErrors: [400, 404, 409, 422],
 		request: {
-			notes: `The lines are generated from the order: one per order line, plus one per shipping movement it carries that is not failed. ${documentNote}. The currency and exchange rate are the order's own - its line figures mean nothing in another one. A credit note is raised through POST /invoices/:id/credit-note instead`,
+			notes: `What the document itemizes follows from its scope. ${InvoiceScopeEnum.ORDER}: the order's goods not billed yet by another live document, or exactly the parts named in lines - an order may carry several. ${InvoiceScopeEnum.SHIPPING}: the one movement of goods named by shipping_id, refused when a live document already bills it. ${InvoiceScopeEnum.SUBSCRIPTION}: no lines yet; the period is itemized through POST /invoices/:id/lines. ${documentNote}. The client, currency and exchange rate are the order's own. A reversal is raised through POST /invoices/:id/reverse instead`,
 			body: {
 				order_id: {
 					type: 'number',
 					required: true,
 				},
-				type: {
+				scope: {
 					type: 'enum',
 					required: false,
-					values: [InvoiceTypeEnum.CHARGE],
-					condition: `defaults to ${InvoiceTypeEnum.CHARGE}; each type draws its number from its own series`,
+					values: [
+						InvoiceScopeEnum.ORDER,
+						InvoiceScopeEnum.SHIPPING,
+						InvoiceScopeEnum.SUBSCRIPTION,
+					],
+					condition: `defaults to ${InvoiceScopeEnum.ORDER}; the three share the invoice series`,
+				},
+				shipping_id: {
+					type: 'number',
+					required: false,
+					condition: `required when scope is ${InvoiceScopeEnum.SHIPPING}; a shipping of this order`,
+				},
+				subscription_id: {
+					type: 'number',
+					required: false,
+					condition: `required when scope is ${InvoiceScopeEnum.SUBSCRIPTION}`,
+				},
+				lines: {
+					type: 'array',
+					required: false,
+					condition: `${InvoiceScopeEnum.ORDER} only; [{ order_line_id, quantity }], each quantity at most what is left to bill on that line. Omitted, every line's remainder is billed`,
+				},
+				due_at: {
+					type: 'string',
+					required: false,
+					condition: `ISO 8601; defaults to ${Configuration.get('invoice.dueDays')} days after the invoice is issued, and is replaced by that term if it has already passed when the invoice is issued`,
+				},
+				notes: {
+					type: 'string',
+					required: false,
+				},
+			},
+		},
+	}),
+
+	createCustom: helperApiInputDocumentation({
+		description: 'Create an empty custom invoice draft',
+		withBearerAuth: true,
+		success: {
+			status: 201,
+			description: 'Invoice created successfully',
+			dataSample: entitySample,
+		},
+		withAuthErrors: true,
+		withErrors: [400, 404, 422],
+		request: {
+			notes: `A document built by hand for a client, with no order behind it: scope ${InvoiceScopeEnum.CUSTOM}, in the base currency. It starts with no lines - write them, the parties and the rest through PUT /invoices/:id, the same as on any draft; issuing refuses it until it has a line. The buyer is frozen from the client's billing address when there is one; otherwise it is stated through PUT /invoices/:id before issuing. ${documentNote}`,
+			body: {
+				client_id: {
+					type: 'number',
+					required: true,
 				},
 				due_at: {
 					type: 'string',
@@ -100,6 +149,7 @@ export const docs: Record<
 				...entitySample,
 				lines: [lineSample],
 				payments: [paymentSample],
+				amount_outstanding: 142, // total_gross 242 less the 100 allocated
 			},
 		},
 		withAuthErrors: true,
@@ -122,7 +172,7 @@ export const docs: Record<
 		withAuthErrors: true,
 		withErrors: [404, 409, 422],
 		request: {
-			notes: `${mutableNote}. The money on a document comes from its lines, so the totals are never accepted here`,
+			notes: `${mutableNote}. The money on a document comes from its lines, so the totals are never accepted here - they are re-summed from \`lines\` when it is sent`,
 			params: {
 				id: idParam,
 			},
@@ -130,29 +180,30 @@ export const docs: Record<
 				due_at: {
 					type: 'string',
 					required: false,
-					condition: 'ISO 8601',
+					condition: `ISO 8601; replaced by the standard ${Configuration.get('invoice.dueDays')}-day term if it has already passed when the invoice is issued`,
 				},
 				notes: {
 					type: 'string',
 					required: false,
 				},
-			},
-		},
-	}),
-
-	delete: helperApiInputDocumentation({
-		description: 'Delete a draft invoice',
-		withBearerAuth: true,
-		success: {
-			status: 200,
-			description: 'Invoice deleted successfully',
-		},
-		withAuthErrors: true,
-		withErrors: [404, 409, 422],
-		request: {
-			notes: mutableNote,
-			params: {
-				id: idParam,
+				billing_details: {
+					type: 'object',
+					required: false,
+					condition:
+						'The buyer stated by hand: { type: person, person_name, person_identification_number? } or { type: company, company_name, company_cui?, company_reg_com? }, plus address_country (required), address_region?, address_city?, details?, postal_code?, contact_name?, contact_email?, contact_phone?, iban?, bank_name?. Issuing freezes it as given instead of resolving the buyer from the order. null clears it, so issuing resolves the buyer again. The detail read of a draft reports resolved_billing_details - what issuing would use otherwise. Refused on a reversal',
+				},
+				seller_details: {
+					type: 'object',
+					required: false,
+					condition:
+						'The issuer stated by hand: { company_name, company_cui?, company_reg_com? } plus the same address, contact and bank fields as billing_details. Issuing freezes it as given instead of the configured company. null clears it. The detail read of a draft reports resolved_seller_details. Refused on a reversal',
+				},
+				lines: {
+					type: 'array',
+					required: false,
+					condition:
+						'[{ id?, label, quantity, unit_price, vat_rate, discount_reduction?, notes? }] - the whole set the draft should itemize, applied in one transaction with the header. With id: restates that line of this invoice (product and shipping lines within max_quantity / max_unit_price from the detail read). Without id: adds an adjustment line. A line left out is removed; an empty array removes them all. On a reversal no line may be added and only label and notes may change',
+				},
 			},
 		},
 	}),
@@ -171,7 +222,7 @@ export const docs: Record<
 		withAuthErrors: true,
 		withErrors: [422],
 		request: {
-			notes: 'is_overdue reads "late right now" - stamped as overdue and still unsettled - rather than "was late at some point", which overdue_at alone says',
+			notes: 'is_overdue reads "late right now" - stamped as overdue and still unsettled - rather than "was late at some point", which overdue_at alone says. Each entry carries reversible_net: on an issued original, its net less what every non-canceled reversal (draft included) already took back - 0 once nothing is left to reverse; null on drafts, canceled documents and reversals. Each entry also carries amount_outstanding: on an issued document, what it still asks for - total_gross less its allocations and, on an original, less its issued reversals, floored at 0; null on drafts and canceled documents',
 			query: {
 				page: { type: 'number', required: false },
 				limit: { type: 'number', required: false },
@@ -185,9 +236,20 @@ export const docs: Record<
 					required: false,
 					values: Object.values(OrderDirectionEnum),
 				},
+				'filter[client_id]': { type: 'number', required: false },
 				'filter[order_id]': { type: 'number', required: false },
+				'filter[subscription_id]': { type: 'number', required: false },
+				'filter[shipping_id]': {
+					type: 'number',
+					required: false,
+					condition: 'the movement a shipping invoice bills',
+				},
 				'filter[parent_invoice_id]': {
 					type: 'number',
+					required: false,
+				},
+				'filter[is_reversal]': {
+					type: 'boolean',
 					required: false,
 				},
 				'filter[status]': {
@@ -200,10 +262,10 @@ export const docs: Record<
 					required: false,
 					values: Object.values(InvoicePaymentStatusEnum),
 				},
-				'filter[type]': {
+				'filter[scope]': {
 					type: 'enum',
 					required: false,
-					values: Object.values(InvoiceTypeEnum),
+					values: Object.values(InvoiceScopeEnum),
 				},
 				'filter[currency]': {
 					type: 'string',
@@ -219,7 +281,6 @@ export const docs: Record<
 					condition:
 						'a number matches the printed ref_number or the id; text matches the series code or the notes',
 				},
-				'filter[is_deleted]': { type: 'boolean', required: false },
 			},
 		},
 	}),
@@ -234,7 +295,7 @@ export const docs: Record<
 		withAuthErrors: true,
 		withErrors: [400, 404, 409, 422],
 		request: {
-			notes: `Allowed moves: ${statusTransitionNote}. ${documentNote}. Issuing needs at least one line, a billing address on the order and a country on it; canceling is refused once anything has been allocated against the document`,
+			notes: `Allowed moves: ${statusTransitionNote}. ${documentNote}. Issuing needs at least one line, a billing address on the order and a country on it. Only a draft can be canceled: an issued invoice is taken back by a reversal (POST /invoices/:id/reverse), never canceled. Issuing a reversal writes its ledger entry and, when the client is left overpaid on the original, pays the difference back in the same transaction: completed refund cash flows against the original's payments, booked to the ledger and allocated to the reversal. An unpaid original is owed nothing back`,
 			params: {
 				id: idParam,
 				status: {
@@ -247,7 +308,7 @@ export const docs: Record<
 	}),
 
 	raiseForCashFlow: helperApiInputDocumentation({
-		description: 'Raise and issue the charge a revenue movement is owed',
+		description: 'Raise and issue the invoice a revenue movement is owed',
 		withBearerAuth: true,
 		success: {
 			status: 201,
@@ -257,7 +318,7 @@ export const docs: Record<
 		withAuthErrors: true,
 		withErrors: [404, 409, 422],
 		request: {
-			notes: "The movement's order record decides what the document itemizes: with an order named, the order's own lines and its shipping; with none, a single line worth what the movement was worth, billed to the client's billing address. The movement is then allocated against the document, unless it has not been captured yet - in which case the document stands unpaid until it is. Refused with 409 when a live charge already stands for the order, or when a movement with no order has already been allocated",
+			notes: "The movement's order record decides what the document itemizes: with an order named, the order's goods not billed yet; with none, a custom invoice - a single line worth what the movement was worth, billed to the client's billing address. The client's captured money is then allocated against their open documents, oldest due first - so the movement settles this document only if nothing older is still open. Refused with 409 when the order is already billed in full, or when a movement with no order has already been allocated",
 			params: {
 				cash_flow_id: {
 					type: 'number' as const,
@@ -268,26 +329,32 @@ export const docs: Record<
 		},
 	}),
 
-	creditNote: helperApiInputDocumentation({
-		description: 'Raise a credit note against an issued charge',
+	reverse: helperApiInputDocumentation({
+		description: 'Raise a reversal (storno) against an issued invoice',
 		withBearerAuth: true,
 		success: {
 			status: 201,
-			description: 'Credit note created successfully',
+			description: 'Reversal created successfully',
 			dataSample: {
 				...entitySample,
-				type: InvoiceTypeEnum.CREDIT_NOTE,
+				is_reversal: true,
 				parent_invoice_id: 1,
 			},
 		},
 		withAuthErrors: true,
-		withErrors: [404, 409, 422],
+		withErrors: [400, 404, 409, 422],
 		request: {
-			notes: 'The note mirrors the parent lines and is raised as a draft of its own, so it is issued - and numbered from the credit note series - like any other document. Every figure stays positive; the type carries the sign',
+			notes: 'The reversal keeps the type of the invoice it reverses and is raised as a draft, then issued and numbered from the invoice series like any other document. Its lines mirror the original figures; every figure stays positive and is_reversal carries the sign. A reversal cannot itself be reversed. Its line figures cannot be edited, only its labels and notes',
 			params: {
 				id: idParam,
 			},
 			body: {
+				lines: {
+					type: 'array',
+					required: false,
+					condition:
+						'[{ invoice_line_id, quantity } | { invoice_line_id, amount }] - lines of this invoice, each with exactly one of the two. quantity: goods returned, at most what earlier quantity reversals left, carrying its share of the line discount, and billable again on the order. amount: a net price correction on goods the client keeps, written as one unit at the line VAT rate, releasing nothing for billing. Across every reversal of a line, the net taken back never exceeds the line net. Omitted, the remaining units of every line are taken back by quantity; a line already corrected by value so far that its remaining units no longer fit in its remaining net is left out. The detail read reports reversed_quantity and reversed_net per line',
+				},
 				notes: {
 					type: 'string',
 					required: false,
@@ -367,8 +434,18 @@ export const docs: Record<
 			},
 			body: {
 				label: { type: 'string', required: false },
-				quantity: { type: 'number', required: false },
-				unit_price: { type: 'number', required: false },
+				quantity: {
+					type: 'number',
+					required: false,
+					condition:
+						'on a product or shipping line, at most max_quantity from the detail read - what its source has left to invoice, this line included',
+				},
+				unit_price: {
+					type: 'number',
+					required: false,
+					condition:
+						'on a product or shipping line, at most max_unit_price from the detail read - the unit price of its source',
+				},
 				vat_rate: { type: 'number', required: false },
 				discount_reduction: { type: 'number', required: false },
 				notes: { type: 'string', required: false },
@@ -409,7 +486,7 @@ export const docs: Record<
 		withAuthErrors: true,
 		withErrors: [404, 409, 422],
 		request: {
-			notes: `Only an issued invoice can be settled, and only by a completed cash flow entry in the same currency: the two amounts are separate columns with no rate between them. A charge is settled by an incoming movement and a credit note by an outgoing one. The amount is gross, in the invoice currency and its two decimals - not the net, scaled figure the movement stores - and cannot exceed what is left of that movement after its other allocations. The invoice payment status is recomputed in the same transaction`,
+			notes: `Only an issued invoice can be settled, and only by a completed cash flow entry in the same currency: the two amounts are separate columns with no rate between them. An invoice is settled by an incoming movement and a reversal by an outgoing one. The movement must be filed under the invoice's own client - money is never moved between clients. The amount is gross, in the invoice currency and its two decimals - not the net, scaled figure the movement stores - and cannot exceed what is left of that movement after its other allocations, nor what the invoice still asks for. The invoice payment status is recomputed in the same transaction`,
 			params: {
 				id: idParam,
 			},
@@ -425,6 +502,23 @@ export const docs: Record<
 		},
 	}),
 
+	paymentClear: helperApiInputDocumentation({
+		description: 'Remove every payment allocation from an invoice',
+		withBearerAuth: true,
+		success: {
+			status: 200,
+			description: 'Payment allocations removed successfully',
+		},
+		withAuthErrors: true,
+		withErrors: [404, 409, 422],
+		request: {
+			notes: 'Hands the money back to the movements it came from, for an operator to allocate to another invoice of the same client. Refused on a reversal (its allocations are refunds already paid out), on an invoice with an issued reversal (its payments may have been refunded), and on an invoice with no allocations. Nothing is re-spread automatically - the next capture or issue for the client spreads whatever is still unallocated, oldest due first. The order is not moved back',
+			params: {
+				id: idParam,
+			},
+		},
+	}),
+
 	paymentDelete: helperApiInputDocumentation({
 		description: 'Remove a payment allocation from an invoice',
 		withBearerAuth: true,
@@ -433,9 +527,9 @@ export const docs: Record<
 			description: 'Payment allocation removed successfully',
 		},
 		withAuthErrors: true,
-		withErrors: [404, 422],
+		withErrors: [404, 409, 422],
 		request: {
-			notes: 'A hard delete - the invoice/movement pair is unique over live rows, so a soft-deleted allocation would block ever allocating that movement to this invoice again. The payment status is recomputed from what remains',
+			notes: 'Refused on a reversal and on an invoice with an issued reversal, as for clearing. A hard delete - the invoice/movement pair is unique over live rows, so a soft-deleted allocation would block ever allocating that movement to this invoice again. The payment status is recomputed from what remains',
 			params: {
 				id: idParam,
 				payment_id: {

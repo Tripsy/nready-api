@@ -1,0 +1,8 @@
+{
+	"name": "client-ledger",
+	"version": "1.0.0",
+	"relativePath": "/client-ledger",
+	"entities": ["client-ledger"],
+	"depends_on": ["client", "cash-flow"],
+	"required_by": []
+}

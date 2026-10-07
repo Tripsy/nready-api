@@ -53,7 +53,10 @@ import {
 	assertValidStatusTransition,
 	cleanEntityCache,
 } from '@/shared/abstracts/service.abstract';
-import { notifyOrderConfirmed } from '@/shared/registries/order-settlement.registry';
+import {
+	isOrderInvoiced,
+	notifyOrderConfirmed,
+} from '@/shared/registries/order-settlement.registry';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 /**
@@ -576,6 +579,12 @@ export class OrderService {
 				throw new CustomError(409, lang('order.error.lines_locked'));
 			}
 
+			// Billed up front: a live document froze these lines, and rewriting them under it
+			// would leave it billing goods the order no longer lists
+			if (await isOrderInvoiced(entry.id)) {
+				throw new CustomError(409, lang('order.error.lines_invoiced'));
+			}
+
 			await this.checkLines(data.lines);
 		}
 
@@ -735,22 +744,19 @@ export class OrderService {
 	 * true, and a subscriber would fire inside the transaction, where a concurrent reader can
 	 * refill the cache from a snapshot about to be superseded.
 	 *
-	 * When the move is the one that accepts the order, it is announced so the charge is raised.
-	 * `settledByCashFlowId` names the captured payment that caused the confirmation, when one did:
-	 * the invoice raised downstream is settled by that same movement in one step, instead of
-	 * standing `unpaid` beside money already in the bank. It stays null on the back-office path,
-	 * where an operator confirms an order nobody has paid for yet.
+	 * When the move is the one that accepts the order, it is announced so whatever is still
+	 * unbilled is billed - the whole order on the back-office path, nothing on the checkout path,
+	 * which billed it when it was placed. Settled documents confirm an order through here too.
 	 *
 	 * The announcement runs **after the write has committed** and is not part of any transaction
 	 * the caller holds - see `order-settlement.registry.ts` for why, and for what a failure to raise
 	 * the document leaves behind. Confirming the order is the part that must not fail: billing details
 	 * an invoice refuses on are the client's to fix, and none of that is a reason to refuse an
-	 * operator the status change or to reject a payment that has already landed.
+	 * operator the status change.
 	 */
 	public async updateStatus(
 		entry: OrderEntity,
 		newStatus: OrderStatus,
-		settledByCashFlowId: number | null = null,
 	): Promise<OrderEntity> {
 		assertValidStatusTransition(
 			STATUS_TRANSITIONS,
@@ -767,7 +773,6 @@ export class OrderService {
 		if (newStatus === OrderStatusEnum.CONFIRMED) {
 			await notifyOrderConfirmed({
 				order_id: saved.id,
-				cash_flow_id: settledByCashFlowId,
 			});
 		}
 

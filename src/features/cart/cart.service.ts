@@ -84,6 +84,7 @@ import {
 import { createFutureDate } from '@/helpers/date.helper';
 import { roundMoney } from '@/helpers/shop.helper';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
+import { notifyOrderPlaced } from '@/shared/registries/order-settlement.registry';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 /**
@@ -1174,7 +1175,7 @@ export class CartService {
 			pricing.total + (deliveryPricing?.total ?? 0),
 		);
 
-		return dataSource.transaction(async (manager) => {
+		const placed = await dataSource.transaction(async (manager) => {
 			/*
 			 * The manager is handed over so the whole thing is one transaction: the series
 			 * number `OrderService` allocates rolls back with the cart delete below, and a cart
@@ -1222,10 +1223,10 @@ export class CartService {
 
 			/*
 			 * The money is asked for before the business commits to anything: the order is left
-			 * `pending` and this movement is what confirms it, once it is captured - see
-			 * `order-settlement.registry.ts` for the chain that runs from there. A cash-on-delivery
-			 * checkout raises the same request; it simply stays `pending` until the courier
-			 * settles, and the operator confirms the order in the meantime.
+			 * `pending`, billed once this transaction commits, and confirmed once its documents are
+			 * paid - see `order-settlement.registry.ts` for the chain that runs from there. A
+			 * cash-on-delivery checkout raises the same request; it simply stays `pending` until
+			 * the courier settles, and the operator confirms the order in the meantime.
 			 */
 			await this.cashFlowService.createWithin(manager, {
 				direction: CashFlowDirectionEnum.IN,
@@ -1257,6 +1258,13 @@ export class CartService {
 
 			return order;
 		});
+
+		// After the commit, like every settlement step: billing allocates series numbers in
+		// transactions of its own, and a document refused over the buyer's details must not undo
+		// a checkout that has already succeeded
+		await notifyOrderPlaced({ order_id: placed.id });
+
+		return placed;
 	}
 
 	/**

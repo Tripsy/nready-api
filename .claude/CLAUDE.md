@@ -33,7 +33,7 @@ context yet. Read the relevant one *before* proposing an approach in that area, 
 | `discount.md` | Discount scopes and targets, the two resolution passes and how they stack, the gross `min_order_value` base, order-wide apportionment, where the money sits on a line | `src/features/discount/**`, `cart-pricing.service.ts`, `order-discount.service.ts` |
 | `error-handling.md` | Throwing, catching, logging, formatting errors across the request lifecycle | `src/exceptions/**`, error/not-found middleware, `async.handler.ts` |
 | `feature-installer.md` | Feature packaging, the `manifest.json` contract, `depends_on`/`required_by` version ranges, install/remove/upgrade checks | `cli/feature.ts`, `cli/helpers/version.ts`, `**/manifest.json` |
-| `settlement.md` | The one-way order → payment → invoice chain through `order-settlement.registry.ts` | `order`/`invoice`/`cash-flow` features, the settlement registry |
+| `settlement.md` | Typed invoices, the invoice-first order → invoice → payment chain, FIFO allocation by client, the client ledger | `order`/`invoice`/`order-settlement`/`cash-flow`/`shipping` features, `cart.service.ts`, the settlement registry |
 | `ui-contract.md` | Keeping `../nready-ui` services and mirrored enums in step with the API | `*.controller.ts`, `*.routes.ts`, `*.entity.ts`, `*.enum.ts` |
 | `product.md` | The product / variant / option / bundle split, availability windows, order-line arithmetic | `src/features/product/**`, `order-line.entity.ts`, `order-shipping/**` |
 | `validation.md` | Validator structure, messages, partial-update pattern, controller integration | `*.validator.ts`, feature/shared `locales/*.json` |
@@ -179,8 +179,16 @@ suffix and a file is picked up automatically:
   for a row comes from with `target-image.registry.ts`. **The two run in opposite directions**: the
   first is a target answering about its own rows for other features to read, the second a provider
   others consume. `order-settlement.registry.ts` is a third shape - a one-way notification, where
-  `order.bootstrap.ts` and `invoice.bootstrap.ts` each register the step that runs after somebody
-  else's write commits (see `rules/settlement.md`).
+  `invoice.bootstrap.ts` registers the billing steps that run after a checkout, a capture, an
+  order confirm or a shipping change commits, and the optional `order-settlement` feature
+  registers the step that moves the order's status (see `rules/settlement.md`).
+  `client-ledger.registry.ts` is a fourth - an optional recorder that runs **inside the caller's
+  transaction**: `cash-flow` hands it its `EntityManager` from `completeWithin` and awaits it, so a
+  movement is never completed without its ledger entry. Keep it in-transaction; with
+  `client-ledger` absent it no-ops.
+  `billable-source.registry.ts` is keyed providers: `shipping` / `subscription` register, per
+  `invoice_source.source_type`, what of an order they bill and with which lines; `invoice` does
+  the bookkeeping (see `rules/settlement.md`).
   Not for fire-and-forget event handlers - those go in `*.listener.ts` on the shared emitter.
   A handler the caller awaits, with one owner per step (`order-settlement.registry.ts`), is
   registered from bootstrap. And not for work: it is startup latency on every deployment.

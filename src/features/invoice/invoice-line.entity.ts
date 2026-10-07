@@ -43,6 +43,14 @@ const ENTITY_TABLE_NAME = 'invoice_line';
 		OR (kind = 'adjustment' AND order_line_id IS NULL AND shipping_id IS NULL)
 	)
 `)
+// A value reversal takes money back off a line of the original, so it names that line; and it
+// returns no goods and no delivery, so it names neither source row
+@Check(`
+	(
+		is_value_reversal = false
+		OR (parent_line_id IS NOT NULL AND order_line_id IS NULL AND shipping_id IS NULL)
+	)
+`)
 export default class InvoiceLineEntity extends EntityAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
@@ -76,6 +84,32 @@ export default class InvoiceLineEntity extends EntityAbstract {
 		where: 'shipping_id IS NOT NULL',
 	})
 	shipping_id!: number | null;
+
+	/**
+	 * On a reversal, the line of the original document this one takes back. What caps a partial
+	 * reversal: a line can be taken back up to its own quantity across every reversal raised
+	 * against it, and an `adjustment` line names no source row to count by otherwise.
+	 *
+	 * RESTRICT: the original is an issued document and is never deleted while a reversal stands.
+	 */
+	@Column('int', { nullable: true })
+	@Index('IDX_invoice_line_parent_line_id', {
+		where: 'parent_line_id IS NOT NULL',
+	})
+	parent_line_id!: number | null;
+
+	/**
+	 * On a reversal, whether this line takes back **value** rather than quantity: a price
+	 * correction on goods the client keeps. Written as one unit worth the net amount taken back,
+	 * at the original line's VAT rate.
+	 *
+	 * It names no `order_line_id` or `shipping_id`, so it releases nothing for billing again - the
+	 * goods and the delivery are still the client's. What it caps is the original line's value:
+	 * every reversal against a line, by quantity or by value, together takes back at most that
+	 * line's net.
+	 */
+	@Column('boolean', { nullable: false, default: false })
+	is_value_reversal!: boolean;
 
 	/**
 	 * What was sold, kept for reporting that groups by product without joining back through a
@@ -151,7 +185,7 @@ export default class InvoiceLineEntity extends EntityAbstract {
 	 * `line_total` is their sum. A printed document has to keep adding up years later, whatever
 	 * the rounding helper does by then.
 	 *
-	 * All three stay positive - a `credit_note` subtracts by virtue of its `type`, the same way
+	 * All three stay positive - a reversal subtracts by virtue of `invoice.is_reversal`, the same way
 	 * `cash_flow` keeps `amount > 0` and lets `direction` carry the sign.
 	 */
 	@Column('decimal', {
@@ -201,4 +235,11 @@ export default class InvoiceLineEntity extends EntityAbstract {
 	})
 	@JoinColumn({ name: 'shipping_id' })
 	shipping?: ShippingEntity | null;
+
+	@ManyToOne('InvoiceLineEntity', {
+		onDelete: 'RESTRICT',
+		nullable: true,
+	})
+	@JoinColumn({ name: 'parent_line_id' })
+	parent_line?: InvoiceLineEntity | null;
 }

@@ -52,6 +52,7 @@ import {
 	assertValidStatusTransition,
 	cleanEntityCache,
 } from '@/shared/abstracts/service.abstract';
+import { notifyShippingChanged } from '@/shared/registries/order-settlement.registry';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 const ENTRY_COLUMNS = [
@@ -501,6 +502,11 @@ export class ShippingService {
 	 *
 	 * The movement and its lines are written in one transaction: a consignment that failed to record
 	 * what is in it is not one anybody can pick.
+	 *
+	 * Announced once committed, so a priced movement added to an order that is already billed gets
+	 * a document of its own - see `order-settlement.registry.ts`. A checkout's first delivery goes
+	 * through `createWithin` and is not announced: the order it belongs to is billed whole once
+	 * the checkout commits.
 	 */
 	public async create(
 		data: ValidatorOutput<ShippingValidator, 'create'>,
@@ -509,9 +515,16 @@ export class ShippingService {
 
 		const input = await this.withRateDefaults(data);
 
-		return dataSource.transaction((manager) =>
+		const entry = await dataSource.transaction((manager) =>
 			this.createWithin(manager, input),
 		);
+
+		await notifyShippingChanged({
+			shipping_id: entry.id,
+			order_id: entry.order_id,
+		});
+
+		return entry;
 	}
 
 	/**
@@ -747,6 +760,9 @@ export class ShippingService {
 	 *
 	 * `shipped_at` and `delivered_at` are stamped by the same moves and never re-stamped: they
 	 * record when something happened, so a correction that revisits a state must not move them.
+	 *
+	 * Every move is announced once written: a delivery arriving can complete the order it
+	 * belongs to, and a failed one stops being billable.
 	 */
 	public async updateStatus(
 		entry: ShippingEntity,
@@ -782,7 +798,14 @@ export class ShippingService {
 
 		entry.status = newStatus;
 
-		return this.update(entry);
+		const saved = await this.update(entry);
+
+		await notifyShippingChanged({
+			shipping_id: saved.id,
+			order_id: saved.order_id,
+		});
+
+		return saved;
 	}
 
 	public async delete(id: number) {
@@ -799,6 +822,58 @@ export class ShippingService {
 			.filterById(id)
 			.withDeleted(withDeleted)
 			.firstOrFail();
+	}
+
+	/**
+	 * @description Used by the billable-source provider in `shipping.bootstrap.ts`
+	 *
+	 * The movements billable at all, of one order or by id: every one except a failed movement,
+	 * and only one carrying a price - a free movement has nothing to bill.
+	 */
+	public findBillable(filter: {
+		order_id?: number;
+		id?: number;
+	}): Promise<ShippingEntity[]> {
+		return this.repository
+			.createQuery()
+			.select([
+				'shipping.id',
+				'shipping.order_id',
+				'shipping.scope',
+				'shipping.status',
+				'shipping.price',
+				'shipping.vat_rate',
+				'shipping.discount_reduction',
+			])
+			.filterBy('order_id', filter.order_id)
+			.filterBy('id', filter.id)
+			.filterBy('status', ShippingStatusEnum.FAILED, '!=')
+			.filterBy('price', 0, '>')
+			.orderBy('id')
+			.all();
+	}
+
+	/**
+	 * @description Used by the billable-source provider in `shipping.bootstrap.ts`
+	 *
+	 * The fee of each movement, deleted ones included: a document already billing a movement keeps
+	 * its ceiling after the row goes.
+	 */
+	public async getPrices(
+		ids: readonly number[],
+	): Promise<Map<number, number>> {
+		if (ids.length === 0) {
+			return new Map();
+		}
+
+		const rows = await this.repository
+			.createQuery()
+			.select(['shipping.id', 'shipping.price'])
+			.filterBy('id', [...ids], 'IN')
+			.withDeleted(true)
+			.all();
+
+		return new Map(rows.map((row) => [row.id, Number(row.price)]));
 	}
 
 	/**

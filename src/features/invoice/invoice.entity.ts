@@ -1,5 +1,6 @@
 import { Check, Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import type { AddressSnapshotRequiredCountry } from '@/features/address/address.entity';
+import type ClientEntity from '@/features/client/client.entity';
 import type {
 	ClientTypeEnum,
 	ContactSnapshot,
@@ -9,7 +10,6 @@ import {
 	type DocumentType,
 	DocumentTypeEnum,
 } from '@/features/document-series/document-series.entity';
-import type OrderEntity from '@/features/order/order.entity';
 import { OrderStatusEnum } from '@/features/order/order.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import { numericTransformer } from '@/shared/transformers/numeric.transformer';
@@ -29,8 +29,8 @@ export type InvoiceStatus =
  * buyer holds a copy, and the only move left is to invalidate the whole document.
  *
  * Nothing leads back to `draft` - a number cannot be handed back to the series - and `canceled`
- * is terminal for the same reason. A cancellation that has to undo money already taken is a
- * credit note plus its own movement, not a way back up this list.
+ * is terminal for the same reason. An issued document is taken back by a reversal - which
+ * refunds what was paid on it - not by a way back up this list.
  */
 export const STATUS_TRANSITIONS: StatusTransitions<InvoiceStatus> = {
 	[InvoiceStatusEnum.DRAFT]: [
@@ -38,7 +38,12 @@ export const STATUS_TRANSITIONS: StatusTransitions<InvoiceStatus> = {
 		InvoiceStatusEnum.CANCELLED,
 	],
 
-	[InvoiceStatusEnum.ISSUED]: [InvoiceStatusEnum.CANCELLED],
+	// An issued document is the record of what was charged, and it is taken back only by a
+	// reversal - which refunds what was paid, books the ledger and carries a number of its own.
+	// Canceling it would do none of that.
+	[InvoiceStatusEnum.ISSUED]: [
+		// Allow nothing
+	],
 
 	[InvoiceStatusEnum.CANCELLED]: [
 		// Allow nothing
@@ -80,7 +85,7 @@ export const PAYMENT_SETTLED_TOLERANCE = 0.005;
  * invoice's own currency, which is what `invoice_payment.amount` stores.
  *
  * Over-allocation reads as `paid` rather than as a state of its own: a buyer who sent too much is
- * owed a refund, and that is a credit note plus its own movement, not a status on this row.
+ * owed a refund, and that is a reversal plus its own movement, not a status on this row.
  */
 export const resolvePaymentStatus = (
 	totalGross: number,
@@ -96,34 +101,54 @@ export const resolvePaymentStatus = (
 };
 
 /**
- * Each type draws its number from its own `document_series`: a credit note is its own document
- * and must not spend a number out of the invoice series.
+ * What a document bills, which decides how it reads and which lines it may carry.
+ *
+ * - `order` - the goods on an order, as `product` lines. An order may carry several: a partial
+ *   shipment invoiced as it goes, physical goods and services billed apart, a corrected document
+ *   raised after a reversal.
+ * - `shipping` - what a movement of goods cost, as `shipping` lines. The fee lives on the
+ *   `shipping` row, not in the order total (`OrderService.computeTotals` leaves it out), and an
+ *   order that travels as two parcels is billed for two.
+ * - `subscription` - a period of a subscription, as `adjustment` lines. Raised by hand for now; a
+ *   billing cycle is a later feature.
+ * - `custom` - a document built by hand for a client, with no order behind it: a one-off service,
+ *   a charge agreed off-system, money banked with nothing in the catalogue to itemize. Its lines
+ *   are `adjustment` lines, and its buyer is frozen from the client when it is raised.
+ *
+ * Every scope may add `adjustment` lines - rounding, a manual correction.
+ *
+ * Whether a document takes money back is not a scope: a reversal carries `is_reversal`
+ * and the scope of the document it reverses, so a reversed shipping document is still read and
+ * rendered as a shipping document.
  */
-export const InvoiceTypeEnum = {
-	CHARGE: 'charge',
-	CREDIT_NOTE: 'credit_note', // Reduces the amount the buyer owes from a previous order
+export const InvoiceScopeEnum = {
+	ORDER: 'order',
+	SHIPPING: 'shipping',
+	SUBSCRIPTION: 'subscription',
+	CUSTOM: 'custom',
 } as const;
 
-export type InvoiceType =
-	(typeof InvoiceTypeEnum)[keyof typeof InvoiceTypeEnum];
+export type InvoiceScope =
+	(typeof InvoiceScopeEnum)[keyof typeof InvoiceScopeEnum];
 
 /**
- * Which series a type spends its number from. A map rather than a cast over the two enums: the
- * names do not line up (`charge` draws from the `invoice` series), and `document_series` also
- * numbers orders, GRNs and subscriptions - so a new invoice type has to name its series here
- * rather than silently resolving to one that happens to share its spelling.
+ * The series every invoice spends its number from, reversals included: they are all invoices to
+ * the tax authority, which expects one continuous numbering, and a storno is numbered as the next
+ * invoice rather than out of a series of its own.
  */
-export const INVOICE_TYPE_DOCUMENT_TYPE: Record<InvoiceType, DocumentType> = {
-	[InvoiceTypeEnum.CHARGE]: DocumentTypeEnum.INVOICE,
-	[InvoiceTypeEnum.CREDIT_NOTE]: DocumentTypeEnum.CREDIT_NOTE,
-};
+export const INVOICE_DOCUMENT_TYPE: DocumentType = DocumentTypeEnum.INVOICE;
 
 /**
- * The order states a document may be raised from: one the business has agreed to, and one it has
- * fulfilled. A `pending` order is still being amended - its lines would be frozen onto a document
- * before they settled - and a `canceled` one was never charged at all.
+ * The order states a document may be raised from - everything but `canceled`, which was never
+ * charged at all.
+ *
+ * `pending` is included because the shop bills up front: a checkout raises the order's documents
+ * at once and the order is confirmed once they are paid. The lines of an order with a live `order`
+ * document are locked from that point (`OrderService.updateData` asks `isOrderInvoiced`), so a
+ * document cannot be left describing lines that were rewritten under it.
  */
 export const INVOICEABLE_ORDER_STATUSES = [
+	OrderStatusEnum.PENDING,
 	OrderStatusEnum.CONFIRMED,
 	OrderStatusEnum.COMPLETED,
 ];
@@ -167,13 +192,40 @@ export type SellerDetails = PartySnapshot & {
 	company_reg_com?: string | null;
 };
 
+/**
+ * What a document was raised from, read off its `invoice_source` rows - see
+ * `invoice-source.entity.ts`. Not columns of `invoice`, so a loaded row does not carry them: only
+ * `InvoiceService.withSources` (and the finders built on it) hand out an `InvoiceWithSources`, which
+ * is what every caller that needs one asks for by type.
+ *
+ * Each is null when the document has no source of that kind - a `custom` document names none.
+ */
+export type InvoiceSources = {
+	order_id: number | null;
+	shipping_id: number | null;
+	subscription_id: number | null;
+};
+
+export type InvoiceWithSources = InvoiceEntity & InvoiceSources;
+
 const ENTITY_TABLE_NAME = 'invoice';
 
 @Entity({
 	name: ENTITY_TABLE_NAME,
 	schema: 'public',
-	comment: 'Stores invoices generated from orders',
+	comment: 'Stores invoices',
 })
+// A reversal is meaningless without the document it takes back, and only a reversal names one
+@Check(`(is_reversal = (parent_invoice_id IS NOT NULL))`)
+/*
+ * What a client's payment is allocated against: their live, unsettled originals, oldest first. A
+ * reversal is settled by a refund, never by the client's incoming money, so it stays out.
+ */
+@Index(
+	'IDX_invoice_client_settlement',
+	['client_id', 'status', 'payment_status'],
+	{ where: 'is_reversal = false' },
+)
 /*
  * A number is spent the moment it is handed out - `document_series` counts continuously and has no
  * release path - so the pair is allocated on the transition to `issued`, not when the row is
@@ -202,21 +254,18 @@ export default class InvoiceEntity extends EntityAbstract {
 	static readonly HAS_CACHE: boolean = true;
 
 	/**
-	 * The order this document bills, or null when there is no order behind it.
+	 * Who is billed. Stored rather than read through the order because a document need not have
+	 * one - a bare revenue movement, a subscription period - and because the client ledger and
+	 * the allocation of a client's payments both read documents by client, on every capture.
 	 *
-	 * Nullable because a revenue movement may be invoiced on its own: money banked against a
-	 * client with nothing in the catalogue to itemize - a deposit, a service agreed off-system -
-	 * still has to be charged for. Such a document carries a single line built from the movement
-	 * itself, and `billing_details` is frozen onto it when it is raised rather than resolved from
-	 * an order at issue time.
+	 * RESTRICT: a client with documents issued to them is a party to the books.
 	 */
-	@Column('int', { nullable: true })
-	@Index('IDX_invoice_order_id')
-	order_id!: number | null;
+	@Column('int', { nullable: false })
+	client_id!: number;
 
 	/**
-	 * Not unique: an order may carry a charge and a credit note against that charge, and a
-	 * partly shipped order is invoiced per parcel.
+	 * Not unique: an order may carry several documents of each scope - a partly shipped order
+	 * invoiced per parcel, a reversal and the corrected document raised after it.
 	 */
 	@Column('varchar', {
 		length: 10,
@@ -251,18 +300,28 @@ export default class InvoiceEntity extends EntityAbstract {
 
 	@Column({
 		type: 'enum',
-		enum: InvoiceTypeEnum,
-		default: InvoiceTypeEnum.CHARGE,
+		enum: InvoiceScopeEnum,
+		default: InvoiceScopeEnum.ORDER,
 		nullable: false,
 	})
-	@Index('IDX_invoice_type')
-	type!: InvoiceType;
+	@Index('IDX_invoice_scope')
+	scope!: InvoiceScope;
 
 	/**
-	 * The charge this document reverses. Set on a `credit_note`, NULL on everything else.
+	 * A reversal: this document takes back part or all of
+	 * `parent_invoice_id`, and carries that document's scope.
 	 *
-	 * RESTRICT: the credit note only means anything next to the invoice it corrects, so that
-	 * invoice has to stay reachable for as long as the note does.
+	 * Its figures stay positive like every other document's - the flag carries the sign, the way
+	 * `cash_flow.direction` does - and it is numbered from the same series as the original.
+	 */
+	@Column('boolean', { nullable: false, default: false })
+	is_reversal!: boolean;
+
+	/**
+	 * The document this one reverses. Set on a reversal, NULL on everything else.
+	 *
+	 * RESTRICT: a reversal only means anything next to the invoice it corrects, so that invoice
+	 * has to stay reachable for as long as the reversal does.
 	 */
 	@Column('int', { nullable: true })
 	@Index('IDX_invoice_parent_invoice_id', {
@@ -387,12 +446,11 @@ export default class InvoiceEntity extends EntityAbstract {
 	notes!: string | null;
 
 	// RELATIONS
-	@ManyToOne('OrderEntity', {
+	@ManyToOne('ClientEntity', {
 		onDelete: 'RESTRICT',
-		nullable: true,
 	})
-	@JoinColumn({ name: 'order_id' })
-	order!: OrderEntity | null;
+	@JoinColumn({ name: 'client_id' })
+	client!: ClientEntity;
 
 	@ManyToOne('InvoiceEntity', {
 		onDelete: 'RESTRICT',

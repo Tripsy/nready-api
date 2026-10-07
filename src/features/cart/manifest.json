@@ -1,6 +1,6 @@
 {
 	"name": "cart",
-	"version": "1.5.0",
+	"version": "1.6.0",
 	"relativePath": "/cart",
 	"entities": ["cart", "cart-item"],
 	"depends_on": [

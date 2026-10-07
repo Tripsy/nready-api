@@ -12,14 +12,17 @@ import CashFlowEntity, {
 	CashFlowStatusEnum,
 	toGrossAmount,
 } from '@/features/cash-flow/cash-flow.entity';
+import OperationalRecordEntity, {
+	OperationalRecordTypeEnum,
+} from '@/features/cash-flow/operational-record.entity';
 import ClientEntity, { ClientTypeEnum } from '@/features/client/client.entity';
 import { DocumentTypeEnum } from '@/features/document-series/document-series.entity';
 import { documentSeriesService } from '@/features/document-series/document-series.service';
 import InvoiceEntity, {
 	type BillingDetails,
 	InvoicePaymentStatusEnum,
+	InvoiceScopeEnum,
 	InvoiceStatusEnum,
-	InvoiceTypeEnum,
 	resolvePaymentStatus,
 	type SellerDetails,
 } from '@/features/invoice/invoice.entity';
@@ -27,6 +30,9 @@ import InvoiceLineEntity, {
 	InvoiceLineKindEnum,
 } from '@/features/invoice/invoice-line.entity';
 import InvoicePaymentEntity from '@/features/invoice/invoice-payment.entity';
+import InvoiceSourceEntity, {
+	InvoiceSourceTypeEnum,
+} from '@/features/invoice/invoice-source.entity';
 import OrderEntity, { OrderStatusEnum } from '@/features/order/order.entity';
 import OrderLineEntity from '@/features/order/order-line.entity';
 import ProductContentEntity from '@/features/product/product-content.entity';
@@ -48,6 +54,7 @@ type OrderWithClient = {
 
 type SettleableMovement = {
 	id: number;
+	client_id: number | null;
 	currency: string;
 	gross: number;
 };
@@ -194,7 +201,27 @@ export const invoiceSeed: SeedDefinition = {
 		 * What a seeded allocation may draw on: money that actually moved, in and from a client.
 		 * The ceiling is the movement's **gross** worth - `cash_flow.amount` is net and scaled by
 		 * four decimals, so allocating against the raw column would overstate it wildly.
+		 *
+		 * Only the billed client's own money: the application allocates a client's payments to
+		 * that client's documents alone, and the client ledger seeded after this would otherwise
+		 * show one client paid and another owing for the same allocation.
 		 */
+		const clientRecords = await manager
+			.getRepository(OperationalRecordEntity)
+			.find({
+				select: { cash_flow_id: true, entity_id: true },
+				where: {
+					operational_record_type: OperationalRecordTypeEnum.CLIENT,
+				},
+			});
+
+		const clientByMovement = new Map(
+			clientRecords.map((record) => [
+				record.cash_flow_id,
+				record.entity_id,
+			]),
+		);
+
 		const movements = await manager.getRepository(CashFlowEntity).find({
 			where: {
 				status: CashFlowStatusEnum.COMPLETED,
@@ -205,6 +232,7 @@ export const invoiceSeed: SeedDefinition = {
 
 		const settleable: SettleableMovement[] = movements.map((movement) => ({
 			id: movement.id,
+			client_id: clientByMovement.get(movement.id) ?? null,
 			currency: movement.currency,
 			gross: toGrossAmount(
 				Number(movement.amount),
@@ -253,13 +281,14 @@ export const invoiceSeed: SeedDefinition = {
 
 			const invoice = await repository.save(
 				repository.create({
-					order_id: order.id,
+					client_id: order.client_id,
 					ref_code: reference?.code ?? null,
 					ref_number: reference?.number ?? null,
 					status: isDraft
 						? InvoiceStatusEnum.DRAFT
 						: InvoiceStatusEnum.ISSUED,
-					type: InvoiceTypeEnum.CHARGE,
+					scope: InvoiceScopeEnum.ORDER,
+					is_reversal: false,
 					currency: currency,
 					exchange_rate: Number(orderLines[0]?.exchange_rate ?? 1),
 					issued_at: issuedAt,
@@ -271,6 +300,15 @@ export const invoiceSeed: SeedDefinition = {
 						: buildBillingDetails(client),
 					seller_details: isDraft ? null : buildSellerDetails(),
 					notes: null,
+				}),
+			);
+
+			// What it was raised from is a link row, not a column - see `invoice-source.entity.ts`
+			await manager.getRepository(InvoiceSourceEntity).save(
+				manager.create(InvoiceSourceEntity, {
+					invoice_id: invoice.id,
+					source_type: InvoiceSourceTypeEnum.ORDER,
+					source_id: order.id,
 				}),
 			);
 
@@ -338,6 +376,7 @@ export const invoiceSeed: SeedDefinition = {
 				? undefined
 				: settleable.find(
 						(candidate) =>
+							candidate.client_id === order.client_id &&
 							candidate.currency === invoice.currency &&
 							!usedMovements.has(candidate.id) &&
 							candidate.gross > 0,

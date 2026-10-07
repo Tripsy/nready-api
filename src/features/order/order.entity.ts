@@ -38,9 +38,8 @@ export type OrderStatus =
  * own status machine to resolve.
  *
  * **`completed` is terminal.** An order that goes wrong afterwards is corrected on the money, not
- * on the document - a credit note or a refund against the invoice, which `invoice` carries its own
- * statuses for. Cancelling a fulfilled order would leave goods delivered against a document
- * claiming they never were.
+ * on the document - a reversal of the invoice, which refunds what was paid on it. Cancelling a
+ * fulfilled order would leave goods delivered against a document claiming they never were.
  */
 export const STATUS_TRANSITIONS: StatusTransitions<OrderStatus> = {
 	[OrderStatusEnum.PENDING]: [

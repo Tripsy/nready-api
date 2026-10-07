@@ -1,0 +1,8 @@
+{
+	"name": "order-settlement",
+	"version": "1.0.0",
+	"relativePath": "/order-settlement",
+	"entities": [],
+	"depends_on": ["order", "invoice", "product", "shipping"],
+	"required_by": []
+}

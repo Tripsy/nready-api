@@ -38,6 +38,25 @@ export function randomPastDate(random: Random, daysBack: number): Date {
 	return new Date(Date.now() - millisecondsBack);
 }
 
+/**
+ * A Romanian IBAN that passes the ISO 13616 check `validateIBAN` applies: `RO`, two check digits,
+ * a four-letter bank code, then a sixteen-character account. The check digits are computed, not
+ * drawn, so a seeded client can be saved back through the API unchanged.
+ */
+export function romanianIban(bankCode: string, account: string): string {
+	const bban = `${bankCode.toUpperCase()}${account.padStart(16, '0').slice(-16)}`;
+
+	// Mod 97 over the BBAN followed by `RO00`, letters as two-digit numbers (A = 10)
+	const numeric = `${bban}RO00`.replace(/[A-Z]/g, (char) =>
+		(char.charCodeAt(0) - 55).toString(),
+	);
+
+	const remainder = BigInt(numeric) % 97n;
+	const checkDigits = (98n - remainder).toString().padStart(2, '0');
+
+	return `RO${checkDigits}${bban}`;
+}
+
 /** Zero-padded sequence suffix, so natural keys sort and read predictably. */
 export function sequenceLabel(index: number, width = 4): string {
 	return String(index + 1).padStart(width, '0');

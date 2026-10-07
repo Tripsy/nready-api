@@ -25,7 +25,7 @@ import {
 	type CashFlowCategory,
 	CashFlowCategoryEnum,
 } from '@/features/cash-flow/cash-flow-category.enum';
-import {
+import OperationalRecordEntity, {
 	getOperationalRecordOptions,
 	type OperationalRecordType,
 	OperationalRecordTypeEnum,
@@ -45,7 +45,8 @@ import {
 	assertValidStatusTransition,
 	cleanEntityCache,
 } from '@/shared/abstracts/service.abstract';
-import { notifyCashFlowSettled } from '@/shared/registries/order-settlement.registry';
+import { recordLedgerMovement } from '@/shared/registries/client-ledger.registry';
+import { notifyCashFlowCompleted } from '@/shared/registries/order-settlement.registry';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 export class CashFlowService {
@@ -170,10 +171,6 @@ export class CashFlowService {
 	 * `checkRefund` has already established that the two are the same currency, so converting
 	 * the way back at a rate that has since moved would leave a residue in base currency that
 	 * no payment ever produced - an FX gain is its own entry, not part of a refund.
-	 *
-	 * There is no fallback when the currency has never been published. Converting at an invented
-	 * rate silently mis-states every base-currency total that sums this column, so the entry is
-	 * refused instead and the rate is entered by hand or imported first.
 	 */
 	public async getExchangeRate(
 		selectedCurrency: string,
@@ -390,10 +387,18 @@ export class CashFlowService {
 			notes: data.notes,
 		};
 
-		const operationalRecords = this.dropInvalidOperationalRecords(
-			data.category,
-			data.operational_records,
-		);
+		/*
+		 * A refund is filed under whoever its parent is filed under - the client it pays back, the
+		 * order it came from. Inherited rather than stated, and outside the category map, which
+		 * says what a caller may state: the refund then reads as its client's money everywhere a
+		 * movement's own records are read (the ledger, allocation, the list filtered by client).
+		 */
+		const operationalRecords = parentEntry
+			? await this.findRecordsWithin(manager, parentEntry.id)
+			: this.dropInvalidOperationalRecords(
+					data.category,
+					data.operational_records,
+				);
 
 		const resultEntry = await manager
 			.getRepository(CashFlowEntity)
@@ -533,7 +538,7 @@ export class CashFlowService {
 		}
 
 		/*
-		 * Only the types the submitted category allows survive; the rest are dropped rather than
+		 * Only the types the submitted category allows are kept; the rest are dropped rather than
 		 * refused, the same way `create` drops them.
 		 *
 		 * `order` is among them, so an operator can name the document a movement belongs to after
@@ -580,18 +585,12 @@ export class CashFlowService {
 	}
 
 	/**
-	 * Moves a movement along and, when that movement is the money an order was waiting for,
-	 * announces it.
-	 *
-	 * The announcement is made **after the status write has committed** and only for `completed`:
-	 * capture is the one transition that settles anything, and what runs downstream - confirming
-	 * the order, raising and settling its charge - opens transactions of its own. See
-	 * `order-settlement.registry.ts` for why the chain is not held inside one, and for what a failure
-	 * downstream leaves behind.
-	 *
-	 * The order is read off this movement's own `operational_record` rows, so the ledger resolves
-	 * it without knowing what an order is. A movement carrying no such record - a deposit, a
-	 * back-office correction - announces nothing.
+	 * Capturing goes through `completeWithin`, so the client ledger entry is written in the same
+	 * transaction as the status - a movement is never completed without it. The announcement is
+	 * made **after that commit**: what runs downstream - allocating the money to the client's open
+	 * documents, moving their orders along - opens transactions of its own. See
+	 * `order-settlement.registry.ts` for why that chain is not held inside one, and for what a
+	 * failure downstream leaves behind.
 	 */
 	public async updateStatus(
 		entry: CashFlowEntity,
@@ -603,24 +602,48 @@ export class CashFlowService {
 			newStatus,
 		);
 
-		entry.status = newStatus;
-
-		await this.update(entry);
-
 		if (newStatus !== CashFlowStatusEnum.COMPLETED) {
+			entry.status = newStatus;
+
+			await this.update(entry);
+
 			return;
 		}
 
-		const orderId = await this.findOrderId(entry.id);
+		await dataSource.transaction((manager) =>
+			this.completeWithin(manager, entry),
+		);
 
-		if (!orderId) {
-			return;
-		}
+		await cleanEntityCache(CashFlowEntity, entry.id);
 
-		await notifyCashFlowSettled({
+		await notifyCashFlowCompleted({
 			cash_flow_id: entry.id,
-			order_id: orderId,
 		});
+	}
+
+	/**
+	 * @description Used by `updateStatus`, and by a caller completing a movement inside its own
+	 * transaction - a reversal paying its refund as it is issued
+	 *
+	 * Marks the movement `completed` and books it on the client ledger, both through the caller's
+	 * manager: the ledger is the money that moved, and this is the moment it moved. With the
+	 * `client-ledger` feature absent the booking does nothing.
+	 *
+	 * Announcing it downstream is the caller's - it has to happen after the caller's commit.
+	 */
+	public async completeWithin(
+		manager: EntityManager,
+		entry: CashFlowEntity,
+	): Promise<CashFlowEntity> {
+		entry.status = CashFlowStatusEnum.COMPLETED;
+
+		const completed = await manager
+			.getRepository(CashFlowEntity)
+			.save(entry);
+
+		await recordLedgerMovement(manager, completed);
+
+		return completed;
 	}
 
 	/**
@@ -635,6 +658,73 @@ export class CashFlowService {
 			cashFlowId,
 			OperationalRecordTypeEnum.ORDER,
 		);
+	}
+
+	/**
+	 * The client a movement was made with: its own `client` record, or the one on its parent.
+	 * A refund inherits its parent's records when it is written (`createWithin`), so the fallback
+	 * only answers for a refund whose parent was filed under a client after the refund was made.
+	 *
+	 * Read through the caller's manager, so a caller inside a transaction - the demo seed runs
+	 * every seed in one, an issue refunds in one - sees the records it has not committed yet.
+	 */
+	public async findClientId(
+		cashFlow: Pick<CashFlowEntity, 'id' | 'parent_id'>,
+		manager: EntityManager = dataSource.manager,
+	): Promise<number | null> {
+		const own = await this.findRecordIdWithin(
+			manager,
+			cashFlow.id,
+			OperationalRecordTypeEnum.CLIENT,
+		);
+
+		if (own || !cashFlow.parent_id) {
+			return own;
+		}
+
+		return this.findRecordIdWithin(
+			manager,
+			cashFlow.parent_id,
+			OperationalRecordTypeEnum.CLIENT,
+		);
+	}
+
+	/** Every live record a movement is filed under, as `{ type: entity_id }`. */
+	private async findRecordsWithin(
+		manager: EntityManager,
+		cashFlowId: number,
+	): Promise<Partial<Record<OperationalRecordType, number>>> {
+		const records = await manager
+			.getRepository(OperationalRecordEntity)
+			.find({
+				select: { operational_record_type: true, entity_id: true },
+				where: { cash_flow_id: cashFlowId },
+			});
+
+		return Object.fromEntries(
+			records.map((record) => [
+				record.operational_record_type,
+				record.entity_id,
+			]),
+		);
+	}
+
+	private async findRecordIdWithin(
+		manager: EntityManager,
+		cashFlowId: number,
+		type: OperationalRecordType,
+	): Promise<number | null> {
+		const record = await manager
+			.getRepository(OperationalRecordEntity)
+			.findOne({
+				select: { entity_id: true },
+				where: {
+					cash_flow_id: cashFlowId,
+					operational_record_type: type,
+				},
+			});
+
+		return record?.entity_id ?? null;
 	}
 
 	/**

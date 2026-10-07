@@ -10,6 +10,9 @@ import {
 } from '@/database/seed/seed.helper';
 import { runSeedFile } from '@/database/seed/seed.runner';
 import ClientEntity from '@/features/client/client.entity';
+import ClientAddressEntity, {
+	ClientAddressTypeEnum,
+} from '@/features/client-address/client-address.entity';
 import { DocumentTypeEnum } from '@/features/document-series/document-series.entity';
 import { documentSeriesService } from '@/features/document-series/document-series.service';
 import OrderEntity, {
@@ -94,6 +97,34 @@ export const orderSeed: SeedDefinition = {
 		const clientIds = await loadIds(manager, ClientEntity);
 
 		/*
+		 * The address each client is billed at, first by id. An order with none cannot be
+		 * invoiced - issuing refuses a document with nowhere to be sent - so buyers are drawn from
+		 * the clients that have one, and only a book with no billing address anywhere falls back
+		 * to every client.
+		 */
+		const billingAddresses = await manager
+			.getRepository(ClientAddressEntity)
+			.find({
+				select: { id: true, client_id: true },
+				where: { type: ClientAddressTypeEnum.BILLING },
+				order: { id: 'ASC' },
+			});
+
+		const billingAddressByClient = new Map<number, number>();
+
+		for (const address of billingAddresses) {
+			if (!billingAddressByClient.has(address.client_id)) {
+				billingAddressByClient.set(address.client_id, address.id);
+			}
+		}
+
+		const billableClientIds = clientIds.filter((id) =>
+			billingAddressByClient.has(id),
+		);
+		const buyerIds =
+			billableClientIds.length > 0 ? billableClientIds : clientIds;
+
+		/*
 		 * Only variants with a price row in the base currency can be sold: a line has to carry a
 		 * figure, and inventing one would put a number in the order book that the catalog cannot
 		 * account for. The product comes along for its `vat_category`, which is what the stored
@@ -156,10 +187,13 @@ export const orderSeed: SeedDefinition = {
 			);
 
 			const status = randomPick(random, STATUSES);
+			const clientId = randomPick(random, buyerIds);
 
 			const order = await repository.save(
 				repository.create({
-					client_id: randomPick(random, clientIds),
+					client_id: clientId,
+					billing_address_id:
+						billingAddressByClient.get(clientId) ?? null,
 					ref_code: reference.code,
 					ref_number: reference.number,
 					status: status,

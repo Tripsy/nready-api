@@ -37,7 +37,7 @@ export const maxAllocatableAmount = (
  * An allocation table rather than an `invoice_id` on `cash_flow`, because settlement is
  * many-to-many in practice: a deposit and a balance are two movements against one invoice, a
  * single bank transfer from a company client clears several, and a refund is a movement allocated
- * against the credit note that authorized it. A single column can express none of those.
+ * against the reversal that authorized it. A single column can express none of those.
  *
  * It also keeps `cash_flow` free of document coupling - it has no `order_id` or `invoice_id` and
  * reaches its counterparties through `operational_record` - so the ledger stays a ledger.

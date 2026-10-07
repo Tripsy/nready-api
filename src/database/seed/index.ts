@@ -10,6 +10,7 @@ import { cashFlowSeed } from '@/features/cash-flow/database/cash-flow.seed';
 import { categorySeed } from '@/features/category/database/category.seed';
 import { clientSeed } from '@/features/client/database/client.seed';
 import { clientAddressSeed } from '@/features/client-address/database/client-address.seed';
+import { clientLedgerSeed } from '@/features/client-ledger/database/client-ledger.seed';
 import { commentSeed } from '@/features/comment/database/comment.seed';
 import { complaintSeed } from '@/features/complaint/database/complaint.seed';
 import { discountSeed } from '@/features/discount/database/discount.seed';
@@ -86,6 +87,9 @@ const seeds: readonly SeedDefinition[] = [
 	// the completed incoming movements its allocations settle against - so it follows `orderSeed`
 	// and `cashFlowSeed`; allocates its numbers from the `INV` series
 	invoiceSeed,
+	// Writes the ledger entries the issued documents and the completed client movements imply -
+	// so it follows `invoiceSeed` and `cashFlowSeed`
+	clientLedgerSeed,
 	// Reads product, product variant and user ids, and the completed orders a verified review
 	// names - so it has to follow `orderSeed`
 	reviewSeed,

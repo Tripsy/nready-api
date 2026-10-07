@@ -3,6 +3,7 @@ import {
 	loadIds,
 	randomInt,
 	randomPick,
+	romanianIban,
 	type SeedDefinition,
 	type SeedSummary,
 	sequenceLabel,
@@ -98,7 +99,10 @@ export const clientSeed: SeedDefinition = {
 					ClientStatusEnum.PENDING,
 				]);
 
-				const iban = `RO${randomInt(random, 10, 99)}BTRL${label}${randomInt(random, 100000, 999999)}`;
+				const iban = romanianIban(
+					'BTRL',
+					`${label}${randomInt(random, 100000, 999999)}${randomInt(random, 100000, 999999)}`,
+				);
 
 				/*
 				 * Two in three clients belong to an account, cycling through the users so some

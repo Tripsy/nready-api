@@ -2,8 +2,9 @@ import { ClientTypeEnum } from '@/features/client/client.entity';
 import type InvoiceEntity from '@/features/invoice/invoice.entity';
 import {
 	InvoicePaymentStatusEnum,
+	InvoiceScopeEnum,
 	InvoiceStatusEnum,
-	InvoiceTypeEnum,
+	type InvoiceWithSources,
 } from '@/features/invoice/invoice.entity';
 import {
 	InvoiceValidator,
@@ -22,16 +23,20 @@ import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
 const invoiceValidator = new InvoiceValidator('invoice');
 
 export function getInvoiceEntityMock(
-	overrides?: Partial<InvoiceEntity>,
-): InvoiceEntity {
+	overrides?: Partial<InvoiceWithSources>,
+): InvoiceWithSources {
 	return {
 		id: 1,
+		client_id: 1,
 		order_id: 1,
+		subscription_id: null,
+		shipping_id: null,
 		ref_code: 'INV',
 		ref_number: 142,
 		status: InvoiceStatusEnum.ISSUED,
 		payment_status: InvoicePaymentStatusEnum.PARTIAL,
-		type: InvoiceTypeEnum.CHARGE,
+		scope: InvoiceScopeEnum.ORDER,
+		is_reversal: false,
 		parent_invoice_id: null,
 		currency: 'RON',
 		exchange_rate: 1,
@@ -79,7 +84,7 @@ export function getInvoiceEntityMock(
 		created_at: createPastDate(86400),
 		updated_at: null,
 		deleted_at: null,
-		order: undefined as unknown as InvoiceEntity['order'],
+		client: undefined as unknown as InvoiceEntity['client'],
 		parent_invoice: null,
 		...overrides,
 	};
@@ -94,6 +99,8 @@ export function getInvoiceLineEntityMock(
 		kind: InvoiceLineKindEnum.PRODUCT,
 		order_line_id: 1,
 		shipping_id: null,
+		parent_line_id: null,
+		is_value_reversal: false,
 		product_id: 1,
 		variant_id: 1,
 		label: 'Test product, 500 ml',
@@ -137,7 +144,9 @@ export function getInvoicePaymentEntityMock(
 export const invoiceInputPayloads = {
 	create: {
 		order_id: 1,
-		type: InvoiceTypeEnum.CHARGE,
+		scope: InvoiceScopeEnum.ORDER,
+		shipping_id: undefined,
+		subscription_id: undefined,
 		due_at: formatDate(createFutureDate(86400 * 14)),
 		notes: 'Test invoice',
 	},
@@ -156,10 +165,9 @@ export const invoiceInputPayloads = {
 			order_id: 1,
 			status: InvoiceStatusEnum.ISSUED,
 			payment_status: InvoicePaymentStatusEnum.PARTIAL,
-			type: InvoiceTypeEnum.CHARGE,
+			scope: InvoiceScopeEnum.ORDER,
 			currency: 'RON',
 			is_overdue: false,
-			is_deleted: false,
 		},
 	},
 	lineCreate: {

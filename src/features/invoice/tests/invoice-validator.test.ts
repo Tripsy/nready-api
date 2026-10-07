@@ -38,10 +38,10 @@ describe(validator, () => {
 		});
 	});
 
-	it('create() rejects an unknown type', () => {
+	it('create() rejects an unknown scope', () => {
 		const validated = invoiceValidator.create.safeParse({
 			...invoiceInputPayloads.create,
-			type: 'not-a-type',
+			scope: 'not-a-scope',
 		});
 
 		expect(validated.success).toBe(false);
@@ -120,6 +120,76 @@ describe(validator, () => {
 		withDebugValidated(() => {
 			expect(validated.success).toBe(true);
 		}, validated);
+	});
+
+	// Free text, but whole: blanks come back as `null` so the snapshot carries every key
+	it('update() accepts a company buyer and fills the blanks with null', () => {
+		const validated = invoiceValidator.update.safeParse({
+			id: 1,
+			billing_details: {
+				type: 'company',
+				company_name: 'Acme SRL',
+				address_country: 'Romania',
+				address_city: '',
+			},
+		});
+
+		withDebugValidated(() => {
+			expect(validated.success).toBe(true);
+			expect(validated.data?.billing_details).toMatchObject({
+				company_name: 'Acme SRL',
+				address_city: null,
+				company_cui: null,
+				iban: null,
+			});
+		}, validated);
+	});
+
+	it('update() rejects a buyer with no name or country', () => {
+		const validated = invoiceValidator.update.safeParse({
+			id: 1,
+			billing_details: { type: 'person', person_name: '' },
+		});
+
+		expect(validated.success).toBe(false);
+	});
+
+	// `null` hands the party back to issuing, so it counts as something to update
+	it('update() accepts null to clear the seller', () => {
+		const validated = invoiceValidator.update.safeParse({
+			id: 1,
+			seller_details: null,
+		});
+
+		withDebugValidated(() => {
+			expect(validated.success).toBe(true);
+		}, validated);
+	});
+
+	it('createCustom() accepts a client on its own', () => {
+		const validated = invoiceValidator.createCustom.safeParse({
+			client_id: 5,
+		});
+
+		withDebugValidated(() => {
+			expect(validated.success).toBe(true);
+		}, validated);
+	});
+
+	it('createCustom() rejects a payload with no client', () => {
+		const validated = invoiceValidator.createCustom.safeParse({});
+
+		expect(validated.success).toBe(false);
+	});
+
+	// A custom document names no order, so it never comes through the order-backed create
+	it('create() rejects the custom scope', () => {
+		const validated = invoiceValidator.create.safeParse({
+			order_id: 1,
+			scope: 'custom',
+		});
+
+		expect(validated.success).toBe(false);
 	});
 
 	it('paymentCreate() rejects an amount of zero', () => {

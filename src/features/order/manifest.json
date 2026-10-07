@@ -1,6 +1,6 @@
 {
 	"name": "order",
-	"version": "2.0.0",
+	"version": "2.1.0",
 	"relativePath": "/order",
 	"entities": ["order", "order-line"],
 	"depends_on": [
@@ -11,5 +11,12 @@
 		"document-series",
 		"exchange-rate"
 	],
-	"required_by": ["shipping", "invoice", "subscription", "review", "cart"]
+	"required_by": [
+		"shipping",
+		"invoice",
+		"subscription",
+		"review",
+		"cart",
+		"order-settlement"
+	]
 }

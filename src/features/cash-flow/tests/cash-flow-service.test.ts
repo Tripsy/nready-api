@@ -1,5 +1,5 @@
 import { expect, jest } from '@jest/globals';
-import type { Repository } from 'typeorm';
+import type { EntityManager, Repository } from 'typeorm';
 import { Configuration } from '@/config/settings.config';
 import { BadRequestError } from '@/exceptions';
 import type CashFlowEntity from '@/features/cash-flow/cash-flow.entity';
@@ -22,9 +22,14 @@ import { CashFlowService } from '@/features/cash-flow/cash-flow.service';
 import type { CashFlowValidator } from '@/features/cash-flow/cash-flow.validator';
 import { CashFlowCategoryEnum } from '@/features/cash-flow/cash-flow-category.enum';
 import {
-	type CashFlowSettledPayload,
-	registerCashFlowSettledHandler,
+	type LedgerMovement,
+	registerClientLedgerRecorder,
+} from '@/shared/registries/client-ledger.registry';
+import {
+	type CashFlowCompletedPayload,
+	registerCashFlowCompletedHandler,
 } from '@/shared/registries/order-settlement.registry';
+import type { ValidatorOutput } from '@/shared/types/mock.type';
 import {
 	createMockRepository,
 	setupTransactionMock,
@@ -95,6 +100,63 @@ describe('CashFlowService', () => {
 				undefined,
 			),
 		).toThrow(BadRequestError);
+	});
+
+	// A refund is filed under its parent's client and order - inherited, whatever it is handed
+	it('createWithin - a refund takes its parent records', async () => {
+		const parent = getCashFlowEntityMock();
+		const records = [
+			{ operational_record_type: 'client', entity_id: 5 },
+			{ operational_record_type: 'order', entity_id: 7 },
+		];
+
+		jest.spyOn(serviceCashFlow, 'findById').mockResolvedValue(parent);
+		jest.spyOn(serviceCashFlow, 'getRefundedAmountSum').mockResolvedValue(
+			0,
+		);
+		jest.spyOn(serviceCashFlow, 'checkRefund').mockResolvedValue();
+		jest.spyOn(
+			serviceCashFlow as unknown as {
+				getExchangeRate: () => Promise<number>;
+			},
+			'getExchangeRate',
+		).mockResolvedValue(1);
+
+		const manager = {
+			getRepository: jest.fn(() => ({
+				save: jest.fn(async (entry: object) => ({ ...entry, id: 99 })),
+				find: jest.fn(async () => records),
+			})),
+		} as unknown as EntityManager;
+
+		const setup = (
+			mockCashFlow.repository as unknown as {
+				setupOperationalRecord: jest.Mock;
+			}
+		).setupOperationalRecord;
+		setup.mockClear();
+
+		await serviceCashFlow.createWithin(manager, {
+			...cashFlowOutputPayloads.create,
+			direction: CashFlowDirectionEnum.OUT,
+			category_type: CashFlowCategoryTypeEnum.CORRECTION,
+			category: CashFlowCategoryEnum.REFUND,
+			currency: parent.currency,
+			parent_id: parent.id,
+			operational_records: { vendor: 3 },
+		} as ValidatorOutput<CashFlowValidator, 'create'>);
+
+		expect(setup).toHaveBeenCalledTimes(2);
+		expect(setup).toHaveBeenCalledWith(manager, {
+			cash_flow_id: 99,
+			operational_record_type: 'client',
+			entity_id: 5,
+		});
+		expect(setup).toHaveBeenCalledWith(manager, {
+			cash_flow_id: 99,
+			operational_record_type: 'order',
+			entity_id: 7,
+		});
 	});
 
 	it('checkRefund - should throw when invalid category is set', async () => {
@@ -307,44 +369,82 @@ describe('CashFlowService', () => {
 
 		jest.spyOn(serviceCashFlow, 'findById').mockResolvedValue(entry);
 
-		// Capture is the one transition that looks for an order to settle. Nothing is registered
-		// with `order-settlement.registry.ts` here - `bootstrap.setup.ts` is skipped in the test
-		// environment - so the lookup is all there is to stub
-		jest.spyOn(serviceCashFlow, 'findOrderId').mockResolvedValue(null);
+		// Capture is the one transition that is announced. Nothing is registered with
+		// `order-settlement.registry.ts` here - `bootstrap.setup.ts` is skipped in the test
+		// environment - so the announcement goes nowhere
+		const save = jest.fn(async (row: unknown) => row);
 
-		mockCashFlow.repository.save.mockResolvedValue(entry);
+		setupTransactionMock({ save: save });
 
 		await serviceCashFlow.updateStatus(entry, CashFlowStatusEnum.COMPLETED);
 
-		expect(mockCashFlow.repository.save).toHaveBeenCalled();
+		expect(save).toHaveBeenCalledWith(
+			expect.objectContaining({ status: CashFlowStatusEnum.COMPLETED }),
+		);
 	});
 
 	/*
-	 * The handover the shop's happy path runs on: a captured payment is what confirms the order it
-	 * was raised for. What the handler does with it is `order`'s to test - this covers that the
-	 * ledger announces it, and only for the transition that moved money.
+	 * The ledger is the money that moved, and completion is the moment it moved: the entry is
+	 * booked through the registry with the completing transaction's own manager, so neither can
+	 * commit without the other.
 	 */
-	it('announces a captured payment to the order it was raised for', async () => {
+	it('books a captured movement on the client ledger inside its transaction', async () => {
 		const entry = getCashFlowEntityMock({
 			status: CashFlowStatusEnum.PENDING,
 		});
 
-		const settled = jest
-			.fn<(payload: CashFlowSettledPayload) => Promise<void>>()
+		const { manager } = setupTransactionMock({
+			save: jest.fn(async (row: unknown) => row),
+		});
+		const recorder = jest.fn(
+			async (_manager: EntityManager, _movement: LedgerMovement) => {},
+		);
+
+		registerClientLedgerRecorder(recorder);
+
+		try {
+			await serviceCashFlow.updateStatus(
+				entry,
+				CashFlowStatusEnum.COMPLETED,
+			);
+		} finally {
+			registerClientLedgerRecorder(null);
+		}
+
+		expect(recorder).toHaveBeenCalledWith(
+			manager as unknown as EntityManager,
+			expect.objectContaining({
+				id: entry.id,
+				status: CashFlowStatusEnum.COMPLETED,
+			}),
+		);
+	});
+
+	/*
+	 * The handover the settlement chain runs on: a captured payment goes on the client's ledger
+	 * and is allocated to their open documents. What the handler does with it is `invoice`'s to
+	 * test - this covers that the ledger announces every capture, whatever it was raised for, and
+	 * only the transition that moved money.
+	 */
+	it('announces a captured payment', async () => {
+		const entry = getCashFlowEntityMock({
+			status: CashFlowStatusEnum.PENDING,
+		});
+
+		const completed = jest
+			.fn<(payload: CashFlowCompletedPayload) => Promise<void>>()
 			.mockResolvedValue();
 
-		registerCashFlowSettledHandler(settled);
+		registerCashFlowCompletedHandler(completed);
 
 		jest.spyOn(serviceCashFlow, 'findById').mockResolvedValue(entry);
-		jest.spyOn(serviceCashFlow, 'findOrderId').mockResolvedValue(42);
 
-		mockCashFlow.repository.save.mockResolvedValue(entry);
+		setupTransactionMock({ save: jest.fn(async (row: unknown) => row) });
 
 		await serviceCashFlow.updateStatus(entry, CashFlowStatusEnum.COMPLETED);
 
-		expect(settled).toHaveBeenCalledWith({
+		expect(completed).toHaveBeenCalledWith({
 			cash_flow_id: entry.id,
-			order_id: 42,
 		});
 	});
 
@@ -353,13 +453,11 @@ describe('CashFlowService', () => {
 			status: CashFlowStatusEnum.PENDING,
 		});
 
-		const settled = jest
-			.fn<(payload: CashFlowSettledPayload) => Promise<void>>()
+		const completed = jest
+			.fn<(payload: CashFlowCompletedPayload) => Promise<void>>()
 			.mockResolvedValue();
 
-		registerCashFlowSettledHandler(settled);
-
-		const findOrderId = jest.spyOn(serviceCashFlow, 'findOrderId');
+		registerCashFlowCompletedHandler(completed);
 
 		jest.spyOn(serviceCashFlow, 'findById').mockResolvedValue(entry);
 
@@ -367,8 +465,7 @@ describe('CashFlowService', () => {
 
 		await serviceCashFlow.updateStatus(entry, CashFlowStatusEnum.CANCELED);
 
-		expect(findOrderId).not.toHaveBeenCalled();
-		expect(settled).not.toHaveBeenCalled();
+		expect(completed).not.toHaveBeenCalled();
 	});
 
 	it('should delete by id', async () => {

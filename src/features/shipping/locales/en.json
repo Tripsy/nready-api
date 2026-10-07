@@ -47,5 +47,10 @@
 		"removed": "Movement(s) {{entity_ids}} removed by user #{{auth_id}}",
 		"restored": "Movement(s) {{entity_ids}} restored by user #{{auth_id}}",
 		"status": "Movement #{{entity_id}} updated from {{oldStatus}} to {{newStatus}} by user #{{auth_id}}"
+	},
+	"label": {
+		"billed_delivery": "Delivery",
+		"billed_return": "Return shipping",
+		"billed_relocation": "Relocation"
 	}
 }

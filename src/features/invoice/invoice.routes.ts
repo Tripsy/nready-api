@@ -18,6 +18,10 @@ export default async () => {
 				path: '',
 				method: 'post',
 			},
+			createCustom: {
+				path: '/custom',
+				method: 'post',
+			},
 			read: {
 				path: '/:id',
 				method: 'get',
@@ -26,11 +30,6 @@ export default async () => {
 			update: {
 				path: '/:id',
 				method: 'put',
-				handlers: [validateParamsWhenId('id')],
-			},
-			delete: {
-				path: '/:id',
-				method: 'delete',
 				handlers: [validateParamsWhenId('id')],
 			},
 			find: {
@@ -52,8 +51,8 @@ export default async () => {
 				method: 'post',
 				handlers: [validateParamsWhenId('cash_flow_id')],
 			},
-			creditNote: {
-				path: '/:id/credit-note',
+			reverse: {
+				path: '/:id/reverse',
 				method: 'post',
 				handlers: [validateParamsWhenId('id')],
 			},
@@ -81,6 +80,11 @@ export default async () => {
 			paymentCreate: {
 				path: '/:id/payments',
 				method: 'post',
+				handlers: [validateParamsWhenId('id')],
+			},
+			paymentClear: {
+				path: '/:id/payments',
+				method: 'delete',
 				handlers: [validateParamsWhenId('id')],
 			},
 			paymentDelete: {
