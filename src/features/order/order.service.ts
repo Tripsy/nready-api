@@ -22,8 +22,6 @@ import OrderEntity, {
 	type OrderPaymentMethod,
 	type OrderStatus,
 	OrderStatusEnum,
-	type OrderType,
-	OrderTypeEnum,
 	STATUS_TRANSITIONS,
 } from '@/features/order/order.entity';
 import {
@@ -121,7 +119,6 @@ export type OrderCreateInput = {
 	 */
 	exchange_rate?: number;
 	lines: readonly OrderLineInput[];
-	type?: OrderType;
 	/** How the client pays. Absent on a back-office document that has not agreed it yet. */
 	payment_method?: OrderPaymentMethod | null;
 	/**
@@ -204,7 +201,6 @@ const ENTRY_COLUMNS = [
 	'order.ref_code',
 	'order.ref_number',
 	'order.status',
-	'order.type',
 	'order.payment_method',
 	'order.billing_address_id',
 	'order.notes',
@@ -390,7 +386,6 @@ export class OrderService {
 				ref_code: reference.code,
 				ref_number: reference.number,
 				status: OrderStatusEnum.PENDING,
-				type: data.type ?? OrderTypeEnum.STANDARD,
 				payment_method: data.payment_method ?? null,
 				billing_address_id: data.billing_address_id ?? null,
 				notes: data.notes ?? null,
@@ -530,7 +525,6 @@ export class OrderService {
 				client_id: data.client_id,
 				currency: data.currency,
 				exchange_rate: exchangeRate,
-				type: data.type,
 				billing_address_id: data.billing_address_id ?? null,
 				notes: data.notes ?? null,
 				lines: data.lines.map((line, index) => ({
@@ -1082,7 +1076,6 @@ export class OrderService {
 			.joinAndSelect('order.client', 'client', 'LEFT')
 			.filterById(data.filter.id)
 			.filterByClient(data.filter.client_id)
-			.filterBy('type', data.filter.type)
 			.filterByReference(data.filter.ref_code, data.filter.ref_number)
 			.filterByRange(
 				'created_at',

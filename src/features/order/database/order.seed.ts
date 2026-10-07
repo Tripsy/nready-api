@@ -20,7 +20,6 @@ import OrderEntity, {
 	OrderPaymentMethodEnum,
 	type OrderStatus,
 	OrderStatusEnum,
-	OrderTypeEnum,
 } from '@/features/order/order.entity';
 import OrderLineEntity from '@/features/order/order-line.entity';
 import ProductEntity from '@/features/product/product.entity';
@@ -197,10 +196,6 @@ export const orderSeed: SeedDefinition = {
 					ref_code: reference.code,
 					ref_number: reference.number,
 					status: status,
-					// Subscriptions raise their own orders, and nothing here renews anything -
-					// a `subscription` order with no subscription behind it would be a shape
-					// the application never produces.
-					type: OrderTypeEnum.STANDARD,
 					payment_method: randomPick(random, PAYMENT_METHODS),
 					created_at: randomPastDate(random, CREATED_WITHIN_DAYS),
 					notes: null,

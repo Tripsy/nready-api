@@ -58,13 +58,6 @@ export const STATUS_TRANSITIONS: StatusTransitions<OrderStatus> = {
 	],
 };
 
-export const OrderTypeEnum = {
-	STANDARD: 'standard',
-	SUBSCRIPTION: 'subscription',
-} as const;
-
-export type OrderType = (typeof OrderTypeEnum)[keyof typeof OrderTypeEnum];
-
 /**
  * How the client said they will pay. Recorded as a choice only - nothing here charges, captures or
  * reconciles a payment; `cash_flow` and `invoice` carry the money once it moves.
@@ -120,14 +113,6 @@ export default class OrderEntity extends EntityAbstract {
 	})
 	@Index('IDX_order_status')
 	status!: OrderStatus;
-
-	@Column({
-		type: 'enum',
-		enum: OrderTypeEnum,
-		default: OrderTypeEnum.STANDARD,
-		nullable: false,
-	})
-	type!: OrderType;
 
 	/**
 	 * Null on a back-office document: an operator composing an order by phone agrees goods and

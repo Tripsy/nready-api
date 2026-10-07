@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { Configuration } from '@/config/settings.config';
-import { OrderStatusEnum, OrderTypeEnum } from '@/features/order/order.entity';
+import { OrderStatusEnum } from '@/features/order/order.entity';
 import { hasAtLeastOneValue } from '@/helpers/objects.helper';
 import { CURRENCY_CODE_CHARS, normalizeCurrency } from '@/helpers/shop.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
@@ -20,7 +20,6 @@ import {
 export const paramsUpdateList: string[] = [
 	'client_id',
 	'billing_address_id',
-	'type',
 	'notes',
 ];
 
@@ -67,7 +66,6 @@ const validatorMessages = [
 	'invalid_client_id',
 	'invalid_billing_address_id',
 	'invalid_currency',
-	'invalid_type',
 	'invalid_lines',
 	'invalid_variant_id',
 	'invalid_product_id',
@@ -214,13 +212,6 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 			{ required: false },
 		),
 		currency: this.currencySchema(),
-		type: this.validateEnum(
-			OrderTypeEnum,
-			this.getMessage('invalid_type'),
-			{
-				required: false,
-			},
-		),
 		notes: this.notesSchema(),
 		lines: this.linesSchema(),
 	});
@@ -256,11 +247,6 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 				{ required: false },
 			),
 			currency: this.currencySchema().optional(),
-			type: this.validateEnum(
-				OrderTypeEnum,
-				this.getMessage('invalid_type'),
-				{ required: false },
-			),
 			notes: this.notesSchema(),
 			lines: this.linesSchema().optional(),
 		})
@@ -331,11 +317,6 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 					),
 				])
 				.optional(),
-			type: this.validateEnum(
-				OrderTypeEnum,
-				this.getMessage('invalid_type'),
-				{ required: false },
-			),
 			/*
 			 * The two halves of the reference, filterable on their own: a series code narrows the
 			 * list to one document type's numbering, and the number alone is what somebody reads

@@ -2,7 +2,6 @@ import { Configuration } from '@/config/settings.config';
 import type { orderController } from '@/features/order/order.controller';
 import {
 	OrderStatusEnum,
-	OrderTypeEnum,
 	STATUS_TRANSITIONS,
 } from '@/features/order/order.entity';
 import { ORDER_LINES_MAX, OrderByEnum } from '@/features/order/order.validator';
@@ -23,7 +22,6 @@ export const orderSample: Record<string, unknown> = {
 	ref_code: 'ORD',
 	ref_number: 1183,
 	status: OrderStatusEnum.CONFIRMED,
-	type: OrderTypeEnum.STANDARD,
 	notes: null,
 	created_at: '2026-08-14T11:32:00.000Z',
 	updated_at: null,
@@ -120,12 +118,6 @@ export const docs: Record<keyof typeof orderController, ApiInputDocumentation> =
 						required: true,
 						condition: 'ISO 4217 code, three letters',
 					},
-					type: {
-						type: 'enum',
-						required: false,
-						values: Object.values(OrderTypeEnum),
-						default: OrderTypeEnum.STANDARD,
-					},
 					notes: { type: 'string', required: false },
 					lines: {
 						type: 'array',
@@ -194,11 +186,6 @@ export const docs: Record<keyof typeof orderController, ApiInputDocumentation> =
 						required: false,
 						condition:
 							'ISO 4217 code, three letters; only together with lines',
-					},
-					type: {
-						type: 'enum',
-						required: false,
-						values: Object.values(OrderTypeEnum),
 					},
 					notes: { type: 'string', required: false },
 					lines: {
@@ -317,11 +304,6 @@ export const docs: Record<keyof typeof orderController, ApiInputDocumentation> =
 							type: 'enum',
 							required: false,
 							values: Object.values(OrderStatusEnum),
-						},
-						type: {
-							type: 'enum',
-							required: false,
-							values: Object.values(OrderTypeEnum),
 						},
 						create_at_start: { type: 'string', required: false },
 						create_at_end: { type: 'string', required: false },
