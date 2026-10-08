@@ -7,6 +7,7 @@ import CashFlowEntity, {
 	type CashFlowCategoryType,
 	CashFlowCategoryTypeEnum,
 	type CashFlowDirection,
+	CashFlowDirectionEnum,
 	type CashFlowStatus,
 	CashFlowStatusEnum,
 	getExpectedCategoryType,
@@ -14,6 +15,7 @@ import CashFlowEntity, {
 	MUTABLE_STATUSES,
 	REFUNDABLE_STATUSES,
 	STATUS_TRANSITIONS,
+	toGrossAmount,
 } from '@/features/cash-flow/cash-flow.entity';
 import {
 	notifyCashFlowCompleted,
@@ -45,6 +47,7 @@ import {
 	hasAtLeastOneValue,
 	pickValuesFromObject,
 } from '@/helpers/objects.helper';
+import { roundMoney } from '@/helpers/shop.helper';
 import {
 	assertValidStatusTransition,
 	cleanEntityCache,
@@ -660,6 +663,107 @@ export class CashFlowService {
 			cashFlowId,
 			OperationalRecordTypeEnum.ORDER,
 		);
+	}
+
+	/**
+	 * The movements filed under an order in the given statuses, read through the caller's manager.
+	 */
+	private findForOrder(
+		manager: EntityManager,
+		orderId: number,
+		statuses: readonly CashFlowStatus[],
+	): Promise<CashFlowEntity[]> {
+		return manager
+			.getRepository(CashFlowEntity)
+			.createQueryBuilder('cash_flow')
+			.innerJoin(
+				OperationalRecordEntity,
+				'record',
+				'record.cash_flow_id = cash_flow.id AND record.operational_record_type = :type AND record.entity_id = :orderId',
+				{ type: OperationalRecordTypeEnum.ORDER, orderId: orderId },
+			)
+			.where('cash_flow.status IN (:...statuses)', {
+				statuses: [...statuses],
+			})
+			.orderBy('cash_flow.id')
+			.getMany();
+	}
+
+	/**
+	 * @description Used by `invoice`'s answer to `isOrderClientLocked`
+	 *
+	 * Whether any movement still stands under an order - pending, authorized or completed. A failed,
+	 * canceled or expired one never moved money and holds nothing for the client it names.
+	 */
+	public async hasMovementsForOrder(orderId: number): Promise<boolean> {
+		const rows = await this.findForOrder(dataSource.manager, orderId, [
+			CashFlowStatusEnum.PENDING,
+			CashFlowStatusEnum.AUTHORIZED,
+			CashFlowStatusEnum.REQUIRES_ACTION,
+			CashFlowStatusEnum.COMPLETED,
+		]);
+
+		return rows.length > 0;
+	}
+
+	/**
+	 * @description Used by `OrderSettlementService` to confirm an order its payment covers
+	 *
+	 * What has been captured for an order, gross, in the movements' own currency: completed money in
+	 * filed under it, less completed refunds out - a refund inherits its parent's records when it is
+	 * written, so it is filed under the same order. Compared against the order's own total, which is
+	 * in the currency the checkout asked for the money in.
+	 */
+	public async sumCompletedForOrder(orderId: number): Promise<number> {
+		const rows = await this.findForOrder(dataSource.manager, orderId, [
+			CashFlowStatusEnum.COMPLETED,
+		]);
+
+		return roundMoney(
+			rows.reduce(
+				(sum, row) =>
+					sum +
+					(row.direction === CashFlowDirectionEnum.IN ? 1 : -1) *
+						toGrossAmount(Number(row.amount), Number(row.vat_rate)),
+				0,
+			),
+		);
+	}
+
+	/**
+	 * @description Used by `cart`'s answer to `syncOrderPayment`, inside the line-replace transaction
+	 *
+	 * Restates the one payment request still `pending` for an order at a new gross total. Anything
+	 * further along - authorized, captured - stated an amount to a gateway or took money, and is
+	 * never moved; nor is a request when the order has several pending, since which of them the new
+	 * total belongs to is not this method's to guess.
+	 *
+	 * Returns the id it moved, for the caller to drop its cache once the transaction commits.
+	 */
+	public async restatePendingForOrder(
+		manager: EntityManager,
+		orderId: number,
+		grossTotal: number,
+	): Promise<number | null> {
+		const pending = (
+			await this.findForOrder(manager, orderId, [
+				CashFlowStatusEnum.PENDING,
+			])
+		).filter((row) => row.direction === CashFlowDirectionEnum.IN);
+
+		if (pending.length !== 1) {
+			return null;
+		}
+
+		const request = pending[0];
+		const vatRate = Number(request.vat_rate);
+
+		await manager.getRepository(CashFlowEntity).update(request.id, {
+			// `amount` is net of the movement's own rate; a checkout request carries 0
+			amount: this.inputAmount(grossTotal / (1 + vatRate / 100)),
+		});
+
+		return request.id;
 	}
 
 	/**

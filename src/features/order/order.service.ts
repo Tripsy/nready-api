@@ -26,8 +26,11 @@ import OrderEntity, {
 	STATUS_TRANSITIONS,
 } from '@/features/order/order.entity';
 import {
+	type AfterCommit,
+	isOrderClientLocked,
 	isOrderInvoiced,
 	notifyOrderConfirmed,
+	syncOrderPayment,
 } from '@/features/order/order.hooks';
 import {
 	getOrderLineRepository,
@@ -38,6 +41,12 @@ import {
 	paramsUpdateList,
 } from '@/features/order/order.validator';
 import {
+	type OrderBundleService,
+	orderBundleService,
+} from '@/features/order/order-bundle.service';
+import {
+	type OrderDiscountContext,
+	type OrderDiscountLine,
 	type OrderDiscountService,
 	orderDiscountService,
 } from '@/features/order/order-discount.service';
@@ -92,6 +101,8 @@ export type OrderLineInput = {
 	discount_reduction?: number;
 	options?: ProductOptionSnapshot[] | null;
 	notes?: string | null;
+	/** On a bundle component, the `product_bundle_item` it was taken from. */
+	bundle_item_id?: number | null;
 	/**
 	 * The components a bundle explodes into, per `product.md` §8.3.
 	 *
@@ -273,6 +284,7 @@ const LINE_COLUMNS = [
 	'order_line.id',
 	'order_line.order_id',
 	'order_line.parent_id',
+	'order_line.bundle_item_id',
 	'order_line.variant_id',
 	'order_line.product_id',
 	'order_line.quantity',
@@ -296,6 +308,7 @@ export class OrderService {
 		private clientAddressService: ClientAddressService,
 		private discountService: OrderDiscountService,
 		private optionService: OrderOptionService,
+		private bundleService: OrderBundleService,
 	) {}
 
 	/**
@@ -562,6 +575,7 @@ export class OrderService {
 						? line.options
 						: null,
 				notes: line.notes ?? null,
+				bundle_item_id: line.bundle_item_id ?? null,
 			});
 
 		const headers = await manager.save(
@@ -606,11 +620,6 @@ export class OrderService {
 
 		const exchangeRate = await this.resolveExchangeRate(data.currency);
 
-		const options = await this.optionService.resolveForLines(
-			data.lines,
-			data.currency,
-		);
-
 		/*
 		 * The buyer's country, for a campaign that names one. A back-office document may not have
 		 * agreed a billing address yet, and every country condition then fails closed - which is
@@ -622,7 +631,7 @@ export class OrderService {
 				)
 			: null;
 
-		const discounts = await this.discountService.resolveForLines(
+		const composed = await this.composeLines(
 			data.lines,
 			{
 				clientId: data.client_id,
@@ -641,22 +650,103 @@ export class OrderService {
 				exchange_rate: exchangeRate,
 				billing_address_id: data.billing_address_id ?? null,
 				notes: data.notes ?? null,
-				discount: discounts.campaign?.manual
-					? discounts.campaign
-					: null,
-				lines: data.lines.map((line, index) => ({
+				discount: composed.discount,
+				lines: composed.rows,
+			}),
+		);
+	}
+
+	/**
+	 * Turns a back-office line set into rows ready to write - the one place both `createEntry` and
+	 * `buildLines` go through, so a created and an edited document cannot be composed differently.
+	 *
+	 * - **Options** are resolved into snapshots against the catalog (`OrderOptionService`).
+	 * - **A bundle line becomes a header and its components** (`OrderBundleService`): the header
+	 *   at `price` and `vat_rate` 0, the operator's bundle price divided over the components at
+	 *   their own rates (`rules/product.md` §8.3). The header keeps the line's options and note.
+	 * - **Discounts are resolved over what carries money** - ordinary lines and bundle components,
+	 *   never a header, which is what the cart does too (`rules/discount.md` §4). A typed discount
+	 *   on a bundle line is refused: it would have to be divided over components priced at
+	 *   different rates, and the order-wide discount already does exactly that.
+	 */
+	private async composeLines(
+		lines: readonly OrderLinePayload[],
+		context: OrderDiscountContext,
+		orderDiscount?: ManualDiscount | null,
+	): Promise<{ rows: OrderLineInput[]; discount: DiscountSnapshot | null }> {
+		const [options, bundles] = await Promise.all([
+			this.optionService.resolveForLines(lines, context.currency),
+			this.bundleService.explodeForLines(lines, context.currency),
+		]);
+
+		lines.forEach((line, index) => {
+			if (bundles[index] && line.discount) {
+				throw new BadRequestError(
+					lang('order.error.bundle_discount', {
+						variant_id: String(line.variant_id),
+					}),
+				);
+			}
+		});
+
+		// Flattened in line order, a bundle contributing its components in its own place
+		const priced = lines.flatMap(
+			(line, index): OrderDiscountLine[] => bundles[index] ?? [line],
+		);
+
+		const discounts = await this.discountService.resolveForLines(
+			priced,
+			context,
+			orderDiscount,
+		);
+
+		let cursor = 0;
+
+		const rows = lines.map((line, index): OrderLineInput => {
+			const components = bundles[index];
+
+			if (!components) {
+				const resolved = discounts.lines[cursor++];
+
+				return {
 					variant_id: line.variant_id,
 					product_id: line.product_id,
 					quantity: line.quantity,
 					price: line.price,
 					vat_rate: line.vat_rate,
-					discount: discounts.lines[index]?.snapshots ?? null,
-					discount_reduction: discounts.lines[index]?.reduction ?? 0,
+					discount: resolved?.snapshots ?? null,
+					discount_reduction: resolved?.reduction ?? 0,
 					options: options[index],
 					notes: line.notes ?? null,
-				})),
-			}),
-		);
+				};
+			}
+
+			return {
+				variant_id: line.variant_id,
+				product_id: line.product_id,
+				quantity: line.quantity,
+				price: 0,
+				vat_rate: 0,
+				discount: null,
+				discount_reduction: 0,
+				options: options[index],
+				notes: line.notes ?? null,
+				children: components.map((component) => {
+					const resolved = discounts.lines[cursor++];
+
+					return {
+						...component,
+						discount: resolved?.snapshots ?? null,
+						discount_reduction: resolved?.reduction ?? 0,
+					};
+				}),
+			};
+		});
+
+		return {
+			rows: rows,
+			discount: discounts.campaign?.manual ? discounts.campaign : null,
+		};
 	}
 
 	/**
@@ -684,6 +774,14 @@ export class OrderService {
 	): Promise<OrderEntity> {
 		if (data.client_id) {
 			await this.checkClientId(data.client_id);
+
+			// Documents are raised for one client and payments filed under one; neither follows a move
+			if (
+				data.client_id !== entry.client_id &&
+				(await isOrderClientLocked(entry.id))
+			) {
+				throw new CustomError(409, lang('order.error.client_locked'));
+			}
 		}
 
 		if (data.lines) {
@@ -738,6 +836,9 @@ export class OrderService {
 			entry.discount = lines.discount;
 		}
 
+		// A holder rather than a `let`: TypeScript does not see the assignment inside the callback
+		const after: { run: AfterCommit | null } = { run: null };
+
 		const saved = await dataSource.transaction(async (manager) => {
 			const order = await manager.save(entry);
 
@@ -749,6 +850,9 @@ export class OrderService {
 					lines.currency,
 					lines.exchange_rate,
 				);
+
+				// A payment request still pending follows the new total, in this transaction
+				after.run = await syncOrderPayment(manager, order.id);
 			}
 
 			return order;
@@ -756,7 +860,29 @@ export class OrderService {
 
 		await cleanEntityCache(OrderEntity, saved.id);
 
+		if (after.run) {
+			await after.run();
+		}
+
 		return saved;
+	}
+
+	/**
+	 * Whether a live goods document bills the order, which locks its lines (`updateData`).
+	 *
+	 * Asked fresh on every read rather than cached with it: the document is raised by `invoice`,
+	 * which does not drop this feature's cache, so a cached answer would outlive the change.
+	 */
+	public isInvoiced(orderId: number): Promise<boolean> {
+		return isOrderInvoiced(orderId);
+	}
+
+	/**
+	 * Whether the order may no longer move to another client (`updateData`) - billed, or paid for,
+	 * under the one it names. Asked fresh for the reason `isInvoiced` is.
+	 */
+	public isClientLocked(orderId: number): Promise<boolean> {
+		return isOrderClientLocked(orderId);
 	}
 
 	/**
@@ -794,18 +920,13 @@ export class OrderService {
 			? await this.resolveExchangeRate(currency, entry.created_at)
 			: denomination.exchange_rate;
 
-		const options = await this.optionService.resolveForLines(
-			lines,
-			lineCurrency,
-		);
-
 		const countryCode = entry.billing_address_id
 			? await this.clientAddressService.getCountryCodeById(
 					entry.billing_address_id,
 				)
 			: null;
 
-		const discounts = await this.discountService.resolveForLines(
+		const composed = await this.composeLines(
 			lines,
 			{
 				clientId: entry.client_id,
@@ -818,20 +939,10 @@ export class OrderService {
 		);
 
 		return {
-			rows: lines.map((line, index) => ({
-				variant_id: line.variant_id,
-				product_id: line.product_id,
-				quantity: line.quantity,
-				price: line.price,
-				vat_rate: line.vat_rate,
-				discount: discounts.lines[index]?.snapshots ?? null,
-				discount_reduction: discounts.lines[index]?.reduction ?? 0,
-				options: options[index],
-				notes: line.notes ?? null,
-			})),
+			rows: composed.rows,
 			currency: lineCurrency,
 			exchange_rate: exchangeRate,
-			discount: discounts.campaign?.manual ? discounts.campaign : null,
+			discount: composed.discount,
 		};
 	}
 
@@ -1268,4 +1379,5 @@ export const orderService = new OrderService(
 	clientAddressService,
 	orderDiscountService,
 	orderOptionService,
+	orderBundleService,
 );

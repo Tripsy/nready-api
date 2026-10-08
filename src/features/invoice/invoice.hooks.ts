@@ -4,12 +4,15 @@ import { createKeyedProvider, createNotification } from '@/helpers/hook.helper';
  * What `invoice` announces once its own writes have committed, and what it asks of the features
  * whose rows it bills.
  *
- * ## The invoice-first chain
+ * ## The chain: billed on confirmation
  *
- * The shop's happy path runs **invoice first**: a checkout raises the order `pending` together
- * with its documents, a captured payment is allocated against the client's oldest open documents,
- * and the order is moved along once everything it was billed for is settled - `confirmed` when its
- * documents are paid, `completed` when its deliveries have also arrived.
+ * A checkout raises the order `pending` with a payment request and **no documents**: a pending
+ * order is still the operator's to edit, and an issued document could only be reversed, never
+ * rewritten. The order is billed when it is confirmed - by the operator, or by `order-settlement`
+ * once a captured payment filed under it covers what it costs. Confirming raises and issues the
+ * goods and delivery documents, the money already captured is allocated against the client's
+ * oldest open documents, and the order is `completed` once those are paid and its deliveries have
+ * arrived.
  *
  * Every step lives in the feature that owns the rows it writes, and none of the writers imports
  * the next: `cash_flow` stays a ledger with no document coupling, `cart`, `order` and `shipping`
@@ -17,12 +20,13 @@ import { createKeyedProvider, createNotification } from '@/helpers/hook.helper';
  * (`order.hooks.ts`, `cash-flow.hooks.ts`, `shipping.hooks.ts`), and the feature acting on them
  * depends on it and registers from its bootstrap:
  *
- * - `invoice` - the billing side: raises documents for a placed or confirmed order and a new
- *   movement, and spreads a captured payment over the client's documents. It then announces the
- *   orders whose standing it may have moved (`notifyOrderStateChanged`, below).
+ * - `invoice` - the billing side: raises documents for a confirmed order and a new movement, and
+ *   spreads a captured payment over the client's documents. It then announces the orders whose
+ *   standing it may have moved (`notifyOrderStateChanged`, below) - including the order a captured
+ *   payment was made for, which is how a prepaid order gets confirmed at all.
  * - `order-settlement` - the order side: re-reads each announced order and moves it to the status
- *   its documents and deliveries justify. Optional - without it orders are billed and paid the
- *   same, and only move status by hand.
+ *   its payments, documents and deliveries justify. Optional - without it orders are confirmed by
+ *   hand, and billed when they are.
  *
  * **Every notification runs after its own write has committed, never inside its transaction.**
  * The chain crosses several features and each link opens transactions of its own - raising a

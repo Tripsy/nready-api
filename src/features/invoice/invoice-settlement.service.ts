@@ -25,8 +25,11 @@ export class InvoiceSettlementService {
 	/**
 	 * @description Used by the cash-flow-completed handler in `invoice.bootstrap.ts`
 	 *
-	 * For money coming in, spreads it over the client's open documents. The ledger entry is not
-	 * written here - `cash-flow` books it in the transaction that completed the movement.
+	 * For money coming in, spreads it over the client's open documents, then announces the order
+	 * the money was paid for. That second step is what confirms a prepaid checkout: its order is
+	 * not billed until confirmed, so the spread touches no document of it and would announce
+	 * nothing. The ledger entry is not written here - `cash-flow` books it in the transaction that
+	 * completed the movement.
 	 */
 	public async onCashFlowCompleted(cashFlowId: number): Promise<void> {
 		const cashFlow = await cashFlowService.findById(cashFlowId, false);
@@ -37,11 +40,15 @@ export class InvoiceSettlementService {
 
 		const clientId = await cashFlowService.findClientId(cashFlow);
 
-		if (!clientId) {
-			return;
+		if (clientId) {
+			await this.settleClient(clientId);
 		}
 
-		await this.settleClient(clientId);
+		const orderId = await cashFlowService.findOrderId(cashFlowId);
+
+		if (orderId) {
+			await notifyOrderStateChanged({ order_ids: [orderId] });
+		}
 	}
 
 	/**

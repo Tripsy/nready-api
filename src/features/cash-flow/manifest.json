@@ -4,5 +4,11 @@
 	"relativePath": "/cash-flow",
 	"entities": ["cash-flow", "operational-record"],
 	"depends_on": ["client", "exchange-rate", "vendor"],
-	"required_by": ["invoice", "stats", "cart", "client-ledger"]
+	"required_by": [
+		"invoice",
+		"stats",
+		"cart",
+		"client-ledger",
+		"order-settlement"
+	]
 }

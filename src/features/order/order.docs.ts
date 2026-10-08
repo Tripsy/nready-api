@@ -40,11 +40,14 @@ export const orderSample: Record<string, unknown> = {
 /** What `read` adds on top: the lines, and what they add up to. */
 export const orderWithLinesSample: Record<string, unknown> = {
 	...orderSample,
+	is_invoiced: false,
+	is_client_locked: false,
 	lines: [
 		{
 			id: 402,
 			order_id: 118,
 			parent_id: null,
+			bundle_item_id: null,
 			variant_id: 91,
 			product_id: 44,
 			quantity: 2,
@@ -83,7 +86,7 @@ const statusTransitionNote = Object.entries(STATUS_TRANSITIONS)
 export const totalsNote =
 	"`totals` sums `price x quantity` per line as `subtotal`, before any discount, and states what the discounts took off beside it as `discount_reduction`; VAT is charged per line on the difference, at that line's own rate, and `total` is `subtotal - discount_reduction + vat_amount`. `order_discount_reduction` says how much of that reduction came from an order-wide campaign rather than from the lines' own rules - it is **already inside** `discount_reduction`, stated separately so a reader can see what the campaign was worth, never to be subtracted a second time";
 
-const lineNote = `Each line names a variant and the product it belongs to - the pair is checked before the insert, so a mismatch answers 400 rather than a constraint violation. Prices are the caller's: the order records the figure that was agreed. Discounts are the catalog's unless typed - the catalog's own rules are resolved over the set as it is saved, clamped against \`product_price.min_price\`, and written to the line as snapshots plus the money they took off. A line carries its own best discount and, stacked on top, its apportioned share of any order-wide campaign, each snapshot stating what it alone was worth; \`discount_reduction\` is their sum and the figure VAT is charged on. A typed \`discount\` ({ type: percent|amount, value }, in the document's currency) replaces the catalog: on a line it stands in for that line's best rule, an \`amount\` per unit; at the top level it stands in for the order-wide campaign and is apportioned the same way. Both are clamped to the same floor and recorded as snapshots with \`manual: true\`. Setting, changing or clearing one needs the \`order.discount\` permission (admins hold it implicitly) and answers 403 otherwise. \`options\` are \`product_option\` ids: each must belong to the line's product and every question on that product must receive between its \`min_select\` and \`max_select\` answers, or the request answers 400. They are stored as snapshots carrying the option id, today's wording and the delta in the document's currency; \`price\` is the unit figure with those deltas already folded in. Up to ${ORDER_LINES_MAX} lines`;
+const lineNote = `Each line names a variant and the product it belongs to - the pair is checked before the insert, so a mismatch answers 400 rather than a constraint violation. Prices are the caller's: the order records the figure that was agreed. Discounts are the catalog's unless typed - the catalog's own rules are resolved over the set as it is saved, clamped against \`product_price.min_price\`, and written to the line as snapshots plus the money they took off. A line carries its own best discount and, stacked on top, its apportioned share of any order-wide campaign, each snapshot stating what it alone was worth; \`discount_reduction\` is their sum and the figure VAT is charged on. A typed \`discount\` ({ type: percent|amount, value }, in the document's currency) replaces the catalog: on a line it stands in for that line's best rule, an \`amount\` per unit; at the top level it stands in for the order-wide campaign and is apportioned the same way. Both are clamped to the same floor and recorded as snapshots with \`manual: true\`. Setting, changing or clearing one needs the \`order.discount\` permission (admins hold it implicitly) and answers 403 otherwise. \`options\` are \`product_option\` ids: each must belong to the line's product and every question on that product must receive between its \`min_select\` and \`max_select\` answers, or the request answers 400. They are stored as snapshots carrying the option id, today's wording and the delta in the document's currency; \`price\` is the unit figure with those deltas already folded in. **A bundle is one line**: \`price\` is what one bundle costs as composed and \`components\` ([{ item_id, units? }], the cart's shape - the choices only, never a component that comes with the kit) says which candidates and extras it takes; it is exploded into a header at price and VAT 0 plus one line per component, the price divided pro-rata by the components' standalone prices, each at its own VAT rate. A bad choice answers 400 naming the bundle, its \`vat_rate\` is ignored, and a typed \`discount\` on it is refused. Up to ${ORDER_LINES_MAX} lines`;
 
 /**
  * An order is the document a business raises against a client. It is created here only for
@@ -123,7 +126,7 @@ export const docs: Record<keyof typeof orderController, ApiInputDocumentation> =
 					lines: {
 						type: 'array',
 						required: true,
-						condition: `1 to ${ORDER_LINES_MAX} entries of { variant_id, product_id, quantity, price, vat_rate, options, discount, notes }; quantity above 0, price and vat_rate from 0, options an optional list of product option ids, discount an optional { type, value } replacing the catalog for that line`,
+						condition: `1 to ${ORDER_LINES_MAX} entries of { variant_id, product_id, quantity, price, vat_rate, options, discount, components, notes }; quantity above 0, price and vat_rate from 0, options an optional list of product option ids, discount an optional { type, value } replacing the catalog for that line, components the choices of a bundle line`,
 					},
 					discount: {
 						type: 'object',
@@ -159,7 +162,7 @@ export const docs: Record<keyof typeof orderController, ApiInputDocumentation> =
 			withAuthErrors: true,
 			withErrors: [404],
 			request: {
-				notes: `A deleted order is only visible to a caller holding order delete. ${totalsNote}`,
+				notes: `A deleted order is only visible to a caller holding order delete. \`is_invoiced\` says whether a live goods document bills the order - read fresh on every call, never cached - and while it is true a new line set answers 409. \`is_client_locked\` says whether the order is invoiced or has a payment filed under it - pending, authorized or completed - and while it is true a different \`client_id\` answers 409. A bundle is a header line at price 0 with its components after it, each carrying \`parent_id\` and the \`bundle_item_id\` it was taken from. ${totalsNote}`,
 				params: {
 					id: {
 						type: 'number',

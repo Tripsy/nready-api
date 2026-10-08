@@ -3,6 +3,6 @@
 	"version": "1.0.0",
 	"relativePath": "/order-settlement",
 	"entities": [],
-	"depends_on": ["order", "invoice", "product", "shipping"],
+	"depends_on": ["order", "invoice", "product", "shipping", "cash-flow"],
 	"required_by": []
 }

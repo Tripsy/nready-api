@@ -9,6 +9,7 @@ import {
 } from 'typeorm';
 import type { DiscountSnapshot } from '@/features/discount/discount.entity';
 import type OrderEntity from '@/features/order/order.entity';
+import type ProductBundleItemEntity from '@/features/product/product-bundle-item.entity';
 import type { ProductOptionSnapshot } from '@/features/product/product-option.entity';
 import type ProductVariantEntity from '@/features/product/product-variant.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
@@ -53,6 +54,20 @@ export default class OrderLineEntity extends EntityAbstract {
 		where: 'parent_id IS NOT NULL',
 	})
 	parent_id!: number | null;
+
+	/**
+	 * The `product_bundle_item` a component line was taken from - null on a header and on every
+	 * ordinary line. It is what lets an editor read a stored bundle back as the choices that
+	 * produced it: which candidate a group took, which tick boxes were ticked and how many of
+	 * each. The variant alone cannot say it - two components of one bundle may name the same
+	 * variant, one in the kit and one as an extra.
+	 *
+	 * `SET NULL` rather than the cart's `CASCADE`: a document line outlives the catalog row it
+	 * came from. With the row gone the line still says what was sold; only re-editing the bundle
+	 * falls back to its current composition.
+	 */
+	@Column('int', { nullable: true })
+	bundle_item_id!: number | null;
 
 	/**
 	 * What was bought. `product_id` is kept alongside it, denormalized, because every revenue
@@ -186,6 +201,13 @@ export default class OrderLineEntity extends EntityAbstract {
 	// Composite: both columns are the key, so the pair has to exist together on one variant row.
 	// It also carries the RESTRICT that keeps a sold variant - and through it its product, since
 	// deleting a product cascades to its variants - from being deleted out from under an order
+	@ManyToOne('ProductBundleItemEntity', {
+		onDelete: 'SET NULL',
+		nullable: true,
+	})
+	@JoinColumn({ name: 'bundle_item_id' })
+	bundle_item?: ProductBundleItemEntity | null;
+
 	@ManyToOne('ProductVariantEntity', {
 		onDelete: 'RESTRICT',
 	})

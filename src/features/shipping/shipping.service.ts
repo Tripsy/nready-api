@@ -1,4 +1,10 @@
-import { type DeepPartial, type EntityManager, In } from 'typeorm';
+import {
+	type DeepPartial,
+	type EntityManager,
+	In,
+	MoreThan,
+	Not,
+} from 'typeorm';
 import dataSource from '@/config/data-source.config';
 import { lang } from '@/config/message.setup';
 import { Configuration } from '@/config/settings.config';
@@ -49,6 +55,7 @@ import {
 	warehouseService,
 } from '@/features/warehouse/warehouse.service';
 import { pickValuesFromObject } from '@/helpers/objects.helper';
+import { roundMoney } from '@/helpers/shop.helper';
 import {
 	assertValidStatusTransition,
 	cleanEntityCache,
@@ -851,6 +858,57 @@ export class ShippingService {
 			.filterBy('price', 0, '>')
 			.orderBy('id')
 			.all();
+	}
+
+	/**
+	 * @description Used to confirm a prepaid order (`order-settlement`) and to restate its pending
+	 * payment request after an edit (`cart`)
+	 *
+	 * What the buyer is asked to pay for an order, gross: its goods (`OrderService.computeTotals`)
+	 * plus every movement that charges for itself, the same two figures a checkout adds up into its
+	 * payment request. A movement counts on the terms `findBillable` bills it on - priced, and not
+	 * failed - at `(price - discount_reduction) x (1 + vat_rate)`.
+	 *
+	 * Read through the caller's manager, so a caller inside the transaction that rewrote the lines
+	 * sees the new ones.
+	 */
+	public async computeOrderPayable(
+		orderId: number,
+		manager: EntityManager = dataSource.manager,
+	): Promise<number> {
+		const [lines, movements] = await Promise.all([
+			manager
+				.getRepository(OrderLineEntity)
+				.find({ where: { order_id: orderId } }),
+			manager.getRepository(ShippingEntity).find({
+				select: {
+					id: true,
+					price: true,
+					vat_rate: true,
+					discount_reduction: true,
+				},
+				where: {
+					order_id: orderId,
+					status: Not(ShippingStatusEnum.FAILED),
+					price: MoreThan(0),
+				},
+			}),
+		]);
+
+		const charges = movements.reduce(
+			(sum, movement) =>
+				sum +
+				roundMoney(
+					(Number(movement.price) -
+						Number(movement.discount_reduction)) *
+						(1 + Number(movement.vat_rate) / 100),
+				),
+			0,
+		);
+
+		return roundMoney(
+			this.orderService.computeTotals(lines).total + charges,
+		);
 	}
 
 	/**

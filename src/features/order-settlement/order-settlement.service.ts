@@ -1,5 +1,6 @@
 import { In } from 'typeorm';
 import dataSource from '@/config/data-source.config';
+import { cashFlowService } from '@/features/cash-flow/cash-flow.service';
 import InvoiceEntity, {
 	InvoicePaymentStatusEnum,
 	InvoiceStatusEnum,
@@ -19,6 +20,7 @@ import ShippingEntity, {
 	ShippingScopeEnum,
 	ShippingStatusEnum,
 } from '@/features/shipping/shipping.entity';
+import { shippingService } from '@/features/shipping/shipping.service';
 import ShippingLineEntity from '@/features/shipping/shipping-line.entity';
 import { getSystemLogger } from '@/providers/logger.provider';
 
@@ -39,11 +41,12 @@ export type OrderSettlementState = {
 };
 
 /**
- * Moves an order along once what it was billed for is settled.
+ * Moves an order along once it is paid for, and once what it was billed for is settled.
  *
  * The order's own status machine runs one way (`order.entity.ts`), and so does this: a `pending`
- * order whose documents are all paid is confirmed; a `confirmed` one whose goods have also all
- * arrived is completed. Nothing here moves an order back - a document raised later, a payment
+ * order with no goods document yet is confirmed once the money captured for it covers what it
+ * costs - confirming is what bills it; a `pending` one already billed is confirmed once its
+ * documents are all paid; a `confirmed` one whose goods have also all arrived is completed. Nothing here moves an order back - a document raised later, a payment
  * removed - and nothing touches a `canceled` order. Those are an operator's to resolve.
  *
  * Its own feature, reached only through `invoice.hooks.ts`: `invoice` announces the
@@ -94,6 +97,25 @@ export class OrderSettlementService {
 			return null;
 		}
 
+		/*
+		 * Not billed yet - every order since checkout stopped billing at placement. The money
+		 * captured for it is what decides: once it covers the order, confirming bills it, and the
+		 * handler that raises the documents spreads that money over them and announces the order
+		 * again, which brings it back here as billed.
+		 */
+		if (
+			order.status === OrderStatusEnum.PENDING &&
+			!(await invoiceService.hasLiveOrderInvoice(orderId))
+		) {
+			if (!(await this.isPrepaid(orderId))) {
+				return null;
+			}
+
+			await orderService.updateStatus(order, OrderStatusEnum.CONFIRMED);
+
+			return OrderStatusEnum.CONFIRMED;
+		}
+
 		const state = await this.getState(orderId);
 
 		if (!state.fully_invoiced || !state.all_paid) {
@@ -119,6 +141,20 @@ export class OrderSettlementService {
 		await orderService.updateStatus(order, OrderStatusEnum.COMPLETED);
 
 		return OrderStatusEnum.COMPLETED;
+	}
+
+	/**
+	 * Whether the money captured for an order covers what the buyer was asked for - its goods and
+	 * its priced deliveries, gross - within the tolerance a settled document is read with. An order
+	 * that costs nothing is not "paid" by nobody paying: it waits for an operator.
+	 */
+	private async isPrepaid(orderId: number): Promise<boolean> {
+		const [paid, payable] = await Promise.all([
+			cashFlowService.sumCompletedForOrder(orderId),
+			shippingService.computeOrderPayable(orderId),
+		]);
+
+		return payable > 0 && paid >= payable - PAYMENT_SETTLED_TOLERANCE;
 	}
 
 	public async getState(orderId: number): Promise<OrderSettlementState> {

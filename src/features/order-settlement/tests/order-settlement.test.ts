@@ -1,4 +1,6 @@
 import { expect, jest } from '@jest/globals';
+import { cashFlowService } from '@/features/cash-flow/cash-flow.service';
+import { invoiceService } from '@/features/invoice/invoice.service';
 import type OrderEntity from '@/features/order/order.entity';
 import {
 	type OrderStatus,
@@ -9,6 +11,7 @@ import {
 	OrderSettlementService,
 	type OrderSettlementState,
 } from '@/features/order-settlement/order-settlement.service';
+import { shippingService } from '@/features/shipping/shipping.service';
 
 const orderWith = (status: OrderStatus): OrderEntity =>
 	({ id: 1, client_id: 1, status: status }) as unknown as OrderEntity;
@@ -32,11 +35,21 @@ describe('OrderSettlementService.evaluate', () => {
 	const run = async (
 		status: OrderStatus,
 		settlement: OrderSettlementState,
+		prepaid?: { billed: boolean; paid: number; payable: number },
 	) => {
 		const order = orderWith(status);
 
 		jest.spyOn(orderService, 'findById').mockResolvedValue(order);
 		jest.spyOn(service, 'getState').mockResolvedValue(settlement);
+		jest.spyOn(invoiceService, 'hasLiveOrderInvoice').mockResolvedValue(
+			prepaid?.billed ?? true,
+		);
+		jest.spyOn(cashFlowService, 'sumCompletedForOrder').mockResolvedValue(
+			prepaid?.paid ?? 0,
+		);
+		jest.spyOn(shippingService, 'computeOrderPayable').mockResolvedValue(
+			prepaid?.payable ?? 0,
+		);
 
 		const updateStatus = jest
 			.spyOn(orderService, 'updateStatus')
@@ -97,6 +110,41 @@ describe('OrderSettlementService.evaluate', () => {
 		);
 
 		expect(result).toBeNull();
+	});
+
+	// Not billed yet - a checkout since invoicing moved to confirmation
+	it('confirms an unbilled pending order its captured payment covers', async () => {
+		const { result, updateStatus } = await run(
+			OrderStatusEnum.PENDING,
+			state({ fully_invoiced: false, all_paid: false }),
+			{ billed: false, paid: 120, payable: 120 },
+		);
+
+		expect(result).toBe(OrderStatusEnum.CONFIRMED);
+		expect(updateStatus).toHaveBeenCalledTimes(1);
+	});
+
+	it('leaves an unbilled pending order its payment does not cover', async () => {
+		const { result, updateStatus } = await run(
+			OrderStatusEnum.PENDING,
+			state({ fully_invoiced: false, all_paid: false }),
+			{ billed: false, paid: 100, payable: 120 },
+		);
+
+		expect(result).toBeNull();
+		expect(updateStatus).not.toHaveBeenCalled();
+	});
+
+	// Nobody paying for an order that costs nothing is not a payment
+	it('leaves an unbilled pending order that costs nothing', async () => {
+		const { result, updateStatus } = await run(
+			OrderStatusEnum.PENDING,
+			state({ fully_invoiced: false, all_paid: false }),
+			{ billed: false, paid: 0, payable: 0 },
+		);
+
+		expect(result).toBeNull();
+		expect(updateStatus).not.toHaveBeenCalled();
 	});
 
 	it('never moves a canceled order', async () => {

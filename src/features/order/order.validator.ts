@@ -57,6 +57,9 @@ export const ORDER_LINES_MAX = 200;
 /** The most answers one line may carry, a bound on the payload rather than a catalog rule. */
 export const ORDER_LINE_OPTIONS_MAX = 20;
 
+/** The most bundle choices one line may cite - the cart's own bound on the same payload. */
+export const ORDER_LINE_COMPONENTS_MAX = 50;
+
 export const ORDER_NOTES_MAX = 2000;
 
 /** Mirrors `varchar(10)` on `order.ref_code`. */
@@ -77,6 +80,8 @@ const validatorMessages = [
 	'invalid_ref_code',
 	'invalid_ref_number',
 	'invalid_discount',
+	'invalid_components',
+	'invalid_component_units',
 	'currency_needs_lines',
 	'discount_needs_lines',
 ] as const;
@@ -168,6 +173,38 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 	}
 
 	/**
+	 * A bundle line's choices, in the cart's own shape (`CartValidator.componentsSchema`): which
+	 * candidate each group took and how many of each tick box, never a component that comes with
+	 * the kit. Whether they fit the bundle is `OrderBundleService`'s question - it reads the
+	 * catalog.
+	 */
+	private componentsSchema() {
+		const message = this.getMessage('invalid_components');
+		const unitsMessage = this.getMessage('invalid_component_units');
+
+		return z
+			.array(
+				z.object({
+					item_id: this.validateId(message),
+					units: this.validateNumber(
+						{
+							invalid: unitsMessage,
+							only_positive: unitsMessage,
+							no_decimals: unitsMessage,
+						},
+						{
+							required: false,
+							onlyPositive: true,
+							allowDecimals: 2,
+						},
+					).optional(),
+				}),
+			)
+			.max(ORDER_LINE_COMPONENTS_MAX, { message: message })
+			.optional();
+	}
+
+	/**
 	 * A three-letter ISO code, normalized here so the document is written the one way a later
 	 * currency comparison matches.
 	 */
@@ -197,6 +234,11 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 	 * applies - so a campaign reaches a phone order without anybody remembering it. Stated, it is
 	 * costed instead of the line's best rule, clamped to the same floor.
 	 *
+	 * **A bundle is one line here.** `price` is what one bundle costs as composed and `components`
+	 * names its choices; `OrderService` explodes it into a header and one line per component
+	 * (`rules/product.md` §8.3), each at its own VAT rate - so `vat_rate` on a bundle line is not
+	 * read.
+	 *
 	 * `product_id` travels with `variant_id` because the row holds both under a composite foreign
 	 * key. The pair is checked before the insert (`OrderService.checkLines`) rather than left to
 	 * that key, which would answer a mismatch with a masked 500.
@@ -219,6 +261,7 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 				})
 				.optional(),
 			discount: this.discountSchema(),
+			components: this.componentsSchema(),
 			notes: this.notesSchema(),
 		});
 	}

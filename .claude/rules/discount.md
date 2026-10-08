@@ -124,8 +124,10 @@ own `reduction`**, and `discount_reduction` is their sum.
   and `toOrder`. A back-office shipment resolves no shipping discount - the operator states the price,
   and a price left out is quoted from the rate table only.
 - **Back office** - `OrderDiscountService.resolveForLines`, one call returning both passes, used by
-  `createEntry` and `buildLines`. The operator states the price; what comes off it is the catalog's
-  decision unless the operator types one (§8).
+  `createEntry` and `buildLines` through `OrderService.composeLines`. The operator states the price;
+  what comes off it is the catalog's decision unless the operator types one (§8). A bundle line is
+  exploded first (`rules/product.md` §8.5) and its components are what get resolved - never the
+  header - with a typed line discount refused on it (422 `bundle_discount`).
 
 ## 8. Manual discounts (back office only)
 

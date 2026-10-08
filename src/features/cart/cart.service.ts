@@ -234,6 +234,7 @@ function toOrderLines(lines: readonly CartLine[]): OrderLineInput[] {
 		discount_reduction: line.discount_reduction,
 		options: line.options,
 		notes: line.notes,
+		bundle_item_id: line.bundle_item_id ?? null,
 	});
 
 	return lines
@@ -1223,10 +1224,12 @@ export class CartService {
 
 			/*
 			 * The money is asked for before the business commits to anything: the order is left
-			 * `pending`, billed once this transaction commits, and confirmed once its documents are
-			 * paid - see `invoice.hooks.ts` for the chain that runs from there. A
-			 * cash-on-delivery checkout raises the same request; it simply stays `pending` until
-			 * the courier settles, and the operator confirms the order in the meantime.
+			 * `pending` and unbilled, still the operator's to edit, and is confirmed - and billed -
+			 * once this request is captured and covers it, or by the operator before that. See
+			 * `invoice.hooks.ts` for the chain that runs from there, and `cart.bootstrap.ts` for how
+			 * the request follows an edit. A cash-on-delivery checkout raises the same request; it
+			 * simply stays `pending` until the courier settles, and the operator confirms the order
+			 * in the meantime.
 			 */
 			await this.cashFlowService.createWithin(manager, {
 				direction: CashFlowDirectionEnum.IN,

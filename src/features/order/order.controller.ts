@@ -4,6 +4,7 @@ import OrderEntity from '@/features/order/order.entity';
 import { type OrderPolicy, orderPolicy } from '@/features/order/order.policy';
 import {
 	type OrderService,
+	type OrderWithLines,
 	orderService,
 } from '@/features/order/order.service';
 import { OrderValidator } from '@/features/order/order.validator';
@@ -67,7 +68,12 @@ class OrderController extends BaseController {
 		);
 
 		res.locals.output.meta(cacheGetResults.isCached, 'isCached');
-		res.locals.output.data(cacheGetResults.data);
+		res.locals.output.data({
+			...(cacheGetResults.data as OrderWithLines),
+			// Read past the cache - see `OrderService.isInvoiced`
+			is_invoiced: await this.orderService.isInvoiced(data.id),
+			is_client_locked: await this.orderService.isClientLocked(data.id),
+		});
 
 		res.json(res.locals.output);
 	});

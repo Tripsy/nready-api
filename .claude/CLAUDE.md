@@ -189,9 +189,11 @@ factories in `helpers/hook.helper.ts` - `createNotification` (after commit, logs
 - **`<feature>.hooks.ts` - the default.** A slot lives in the feature that *raises* it, and the
   answering feature - which already depends on it - registers from its bootstrap. The coupling
   then runs along a manifest edge and vanishes with the answering feature. `order.hooks.ts`
-  (placed, confirmed, `isOrderInvoiced`), `shipping.hooks.ts` (changed) and `cash-flow.hooks.ts`
-  (completed after commit; `recordLedgerMovement` **inside the caller's transaction**, answered
-  by `client-ledger` - keep it in-transaction) are answered by `invoice`; `invoice.hooks.ts`
+  (confirmed, `isOrderInvoiced`; placed is raised but deliberately unanswered - billing waits for
+  confirmation), `shipping.hooks.ts` (changed) and `cash-flow.hooks.ts` (completed after commit;
+  `recordLedgerMovement` **inside the caller's transaction**, answered by `client-ledger` - keep it
+  in-transaction) are answered by `invoice`; `order.hooks.ts` `syncOrderPayment` (in-transaction,
+  restates a pending order's payment request after a line edit) is answered by `cart`; `invoice.hooks.ts`
   (`notifyOrderStateChanged`, answered by the optional `order-settlement`; billable-source
   providers keyed by `invoice_source.source_type`) holds the chain's design notes. See
   `rules/settlement.md`.
