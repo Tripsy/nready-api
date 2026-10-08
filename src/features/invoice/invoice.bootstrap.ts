@@ -1,6 +1,7 @@
 import {
 	type CashFlowCompletedPayload,
 	registerCashFlowCompletedHandler,
+	registerOperationalRecordOrderResolver,
 } from '@/features/cash-flow/cash-flow.hooks';
 import { cashFlowService } from '@/features/cash-flow/cash-flow.service';
 import {
@@ -17,6 +18,7 @@ import {
 	registerOrderConfirmedHandler,
 	registerOrderInvoicedResolver,
 } from '@/features/order/order.hooks';
+import { orderService } from '@/features/order/order.service';
 import {
 	registerShippingChangedHandler,
 	type ShippingChangedPayload,
@@ -44,6 +46,8 @@ import {
  *   and whatever the client already paid is spread over them.
  * - **Shipping changed** - a priced movement added to an order already billed is billed in turn,
  *   and the order is announced either way, since a delivery arriving is what completes it.
+ * - **Cash flow records read** - names the order a movement is filed under, which `cash-flow`
+ *   holds only as an id - the same link a movement is invoiced from.
  *
  * A billing document refused over the buyer's details - a billing address deleted between
  * checkout and now - leaves the order standing with nothing billed, for the operator to raise once
@@ -64,6 +68,10 @@ export default function registerInvoiceBootstrap() {
 		async (orderId: number) =>
 			(await invoiceService.hasLiveOrderInvoice(orderId)) ||
 			(await cashFlowService.hasMovementsForOrder(orderId)),
+	);
+
+	registerOperationalRecordOrderResolver((orderId: number) =>
+		orderService.findReferenceById(orderId),
 	);
 
 	registerCashFlowCompletedHandler(

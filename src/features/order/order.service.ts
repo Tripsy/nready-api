@@ -31,6 +31,7 @@ import {
 	isOrderClientLocked,
 	isOrderInvoiced,
 	notifyOrderConfirmed,
+	notifyOrderFulfillmentReleased,
 	syncOrderPayment,
 } from '@/features/order/order.hooks';
 import {
@@ -1069,6 +1070,7 @@ export class OrderService {
 	 * When the move is the one that accepts the order, it is announced so whatever is still
 	 * unbilled is billed - the whole order on the back-office path, nothing on the checkout path,
 	 * which billed it when it was placed. Settled documents confirm an order through here too.
+	 * It is then announced a second time, for its deliveries still `pending` to be prepared.
 	 *
 	 * The announcement runs **after the write has committed** and is not part of any transaction
 	 * the caller holds - see `invoice.hooks.ts` for why, and for what a failure to raise
@@ -1096,6 +1098,10 @@ export class OrderService {
 			await notifyOrderConfirmed({
 				order_id: saved.id,
 			});
+
+			await notifyOrderFulfillmentReleased({
+				order_id: saved.id,
+			});
 		}
 
 		return saved;
@@ -1118,6 +1124,24 @@ export class OrderService {
 			.withDeleted(withDeleted)
 			.filterById(id)
 			.firstOrFail();
+	}
+
+	/**
+	 * @description Used by `invoice` to name the order a cash flow movement is filed under
+	 *
+	 * The reference alone, soft-deleted orders included - the movement was raised for the
+	 * document whatever became of it since. Null when the id points at nothing: the link is a
+	 * plain id, with no foreign key to keep it honest.
+	 */
+	public findReferenceById(
+		id: number,
+	): Promise<Pick<OrderEntity, 'id' | 'ref_code' | 'ref_number'> | null> {
+		return this.repository
+			.createQuery()
+			.select(['order.id', 'order.ref_code', 'order.ref_number'])
+			.withDeleted(true)
+			.filterById(id)
+			.first();
 	}
 
 	/** The document's lines, in the order they were written - which is the order they read in. */

@@ -20,6 +20,7 @@ import CashFlowEntity, {
 import {
 	notifyCashFlowCompleted,
 	recordLedgerMovement,
+	resolveOperationalRecordOrder,
 } from '@/features/cash-flow/cash-flow.hooks';
 import { getCashFlowRepository } from '@/features/cash-flow/cash-flow.repository';
 import {
@@ -998,6 +999,11 @@ export class CashFlowService {
 							id: entry.entity_id,
 							withDeleted: false,
 						});
+						break;
+					case OperationalRecordTypeEnum.ORDER:
+						entry.order = await resolveOperationalRecordOrder(
+							entry.entity_id,
+						);
 						break;
 				}
 			}),

@@ -1,5 +1,6 @@
 import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import type CashFlowEntity from '@/features/cash-flow/cash-flow.entity';
+import type { OperationalRecordOrder } from '@/features/cash-flow/cash-flow.hooks';
 import {
 	type CashFlowCategory,
 	CashFlowCategoryEnum,
@@ -18,9 +19,9 @@ import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
  * `invoice_payment` - the movement settles the one order in full or it settles nothing, and a
  * payment split across several orders is recorded on the invoices instead.
  *
- * Nothing here imports `order`, and `cash_flow` deliberately does not hydrate the row the way it
- * hydrates a client or a vendor: the value is an id in a table this feature knows nothing about,
- * and reaching for it would make the ledger depend on the shop.
+ * Nothing here imports `order`: the value is an id in a table this feature knows nothing about,
+ * and reaching for it would make the ledger depend on the shop. The row is hydrated through
+ * `resolveOperationalRecordOrder` instead, answered by `invoice`, which depends on both.
  */
 export const OperationalRecordTypeEnum = {
 	CLIENT: 'client',
@@ -115,4 +116,5 @@ export default class OperationalRecordEntity extends EntityAbstract {
 export type OperationalRecordWithRelations = OperationalRecordEntity & {
 	[OperationalRecordTypeEnum.CLIENT]?: ClientEntity | null;
 	[OperationalRecordTypeEnum.VENDOR]?: VendorEntity | null;
+	[OperationalRecordTypeEnum.ORDER]?: OperationalRecordOrder | null;
 };

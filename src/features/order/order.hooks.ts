@@ -3,8 +3,8 @@ import { createNotification, createQuery } from '@/helpers/hook.helper';
 
 /**
  * What `order` announces about its own rows, and what it asks before and while rewriting one -
- * answered by whichever feature bills orders (`invoice`) or raised the order's payment (`cart`),
- * each of which depends on `order` and registers from its bootstrap. See `invoice.hooks.ts` for the
+ * answered by whichever feature bills orders (`invoice`), raised the order's payment (`cart`) or
+ * moves its goods (`shipping`), each of which depends on `order` and registers from its bootstrap. See `invoice.hooks.ts` for the
  * chain these steps belong to.
  *
  * Without a registered handler an order is placed, confirmed and edited the same, and nothing
@@ -35,6 +35,15 @@ const orderConfirmed = createNotification<OrderConfirmedPayload>(
 );
 
 /*
+ * The same moment as `orderConfirmed`, kept a slot of its own: billing and fulfillment are two
+ * steps with two owners, and a slot holds one handler. Announced after billing, so a delivery moved
+ * along here finds its order's documents already raised.
+ */
+const orderFulfillmentReleased = createNotification<OrderConfirmedPayload>(
+	'Failed to release the deliveries of a confirmed order',
+);
+
+/*
  * Unlike the notifications this one propagates a failure: it gates a write the caller has not
  * made yet, and answering `false` on an error would let lines be rewritten under an issued invoice.
  */
@@ -45,6 +54,15 @@ export const notifyOrderPlaced = orderPlaced.notify;
 
 export const registerOrderConfirmedHandler = orderConfirmed.register;
 export const notifyOrderConfirmed = orderConfirmed.notify;
+
+export const registerOrderFulfillmentHandler =
+	orderFulfillmentReleased.register;
+
+/**
+ * An accepted order's goods may now be prepared. Answered by `shipping`, which moves the order's
+ * pending deliveries to `preparing`; without it nothing moves.
+ */
+export const notifyOrderFulfillmentReleased = orderFulfillmentReleased.notify;
 
 export const registerOrderInvoicedResolver = orderInvoiced.register;
 

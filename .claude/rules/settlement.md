@@ -13,7 +13,7 @@ paths:
 
 **Order, invoice, payment and ledger run one way, through hooks each writer declares for its own
 rows** - `order.hooks.ts`, `cash-flow.hooks.ts`, `shipping.hooks.ts`, `invoice.hooks.ts` (built on
-`helpers/hook.helper.ts`; the chain's design notes are in `invoice.hooks.ts`). Two features
+`helpers/hook.helper.ts`; the chain's design notes are in `invoice.hooks.ts`). Three features
 register:
 
 - **`invoice` - billing.** `invoice.bootstrap.ts` owns order confirmed, cash flow completed and
@@ -27,6 +27,10 @@ register:
   handler → `OrderSettlementService.evaluateMany`. Absent → billing and allocation run the same,
   orders change status by hand only. Anything in `invoice` that may move an order's standing
   (issue, allocate, a delivery change) calls `notifyOrderStateChanged`, never the service.
+- **`shipping` - fulfillment.** `shipping.bootstrap.ts` answers `notifyOrderFulfillmentReleased`,
+  announced right after order confirmed (after billing, in its own slot - one handler per slot):
+  the order's `delivery` movements still `pending` move to `preparing` through
+  `ShippingService.updateStatus`, so each is announced as shipping changed like an operator's move.
 
 ## Documents
 

@@ -402,25 +402,31 @@ export class ClientAddressService {
 	}
 
 	/**
-	 * @description Used by `ShippingService.getEntryData` to name the client-address ends of a movement
+	 * @description Used by `ShippingService` to name the client-address ends of the movements it reads
 	 *
-	 * One line, most specific first - street and flat, postal code, then city, region, country - so
-	 * a form can show which address an id is. Null for an id that no longer resolves: the shipment's
-	 * key is `SET NULL`, but a read can race a removal.
+	 * One line per address, most specific first - street and flat, postal code, then city, region,
+	 * country - so a form or a list can show which address an id is. One query for the whole set, so
+	 * a page of movements costs one lookup rather than one per row. An id that no longer resolves is
+	 * absent from the map: the shipment's key is `SET NULL`, but a read can race a removal.
 	 */
-	public async describeById(id: number): Promise<string | null> {
-		const entry = await this.createPlaceQuery(Configuration.language())
-			.filterById(id)
-			.first();
+	public async describeByIds(
+		ids: readonly number[],
+	): Promise<Map<number, string>> {
+		const unique = [...new Set(ids)];
 
-		if (!entry) {
-			return null;
+		if (!unique.length) {
+			return new Map();
 		}
 
-		const snapshot = this.toSnapshot(entry);
+		const entries = await this.createPlaceQuery(Configuration.language())
+			.filterBy('id', unique, 'IN')
+			.all();
 
-		return (
-			[
+		const labels = new Map<number, string>();
+
+		for (const entry of entries) {
+			const snapshot = this.toSnapshot(entry);
+			const label = [
 				snapshot.details,
 				snapshot.postal_code,
 				snapshot.address_city,
@@ -428,8 +434,14 @@ export class ClientAddressService {
 				snapshot.address_country,
 			]
 				.filter((part): part is string => !!part)
-				.join(', ') || null
-		);
+				.join(', ');
+
+			if (label) {
+				labels.set(entry.id, label);
+			}
+		}
+
+		return labels;
 	}
 
 	/**

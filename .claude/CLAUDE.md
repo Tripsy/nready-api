@@ -192,8 +192,11 @@ factories in `helpers/hook.helper.ts` - `createNotification` (after commit, logs
   (confirmed, `isOrderInvoiced`; placed is raised but deliberately unanswered - billing waits for
   confirmation), `shipping.hooks.ts` (changed) and `cash-flow.hooks.ts` (completed after commit;
   `recordLedgerMovement` **inside the caller's transaction**, answered by `client-ledger` - keep it
-  in-transaction) are answered by `invoice`; `order.hooks.ts` `syncOrderPayment` (in-transaction,
-  restates a pending order's payment request after a line edit) is answered by `cart`; `invoice.hooks.ts`
+  in-transaction; `resolveOperationalRecordOrder` names the order a movement is filed under, which
+  `cash-flow` holds only as an id) are answered by `invoice`; `order.hooks.ts` `syncOrderPayment` (in-transaction,
+  restates a pending order's payment request after a line edit) is answered by `cart`;
+  `order.hooks.ts` `notifyOrderFulfillmentReleased` (after confirmed and its billing, moves pending
+  deliveries to `preparing`) is answered by `shipping`; `invoice.hooks.ts`
   (`notifyOrderStateChanged`, answered by the optional `order-settlement`; billable-source
   providers keyed by `invoice_source.source_type`) holds the chain's design notes. See
   `rules/settlement.md`.

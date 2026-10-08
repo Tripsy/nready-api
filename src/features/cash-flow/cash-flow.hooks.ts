@@ -14,6 +14,10 @@ import { createNotification, createQuery } from '@/helpers/hook.helper';
  * Both answering features depend on `cash-flow` and register from their bootstrap. With either
  * absent its slot is empty: money is captured, refunded and allocated the same, with no ledger kept
  * or no document settled.
+ *
+ * And one it asks while reading: `resolveOperationalRecordOrder`, answered by `invoice`, names the
+ * order a movement is filed under. `cash-flow` stores that link as a bare id in a table it does
+ * not import, so with nobody answering the record goes out unhydrated.
  */
 
 /**
@@ -57,3 +61,25 @@ export const registerClientLedgerRecorder = ledgerRecorder.register;
 
 /** Books a completed movement on its client's ledger; nothing without the ledger feature. */
 export const recordLedgerMovement = ledgerRecorder.ask;
+
+/**
+ * What a movement's records show of the order it is filed under - its reference and nothing that
+ * moves. The records are cached under the movement and swept only by writes to it, so a status or
+ * a total here would go stale the first time the order changed.
+ */
+export type OperationalRecordOrder = {
+	id: number;
+	ref_code: string;
+	ref_number: number;
+};
+
+const operationalRecordOrderResolver = createQuery<
+	[orderId: number],
+	OperationalRecordOrder | null
+>(() => null);
+
+export const registerOperationalRecordOrderResolver =
+	operationalRecordOrderResolver.register;
+
+/** The order a record names, or null when it is gone or nothing answers. */
+export const resolveOperationalRecordOrder = operationalRecordOrderResolver.ask;

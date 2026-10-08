@@ -182,7 +182,7 @@ export type ShippingCreateInput = Required<
 /** The movement as `read` hands it over, with what travels in it attached. */
 export type ShippingWithLines = ShippingEntity & {
 	lines: ShippingLineWithLabel[];
-	/** The client-address ends named in one line each, for a form to show - null when unset. */
+	/** The client-address ends named in one line each - null when unset. The list carries them too. */
 	pickup_client_address_label: string | null;
 	destination_client_address_label: string | null;
 };
@@ -818,6 +818,26 @@ export class ShippingService {
 		return saved;
 	}
 
+	/**
+	 * @description Used by `shipping.bootstrap.ts` once an order is confirmed
+	 *
+	 * Moves the order's deliveries still `pending` to `preparing`. Deliveries only - a `return`
+	 * names the order too, but goods coming back are not prepared because the order was accepted.
+	 * Each goes through `updateStatus`, so it is announced like an operator's move.
+	 */
+	public async prepareForOrder(orderId: number): Promise<void> {
+		const pending = await this.repository
+			.createQuery()
+			.filterBy('order_id', orderId)
+			.filterBy('scope', ShippingScopeEnum.DELIVERY)
+			.filterBy('status', ShippingStatusEnum.PENDING)
+			.all();
+
+		for (const entry of pending) {
+			await this.updateStatus(entry, ShippingStatusEnum.PREPARING);
+		}
+	}
+
 	public async delete(id: number) {
 		await this.repository.createQuery().filterById(id).delete();
 	}
@@ -1024,25 +1044,51 @@ export class ShippingService {
 			.withDeleted(data.withDeleted)
 			.firstOrFail();
 
-		const [lines, pickupLabel, destinationLabel] = await Promise.all([
+		const [lines, [labeled]] = await Promise.all([
 			this.getLines(entry.id),
-			entry.pickup_client_address_id
-				? this.clientAddressService.describeById(
-						entry.pickup_client_address_id,
-					)
-				: null,
-			entry.destination_client_address_id
-				? this.clientAddressService.describeById(
-						entry.destination_client_address_id,
-					)
-				: null,
+			this.attachClientAddressLabels([entry]),
 		]);
 
-		return Object.assign(entry, {
+		return Object.assign(labeled, {
 			lines: lines,
-			pickup_client_address_label: pickupLabel,
-			destination_client_address_label: destinationLabel,
 		});
+	}
+
+	/**
+	 * Names the client-address ends of a set of movements in one line each - see
+	 * `ClientAddressService.describeByIds` - one lookup for the whole set. An end frozen at dispatch
+	 * is named by its snapshot instead, but labeled all the same: deciding that is the reader's.
+	 */
+	private async attachClientAddressLabels<T extends ShippingEntity>(
+		entries: T[],
+	): Promise<
+		(T & {
+			pickup_client_address_label: string | null;
+			destination_client_address_label: string | null;
+		})[]
+	> {
+		const labels = await this.clientAddressService.describeByIds(
+			entries.flatMap((entry) =>
+				[
+					entry.pickup_client_address_id,
+					entry.destination_client_address_id,
+				].filter((id): id is number => id !== null),
+			),
+		);
+
+		const labelOf = (id: number | null) =>
+			id === null ? null : (labels.get(id) ?? null);
+
+		return entries.map((entry) =>
+			Object.assign(entry, {
+				pickup_client_address_label: labelOf(
+					entry.pickup_client_address_id,
+				),
+				destination_client_address_label: labelOf(
+					entry.destination_client_address_id,
+				),
+			}),
+		);
 	}
 
 	/**
@@ -1080,7 +1126,7 @@ export class ShippingService {
 		);
 	}
 
-	public findByFilter(
+	public async findByFilter(
 		data: ValidatorOutput<ShippingValidator, 'find'>,
 		withDeleted: boolean,
 	) {
@@ -1128,11 +1174,13 @@ export class ShippingService {
 			query.filterBy('order_id', data.filter.order_id, 'IN');
 		}
 
-		return query
+		const [entries, total] = await query
 			.withDeleted(withDeleted && data.filter.is_deleted)
 			.orderBy(data.order_by, data.direction)
 			.pagination(data.page, data.limit)
 			.all(true);
+
+		return [await this.attachClientAddressLabels(entries), total] as const;
 	}
 }
 
