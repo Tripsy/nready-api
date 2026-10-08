@@ -1,7 +1,6 @@
 {
 	"validation": {
 		"invalid_client_id": "Invalid client",
-		"invalid_billing_address_id": "Invalid billing address",
 		"invalid_currency": "Invalid currency",
 		"invalid_lines": "Invalid order lines",
 		"invalid_variant_id": "Invalid variant",
@@ -16,7 +15,8 @@
 		"invalid_discount": "Invalid discount: percent must be between 0 and 100, amount must be positive",
 		"discount_needs_lines": "The order discount can only be changed together with the order lines",
 		"invalid_components": "Invalid bundle components",
-		"invalid_component_units": "Invalid number of units for a bundle component"
+		"invalid_component_units": "Invalid number of units for a bundle component",
+		"invalid_billing_address": "Invalid billing address"
 	},
 	"error": {
 		"not_found": "Order not found",
@@ -38,7 +38,9 @@
 		"bundle_group_multiple": "Bundle variant #{{variant_id}}: a bundle choice takes exactly one option",
 		"bundle_component_ceiling": "Bundle variant #{{variant_id}}: that component may be taken at most {{max}} times",
 		"bundle_discount": "Bundle variant #{{variant_id}}: a typed discount is not offered on a bundle line; use the order discount",
-		"client_locked": "The order is already invoiced or has a payment under its client; reverse or cancel those before moving it to another client"
+		"client_locked": "The order is already invoiced or has a payment under its client; reverse or cancel those before moving it to another client",
+		"billing_locked": "The order has been invoiced; its billing details were frozen on the invoice - reverse or cancel it before changing them",
+		"billing_country_unknown": "No country is recorded under the code {{code}}"
 	},
 	"success": {
 		"create": "Order created successfully",

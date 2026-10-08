@@ -401,9 +401,14 @@ export class ShippingValidator extends BaseValidator<typeof validatorMessages> {
 				this.getMessage('invalid_scope'),
 				{ required: false },
 			),
-			order_id: this.validateId(this.getMessage('invalid_order_id'), {
-				required: false,
-			}),
+			/*
+			 * One order or several: the dashboard's order list resolves the shipments of every row
+			 * on its page in one request.
+			 */
+			order_id: this.validateIdFilter(
+				this.getMessage('invalid_order_id'),
+				{ required: false },
+			),
 			document_ref: this.validateId(
 				this.getMessage('invalid_document_ref'),
 				{ required: false },

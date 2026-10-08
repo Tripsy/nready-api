@@ -182,6 +182,9 @@ export type ShippingCreateInput = Required<
 /** The movement as `read` hands it over, with what travels in it attached. */
 export type ShippingWithLines = ShippingEntity & {
 	lines: ShippingLineWithLabel[];
+	/** The client-address ends named in one line each, for a form to show - null when unset. */
+	pickup_client_address_label: string | null;
+	destination_client_address_label: string | null;
 };
 
 /** A line with the variant's SKU and the product's name attached; either is null when unresolved. */
@@ -1021,8 +1024,24 @@ export class ShippingService {
 			.withDeleted(data.withDeleted)
 			.firstOrFail();
 
+		const [lines, pickupLabel, destinationLabel] = await Promise.all([
+			this.getLines(entry.id),
+			entry.pickup_client_address_id
+				? this.clientAddressService.describeById(
+						entry.pickup_client_address_id,
+					)
+				: null,
+			entry.destination_client_address_id
+				? this.clientAddressService.describeById(
+						entry.destination_client_address_id,
+					)
+				: null,
+		]);
+
 		return Object.assign(entry, {
-			lines: await this.getLines(entry.id),
+			lines: lines,
+			pickup_client_address_label: pickupLabel,
+			destination_client_address_label: destinationLabel,
 		});
 	}
 
@@ -1065,7 +1084,7 @@ export class ShippingService {
 		data: ValidatorOutput<ShippingValidator, 'find'>,
 		withDeleted: boolean,
 	) {
-		return this.repository
+		const query = this.repository
 			.createQuery()
 			.select([
 				...ENTRY_COLUMNS,
@@ -1088,7 +1107,6 @@ export class ShippingService {
 			.joinAndSelect('shipping.carrier', 'carrier', 'LEFT')
 			.filterById(data.filter.id)
 			.filterBy('scope', data.filter.scope)
-			.filterBy('order_id', data.filter.order_id)
 			.filterBy('document_ref', data.filter.document_ref)
 			.filterBy('pickup_warehouse_id', data.filter.pickup_warehouse_id)
 			.filterBy(
@@ -1103,7 +1121,14 @@ export class ShippingService {
 				data.filter.shipped_at_start,
 				data.filter.shipped_at_end,
 			)
-			.filterByTerm(data.filter.term)
+			.filterByTerm(data.filter.term);
+
+		// One order or several - `IN` either way, since the filter always arrives as a list
+		if (data.filter.order_id) {
+			query.filterBy('order_id', data.filter.order_id, 'IN');
+		}
+
+		return query
 			.withDeleted(withDeleted && data.filter.is_deleted)
 			.orderBy(data.order_by, data.direction)
 			.pagination(data.page, data.limit)

@@ -16,12 +16,15 @@ import ClientAddressEntity, {
 import { DocumentTypeEnum } from '@/features/document-series/document-series.entity';
 import { documentSeriesService } from '@/features/document-series/document-series.service';
 import OrderEntity, {
+	type OrderBillingAddress,
 	type OrderPaymentMethod,
 	OrderPaymentMethodEnum,
 	type OrderStatus,
 	OrderStatusEnum,
 } from '@/features/order/order.entity';
 import OrderLineEntity from '@/features/order/order-line.entity';
+import type PlaceEntity from '@/features/place/place.entity';
+import { type PlaceType, PlaceTypeEnum } from '@/features/place/place.entity';
 import ProductEntity from '@/features/product/product.entity';
 import ProductPriceEntity from '@/features/product/product-price.entity';
 import ProductVariantEntity from '@/features/product/product-variant.entity';
@@ -85,6 +88,43 @@ type SellableVariant = {
  * Numbers are allocated through `documentSeriesService`, in the seed's own transaction, exactly as
  * the application does - so the series is left consistent rather than stepped over.
  */
+/**
+ * A client billing address flattened the way `ClientAddressService.getBillingCopy` flattens it,
+ * built from rows already loaded through the seed's manager - the service reads committed data,
+ * and the seed runs inside the transaction that wrote the addresses.
+ */
+function toBillingSnapshot(entry: ClientAddressEntity): OrderBillingAddress {
+	const city = entry.address?.city ?? null;
+	const chain = [city, city?.parent, city?.parent?.parent].filter(
+		(place): place is PlaceEntity => !!place,
+	);
+	const language = Configuration.language();
+	const placeOf = (type: PlaceType) =>
+		chain.find((place) => place.place_type === type);
+	const nameOf = (type: PlaceType): string | null => {
+		const contents = placeOf(type)?.contents ?? [];
+
+		return (
+			contents.find((content) => content.language === language)?.name ??
+			contents[0]?.name ??
+			null
+		);
+	};
+	const details = [entry.address?.details, entry.details]
+		.filter((part): part is string => !!part)
+		.join(', ');
+
+	return {
+		details: details || null,
+		postal_code: entry.address?.postal_code ?? null,
+		address_city: nameOf(PlaceTypeEnum.CITY),
+		address_region: nameOf(PlaceTypeEnum.REGION),
+		address_country: nameOf(PlaceTypeEnum.COUNTRY),
+		country_code: placeOf(PlaceTypeEnum.COUNTRY)?.alpha2_code ?? null,
+		notes: entry.notes,
+	};
+}
+
 export const orderSeed: SeedDefinition = {
 	name: 'order',
 	run: async ({ manager, random }): Promise<SeedSummary> => {
@@ -104,16 +144,30 @@ export const orderSeed: SeedDefinition = {
 		const billingAddresses = await manager
 			.getRepository(ClientAddressEntity)
 			.find({
-				select: { id: true, client_id: true },
 				where: { type: ClientAddressTypeEnum.BILLING },
+				relations: {
+					address: {
+						city: {
+							contents: true,
+							parent: {
+								contents: true,
+								parent: { contents: true },
+							},
+						},
+					},
+				},
 				order: { id: 'ASC' },
 			});
 
-		const billingAddressByClient = new Map<number, number>();
+		// Copied onto each order the way checkout copies it - the order keeps its own snapshot
+		const billingAddressByClient = new Map<number, OrderBillingAddress>();
 
 		for (const address of billingAddresses) {
 			if (!billingAddressByClient.has(address.client_id)) {
-				billingAddressByClient.set(address.client_id, address.id);
+				billingAddressByClient.set(
+					address.client_id,
+					toBillingSnapshot(address),
+				);
 			}
 		}
 
@@ -191,7 +245,7 @@ export const orderSeed: SeedDefinition = {
 			const order = await repository.save(
 				repository.create({
 					client_id: clientId,
-					billing_address_id:
+					billing_address:
 						billingAddressByClient.get(clientId) ?? null,
 					ref_code: reference.code,
 					ref_number: reference.number,

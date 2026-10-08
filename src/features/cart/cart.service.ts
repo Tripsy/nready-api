@@ -1058,11 +1058,12 @@ export class CartService {
 	 * An order with nothing physical in it - only digital products or services - raises no
 	 * shipment: there is nothing to pick, and an empty parcel would sit in the dispatch queue.
 	 *
-	 * **Both addresses are referenced, not copied** - `order.billing_address_id` and the shipment's
-	 * `destination_client_address_id`. They have to be filed under the billed client with the
-	 * matching type; anything else is the client-address 404. The destination is frozen into
-	 * `shipping.destination_data` when the shipment ships, which is the point after which
-	 * re-addressing a parcel already on its way would be a lie.
+	 * **The billing address is copied, the delivery address referenced.** `order.billing_address`
+	 * is the order's own snapshot - an operator may correct it on the order while it is unbilled,
+	 * without touching the client's address book. The shipment keeps
+	 * `destination_client_address_id`, frozen into `shipping.destination_data` when it ships, the
+	 * point after which re-addressing a parcel already on its way would be a lie. Both have to be
+	 * filed under the billed client with the matching type; anything else is the client-address 404.
 	 */
 	public async toOrder(
 		cart: CartEntity,
@@ -1076,14 +1077,12 @@ export class CartService {
 		);
 
 		/*
-		 * Resolved for what they prove, not for what they return: each call refuses an address that
-		 * is not filed under this client with the matching type, which is the whole ownership check
-		 * behind the two ids below. The rows themselves are referenced, not copied.
+		 * Copied with its country code - and refused, as a 404, when it is not one of this client's
+		 * billing addresses, which is the whole ownership check.
 		 */
-		await this.clientAddressService.getOrderSnapshot(
+		const billingAddress = await this.clientAddressService.getBillingCopy(
 			data.billing_address_id,
 			client.id,
-			ClientAddressTypeEnum.BILLING,
 		);
 
 		const deliveryAddressId =
@@ -1106,14 +1105,8 @@ export class CartService {
 			throw new BadRequestError(lang('cart.error.empty'));
 		}
 
-		/*
-		 * The buyer's country, for a campaign that names one. Read separately from the ownership
-		 * check above because that returns a snapshot, whose `address_country` is a display name
-		 * frozen for the document ("Romania") rather than the code a condition matches ("ROU").
-		 */
-		const countryCode = await this.clientAddressService.getCountryCodeById(
-			data.billing_address_id,
-		);
+		// The buyer's country, for a campaign that names one - the code, not the display name
+		const countryCode = billingAddress.country_code;
 
 		/*
 		 * Priced against the client being billed and their country, neither of which the basket
@@ -1188,7 +1181,7 @@ export class CartService {
 				currency: pricing.currency,
 				exchange_rate: exchangeRate,
 				payment_method: data.payment_method,
-				billing_address_id: data.billing_address_id,
+				billing_address: billingAddress,
 				notes: data.notes ?? null,
 				lines: toOrderLines(pricing.lines),
 			});

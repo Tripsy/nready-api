@@ -374,7 +374,11 @@ export const docs: Record<
 						required: false,
 						values: Object.values(ShippingScopeEnum),
 					},
-					order_id: { type: 'number', required: false },
+					order_id: {
+						type: 'number',
+						required: false,
+						condition: 'one id, or several as filter[order_id][]',
+					},
 					document_ref: { type: 'number', required: false },
 					pickup_warehouse_id: { type: 'number', required: false },
 					destination_warehouse_id: {

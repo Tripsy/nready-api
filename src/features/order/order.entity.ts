@@ -7,7 +7,7 @@ import {
 	OneToMany,
 } from 'typeorm';
 import type ClientEntity from '@/features/client/client.entity';
-import type ClientAddressEntity from '@/features/client-address/client-address.entity';
+import type { ClientAddressSnapshot } from '@/features/client-address/client-address.entity';
 import type {
 	DiscountSnapshot,
 	DiscountType,
@@ -77,6 +77,16 @@ export type ManualDiscount = {
 	value: number;
 };
 
+/**
+ * The billing address as the order keeps it: a client-address snapshot plus the country's ISO
+ * 3166-1 alpha-2 code. The code is what discount country conditions match against
+ * (`rules/discount.md` §1); `address_country` is the country's name for the printed page, and the
+ * order service derives it from the code so the two cannot disagree.
+ */
+export type OrderBillingAddress = ClientAddressSnapshot & {
+	country_code: string | null;
+};
+
 export const OrderPaymentMethodEnum = {
 	CASH_ON_DELIVERY: 'cash_on_delivery',
 	CARD: 'card',
@@ -141,23 +151,22 @@ export default class OrderEntity extends EntityAbstract {
 	payment_method!: OrderPaymentMethod | null;
 
 	/**
-	 * Where the order is billed, named by reference rather than copied.
+	 * Where the order is billed - the order's own copy, not a reference to the client's address
+	 * book. A checkout copies the address the buyer picked; an operator may then correct it field
+	 * by field while the order is pending and unbilled, without touching what the client keeps on
+	 * file, and removing an address from the book never reaches an order.
 	 *
-	 * Null on a back-office document raised before a billing address is agreed, and null again once
-	 * that address is removed - the key is `SET NULL`, so deleting a client address stays possible
-	 * and cannot take the order with it.
-	 *
-	 * The counterparty's own details are not duplicated here either; they are read through
-	 * `client_id`. An invoice raised from the order is where they get frozen, into
-	 * `invoice.billing_details` - the invoice is the document that has to keep saying who was
-	 * billed whatever the client edits afterwards, and an order is still amendable.
+	 * Null on a back-office document raised before a billing address is agreed. The counterparty's
+	 * own details are not copied here; they are read through `client_id`. An invoice raised from the
+	 * order freezes both into `invoice.billing_details`, after which this stops changing (the update
+	 * answers 409).
 	 */
-	@Column('int', {
+	@Column('jsonb', {
 		nullable: true,
-		comment: 'The client address the order is billed to',
+		comment:
+			'Billing address snapshot, editable while the order is unbilled',
 	})
-	@Index('IDX_order_billing_address_id')
-	billing_address_id!: number | null;
+	billing_address!: OrderBillingAddress | null;
 
 	@Column('text', { nullable: true })
 	notes!: string | null;
@@ -185,14 +194,6 @@ export default class OrderEntity extends EntityAbstract {
 	})
 	@JoinColumn({ name: 'client_id' })
 	client!: ClientEntity;
-
-	// SET NULL rather than RESTRICT: a client address is deleted outright, and an order placed
-	// against it must not be what blocks the client from tidying their address book
-	@ManyToOne('ClientAddressEntity', {
-		onDelete: 'SET NULL',
-	})
-	@JoinColumn({ name: 'billing_address_id' })
-	billing_address?: ClientAddressEntity | null;
 
 	@OneToMany(
 		'OrderLineEntity',

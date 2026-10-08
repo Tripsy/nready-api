@@ -117,6 +117,12 @@ export const docs: Record<keyof typeof orderController, ApiInputDocumentation> =
 						condition:
 							'must resolve to a client that is not deleted',
 					},
+					billing_address: {
+						type: 'object',
+						required: false,
+						condition:
+							'{ details, postal_code, address_city, address_region, country_code, notes }; the country name is filled in from country_code',
+					},
 					currency: {
 						type: 'string',
 						required: true,
@@ -182,7 +188,7 @@ export const docs: Record<keyof typeof orderController, ApiInputDocumentation> =
 			withAuthErrors: true,
 			withErrors: [400, 404, 409, 422],
 			request: {
-				notes: `Provide at least one of client_id, currency, type, notes or lines. A \`status\` in the body is ignored - it has its own route. **\`lines\` replaces the whole set and is accepted only while the order is \`${OrderStatusEnum.PENDING}\`** - checkout orders included; on any other status it answers 409, because the business has accepted what the document says. Every line re-states its \`options\` as ids and they are re-resolved from the catalog, so a checkout line keeps its options only when they are sent back. \`currency\` is refused without \`lines\`: no order row holds a currency - each line carries its own - so re-denominating a document means re-stating its prices in the new one, and nothing here converts a figure. Its rate is read from the published \`exchange-rate\` series as of the order's \`created_at\`, never taken from the body`,
+				notes: `Provide at least one of client_id, billing_address, currency, notes or lines. \`billing_address\` is the order's own copy - { details, postal_code, address_city, address_region, country_code, notes }, each optional, null clearing it - and changing it answers 409 once the order is invoiced, since the invoice froze its billing details. \`country_code\` is ISO 3166-1 alpha-2; the country's name is filled in from it, and a code no country carries answers 400. Moving the order to another client without sending one clears the address on file. A \`status\` in the body is ignored - it has its own route. **\`lines\` replaces the whole set and is accepted only while the order is \`${OrderStatusEnum.PENDING}\`** - checkout orders included; on any other status it answers 409, because the business has accepted what the document says. Every line re-states its \`options\` as ids and they are re-resolved from the catalog, so a checkout line keeps its options only when they are sent back. \`currency\` is refused without \`lines\`: no order row holds a currency - each line carries its own - so re-denominating a document means re-stating its prices in the new one, and nothing here converts a figure. Its rate is read from the published \`exchange-rate\` series as of the order's \`created_at\`, never taken from the body`,
 				params: {
 					id: {
 						type: 'number',
@@ -191,6 +197,12 @@ export const docs: Record<keyof typeof orderController, ApiInputDocumentation> =
 				},
 				body: {
 					client_id: { type: 'number', required: false },
+					billing_address: {
+						type: 'object',
+						required: false,
+						condition:
+							'{ details, postal_code, address_city, address_region, country_code, notes }; null clears it; 409 once the order is invoiced',
+					},
 					currency: {
 						type: 'string',
 						required: false,

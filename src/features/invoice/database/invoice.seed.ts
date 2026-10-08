@@ -62,8 +62,8 @@ type SettleableMovement = {
 /**
  * A billing snapshot built from the client alone.
  *
- * The seeded orders carry no `billing_address_id` - `order.seed.ts` raises them without one - so
- * there is no address row to flatten here the way `InvoiceService.issue` does. The country is the
+ * Built from the client rather than from the order's own `billing_address`, which a seeded order
+ * may not have (a client with no billing address on file is still a buyer there). The country is the
  * deployment's own, since that is the jurisdiction the rest of the seeded data sits in, and it is
  * the one field a document cannot go out without.
  */

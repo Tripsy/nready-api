@@ -2674,12 +2674,9 @@ export class InvoiceService {
 	 * billing address - see `buildBillingDetailsForOrder` and `raiseForCashFlow`.
 	 */
 	/**
-	 * The buyer as the order names them: their own client columns, and the address they chose to
-	 * be billed at.
-	 *
-	 * A billing address deleted between checkout and issuing leaves `order.billing_address_id`
-	 * null - the key is `ON DELETE SET NULL` and `client_address` has no soft delete - and the
-	 * document has nowhere to be sent, so it is refused until the client is fixed.
+	 * The buyer as the order names them: their own client columns, and the order's own billing
+	 * address - the snapshot checkout copied and an operator may have corrected since. An order
+	 * with none has nowhere to send the document, so it is refused until the operator fills it in.
 	 */
 	/**
 	 * The buyer a draft would be issued to with nothing stated by hand. An order the buyer cannot
@@ -2709,19 +2706,14 @@ export class InvoiceService {
 	private async buildBillingDetailsForOrder(
 		order: OrderEntity,
 	): Promise<BillingDetails> {
-		if (!order.billing_address_id) {
+		if (!order.billing_address) {
 			throw new CustomError(
 				409,
 				lang('invoice.error.billing_address_required'),
 			);
 		}
 
-		return this.buildBillingDetails(
-			order.client_id,
-			await clientAddressService.getSnapshotById(
-				order.billing_address_id,
-			),
-		);
+		return this.buildBillingDetails(order.client_id, order.billing_address);
 	}
 
 	private async buildBillingDetails(

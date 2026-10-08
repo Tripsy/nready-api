@@ -20,6 +20,7 @@ import { documentSeriesService } from '@/features/document-series/document-serie
 import { exchangeRateService } from '@/features/exchange-rate/exchange-rate.service';
 import OrderEntity, {
 	type ManualDiscount,
+	type OrderBillingAddress,
 	type OrderPaymentMethod,
 	type OrderStatus,
 	OrderStatusEnum,
@@ -140,7 +141,7 @@ export type OrderCreateInput = {
 	 * The caller is what proves the address belongs to the billed client - a checkout resolves it
 	 * through `ClientAddressService.getOrderSnapshot`, which answers a 404 for anybody else's.
 	 */
-	billing_address_id?: number | null;
+	billing_address?: OrderBillingAddress | null;
 	notes?: string | null;
 	/**
 	 * The snapshot of an order-wide discount an operator typed, as `OrderDiscountService` costed
@@ -182,6 +183,11 @@ export type OrderTotals = {
 	total: number;
 	has_discount: boolean;
 };
+
+/** The billing address as the back-office payload states it - without the country's name. */
+type BillingAddressPayload = NonNullable<
+	ValidatorOutput<OrderValidator, 'create'>['billing_address']
+>;
 
 /** One line as the back-office payload states it, after validation. */
 type OrderLinePayload = ValidatorOutput<
@@ -251,7 +257,7 @@ const ENTRY_COLUMNS = [
 	'order.ref_number',
 	'order.status',
 	'order.payment_method',
-	'order.billing_address_id',
+	'order.billing_address',
 	'order.notes',
 	'order.discount',
 	'order.created_at',
@@ -320,6 +326,41 @@ export class OrderService {
 	 */
 	private async checkClientId(clientId: number): Promise<void> {
 		await this.clientService.findById(clientId, false);
+	}
+
+	/**
+	 * The billing address as the order stores it, from what an operator typed. The country's name
+	 * is looked up from its code rather than accepted, so the name an invoice prints and the code a
+	 * discount condition matches can never disagree; a code no country carries answers 400.
+	 */
+	private async toBillingAddress(
+		input: BillingAddressPayload | null | undefined,
+	): Promise<OrderBillingAddress | null> {
+		if (!input) {
+			return null;
+		}
+
+		const country = input.country_code
+			? await this.clientAddressService.resolveCountry(input.country_code)
+			: null;
+
+		if (input.country_code && !country) {
+			throw new BadRequestError(
+				lang('order.error.billing_country_unknown', {
+					code: input.country_code,
+				}),
+			);
+		}
+
+		return {
+			details: input.details,
+			postal_code: input.postal_code,
+			address_city: input.address_city,
+			address_region: input.address_region,
+			address_country: country?.name ?? null,
+			country_code: country?.code ?? null,
+			notes: input.notes,
+		};
 	}
 
 	/**
@@ -510,7 +551,7 @@ export class OrderService {
 				ref_number: reference.number,
 				status: OrderStatusEnum.PENDING,
 				payment_method: data.payment_method ?? null,
-				billing_address_id: data.billing_address_id ?? null,
+				billing_address: data.billing_address ?? null,
 				notes: data.notes ?? null,
 				discount: data.discount ?? null,
 			}),
@@ -618,6 +659,9 @@ export class OrderService {
 		await this.checkLines(data.lines);
 		await this.assertMayDiscount(canDiscount, data);
 
+		const billingAddress = await this.toBillingAddress(
+			data.billing_address,
+		);
 		const exchangeRate = await this.resolveExchangeRate(data.currency);
 
 		/*
@@ -625,11 +669,7 @@ export class OrderService {
 		 * agreed a billing address yet, and every country condition then fails closed - which is
 		 * the same answer the storefront gives a basket that has chosen none.
 		 */
-		const countryCode = data.billing_address_id
-			? await this.clientAddressService.getCountryCodeById(
-					data.billing_address_id,
-				)
-			: null;
+		const countryCode = billingAddress?.country_code ?? null;
 
 		const composed = await this.composeLines(
 			data.lines,
@@ -648,7 +688,7 @@ export class OrderService {
 				client_id: data.client_id,
 				currency: data.currency,
 				exchange_rate: exchangeRate,
-				billing_address_id: data.billing_address_id ?? null,
+				billing_address: billingAddress,
 				notes: data.notes ?? null,
 				discount: composed.discount,
 				lines: composed.rows,
@@ -784,6 +824,23 @@ export class OrderService {
 			}
 		}
 
+		const clientChanged =
+			data.client_id !== undefined && data.client_id !== entry.client_id;
+		const billingAddress =
+			data.billing_address === undefined
+				? entry.billing_address
+				: await this.toBillingAddress(data.billing_address);
+
+		if (
+			JSON.stringify(billingAddress) !==
+			JSON.stringify(entry.billing_address)
+		) {
+			// The issued document froze the billing details; the order would stop agreeing with it
+			if (await isOrderInvoiced(entry.id)) {
+				throw new CustomError(409, lang('order.error.billing_locked'));
+			}
+		}
+
 		if (data.lines) {
 			if (entry.status !== OrderStatusEnum.PENDING) {
 				throw new CustomError(409, lang('order.error.lines_locked'));
@@ -817,6 +874,17 @@ export class OrderService {
 		}
 
 		Object.assign(entry, pickValuesFromObject(data, paramsUpdateList));
+
+		/*
+		 * Set after the generic pass, which would copy the payload as typed - without the country
+		 * name `toBillingAddress` fills in. Moved to another client without naming an address, the
+		 * one on file was the previous client's, so it is dropped rather than kept billing somebody
+		 * else.
+		 */
+		entry.billing_address =
+			data.billing_address === undefined && clientChanged
+				? null
+				: billingAddress;
 
 		/*
 		 * The incoming set is costed before the transaction opens, not inside it: resolving the
@@ -920,11 +988,7 @@ export class OrderService {
 			? await this.resolveExchangeRate(currency, entry.created_at)
 			: denomination.exchange_rate;
 
-		const countryCode = entry.billing_address_id
-			? await this.clientAddressService.getCountryCodeById(
-					entry.billing_address_id,
-				)
-			: null;
+		const countryCode = entry.billing_address?.country_code ?? null;
 
 		const composed = await this.composeLines(
 			lines,

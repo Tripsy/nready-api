@@ -20,7 +20,7 @@ import {
  */
 export const paramsUpdateList: string[] = [
 	'client_id',
-	'billing_address_id',
+	'billing_address',
 	'notes',
 ];
 
@@ -62,13 +62,17 @@ export const ORDER_LINE_COMPONENTS_MAX = 50;
 
 export const ORDER_NOTES_MAX = 2000;
 
+/** Bounds on the billing address fields - free text, kept to what a printed address needs. */
+const BILLING_TEXT_MAX = 255;
+const BILLING_POSTAL_CODE_MAX = 20;
+
 /** Mirrors `varchar(10)` on `order.ref_code`. */
 const REF_CODE_MAX_CHARS = 10;
 
 const validatorMessages = [
 	...sharedValidatorMessages,
 	'invalid_client_id',
-	'invalid_billing_address_id',
+	'invalid_billing_address',
 	'invalid_currency',
 	'invalid_lines',
 	'invalid_variant_id',
@@ -205,6 +209,43 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 	}
 
 	/**
+	 * The order's own billing address, every field typed by the operator - a snapshot, not a
+	 * reference. `country_code` is the ISO 3166-1 alpha-2 code; the country's name is not accepted
+	 * but filled in by `OrderService` from the code, so the two cannot disagree. Null clears it.
+	 */
+	private billingAddressSchema() {
+		const message = this.getMessage('invalid_billing_address');
+		const text = (maxChars: number) =>
+			z
+				.string({ message: message })
+				.trim()
+				.max(maxChars, { message: message })
+				.transform((value) => (value === '' ? null : value))
+				.nullable()
+				.optional()
+				.transform((value) => value ?? null);
+
+		return z
+			.object({
+				details: text(BILLING_TEXT_MAX),
+				postal_code: text(BILLING_POSTAL_CODE_MAX),
+				address_city: text(BILLING_TEXT_MAX),
+				address_region: text(BILLING_TEXT_MAX),
+				country_code: z
+					.string({ message: message })
+					.trim()
+					.length(2, { message: message })
+					.transform((value) => value.toUpperCase())
+					.nullable()
+					.optional()
+					.transform((value) => value ?? null),
+				notes: text(ORDER_NOTES_MAX),
+			})
+			.nullable()
+			.optional();
+	}
+
+	/**
 	 * A three-letter ISO code, normalized here so the document is written the one way a later
 	 * currency comparison matches.
 	 */
@@ -282,15 +323,7 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 	 */
 	readonly create = z.object({
 		client_id: this.validateId(this.getMessage('invalid_client_id')),
-		/*
-		 * Optional, and not checked against the client here: whether the address is one the billed
-		 * client holds is a data question, answered by `OrderService` against `client_address`,
-		 * which owns the 404 either way.
-		 */
-		billing_address_id: this.validateId(
-			this.getMessage('invalid_billing_address_id'),
-			{ required: false },
-		),
+		billing_address: this.billingAddressSchema(),
 		currency: this.currencySchema(),
 		notes: this.notesSchema(),
 		lines: this.linesSchema(),
@@ -329,10 +362,7 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 			client_id: this.validateId(this.getMessage('invalid_client_id'), {
 				required: false,
 			}),
-			billing_address_id: this.validateId(
-				this.getMessage('invalid_billing_address_id'),
-				{ required: false },
-			),
+			billing_address: this.billingAddressSchema(),
 			currency: this.currencySchema().optional(),
 			notes: this.notesSchema(),
 			lines: this.linesSchema().optional(),

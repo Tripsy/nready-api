@@ -328,6 +328,8 @@ export class PlaceService {
 				'place.id',
 				'place.place_type',
 				'place.code',
+				// What a country is matched by - an order's billing address keeps it beside the name
+				'place.alpha2_code',
 				'place.created_at',
 				'place.deleted_at',
 

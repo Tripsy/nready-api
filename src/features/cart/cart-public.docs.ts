@@ -247,7 +247,7 @@ export const docs: Record<
 					type: 'number',
 					required: true,
 					condition:
-						'a `billing` address filed under client_id (`GET /public/client-addresses`); referenced by the order as `billing_address_id`',
+						'a `billing` address filed under client_id (`GET /public/client-addresses`); copied onto the order as its own `billing_address` snapshot',
 				},
 				delivery_address_id: {
 					type: 'number',
