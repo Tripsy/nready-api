@@ -1,11 +1,20 @@
 import { In } from 'typeorm';
 import dataSource from '@/config/data-source.config';
-import type { DiscountSnapshot } from '@/features/discount/discount.entity';
+import { lang } from '@/config/message.setup';
 import {
+	DiscountReasonEnum,
+	type DiscountScope,
+	DiscountScopeEnum,
+	type DiscountSnapshot,
+} from '@/features/discount/discount.entity';
+import {
+	computeOrderReductions,
+	computeReduction,
 	type DiscountResolutionService,
 	discountResolutionService,
 	type OrderDiscountBasis,
 } from '@/features/discount/discount-resolution.service';
+import type { ManualDiscount } from '@/features/order/order.entity';
 import ProductCategoryEntity from '@/features/product/product-category.entity';
 import ProductPriceEntity from '@/features/product/product-price.entity';
 import ProductVariantEntity from '@/features/product/product-variant.entity';
@@ -18,6 +27,8 @@ export type OrderDiscountLine = {
 	quantity: number;
 	/** Unit price excluding VAT, in the document's currency, as the operator stated it. */
 	price: number;
+	/** Replaces the catalog's line pass for this line when stated. */
+	discount?: ManualDiscount | null;
 };
 
 export type OrderLineDiscount = {
@@ -34,7 +45,10 @@ export type OrderLineDiscount = {
 export type OrderDocumentDiscount = {
 	/** Index-aligned with the lines handed in. */
 	lines: OrderLineDiscount[];
-	/** The order-wide campaign that fired, or null. */
+	/**
+	 * The order-wide discount that applied, or null - the catalog's campaign, or the operator's
+	 * typed one (`manual`), whose snapshot is kept even where it took nothing off.
+	 */
 	campaign: DiscountSnapshot | null;
 	/**
 	 * What `campaign` took off the document. **Already inside the line reductions above** - it is
@@ -63,13 +77,44 @@ export type OrderDiscountContext = {
 };
 
 /**
- * Applies the catalog's own discounts to a back-office document.
+ * The document's record of a discount an operator typed. `variant` scope for a line's own, `order`
+ * for an order-wide one - the scope `OrderService.computeTotals` reads to break the campaign share
+ * out of `discount_reduction`.
+ */
+function buildManualSnapshot(
+	discount: ManualDiscount,
+	scope: DiscountScope,
+	reduction: number,
+): DiscountSnapshot {
+	return {
+		label: lang(
+			scope === DiscountScopeEnum.ORDER
+				? 'order.discount.manual_order'
+				: 'order.discount.manual_line',
+		),
+		scope: scope,
+		reason: DiscountReasonEnum.SPECIAL_DISCOUNT,
+		type: discount.type,
+		value: discount.value,
+		manual: true,
+		reduction: reduction,
+	};
+}
+
+/**
+ * Applies discounts to a back-office document - the catalog's own, or the ones an operator typed.
  *
- * The operator states quantity and unit price; what comes off them is the catalog's decision, the
- * same one the storefront makes - so a campaign, a client agreement or a brand promotion reaches a
- * phone order without anybody remembering it exists. `DiscountResolutionService` picks the single
- * best rule per line and clamps it against `product_price.min_price`, so the floor a market
- * committed to holds here too.
+ * The operator states quantity and unit price; by default what comes off them is the catalog's
+ * decision, the same one the storefront makes - so a campaign, a client agreement or a brand
+ * promotion reaches a phone order without anybody remembering it exists. `DiscountResolutionService`
+ * picks the single best rule per line and clamps it against `product_price.min_price`, so the floor
+ * a market committed to holds here too.
+ *
+ * **A typed discount replaces the catalog's pass it stands in for, never both.** A line's own
+ * manual discount takes the place of the best catalog rule for that line; an order-wide one takes
+ * the place of the campaign, and still stacks on the lines as a campaign does. Both are costed with
+ * the catalog's own arithmetic and clamped against the same floor - the operator decides the
+ * figure, not whether the market's minimum holds. Who may type one is `OrderService`'s question.
  *
  * **A typed price still stands.** The discount is computed off whatever the operator agreed, not
  * off the list price - quoting under the catalog and then taking a percentage off that is what the
@@ -86,6 +131,7 @@ export class OrderDiscountService {
 	public async resolveForLines(
 		lines: readonly OrderDiscountLine[],
 		context: OrderDiscountContext,
+		orderDiscount?: ManualDiscount | null,
 	): Promise<OrderDocumentDiscount> {
 		if (lines.length === 0) {
 			return { lines: [], campaign: null, campaign_reduction: 0 };
@@ -102,9 +148,37 @@ export class OrderDiscountService {
 			),
 		);
 
-		const resolved = await Promise.all(
-			lines.map((line) =>
-				this.discountResolution.resolveForLine({
+		const perLine: OrderLineDiscount[] = await Promise.all(
+			lines.map(async (line): Promise<OrderLineDiscount> => {
+				const minPrice =
+					catalog.minPriceByVariant.get(line.variant_id) ?? null;
+
+				if (line.discount) {
+					/*
+					 * No `exchangeRate`: an operator's `amount` is in the document's currency,
+					 * where a catalog rule's is in the base one.
+					 */
+					const reduction = computeReduction(line.discount, {
+						variantId: line.variant_id,
+						productId: line.product_id,
+						quantity: line.quantity,
+						unitPrice: line.price,
+						minPrice: minPrice,
+					});
+
+					return {
+						snapshots: [
+							buildManualSnapshot(
+								line.discount,
+								DiscountScopeEnum.VARIANT,
+								reduction,
+							),
+						],
+						reduction: reduction,
+					};
+				}
+
+				const resolved = await this.discountResolution.resolveForLine({
 					clientId: context.clientId,
 					countryCode: context.countryCode ?? null,
 					variantId: line.variant_id,
@@ -116,18 +190,17 @@ export class OrderDiscountService {
 					quantity: line.quantity,
 					unitPrice: line.price,
 					exchangeRate: context.exchangeRate,
-					minPrice:
-						catalog.minPriceByVariant.get(line.variant_id) ?? null,
+					minPrice: minPrice,
 					orderValue: orderValue,
 					now: context.now,
-				}),
-			),
-		);
+				});
 
-		const perLine: OrderLineDiscount[] = resolved.map((line) => ({
-			snapshots: line ? [line.snapshot] : null,
-			reduction: line?.reduction ?? 0,
-		}));
+				return {
+					snapshots: resolved ? [resolved.snapshot] : null,
+					reduction: resolved?.reduction ?? 0,
+				};
+			}),
+		);
 
 		/*
 		 * The order-wide pass, stacked on top of what each line already gave up - which is why
@@ -154,15 +227,17 @@ export class OrderDiscountService {
 			};
 		});
 
-		const campaign = await this.discountResolution.resolveForOrder(
-			{
-				exchangeRate: context.exchangeRate,
-				orderValue: orderValue,
-				countryCode: context.countryCode ?? null,
-				now: context.now,
-			},
-			basis,
-		);
+		const campaign = orderDiscount
+			? this.applyManualOrderDiscount(orderDiscount, basis)
+			: await this.discountResolution.resolveForOrder(
+					{
+						exchangeRate: context.exchangeRate,
+						orderValue: orderValue,
+						countryCode: context.countryCode ?? null,
+						now: context.now,
+					},
+					basis,
+				);
 
 		if (campaign) {
 			campaign.reductions.forEach((share, index) => {
@@ -186,6 +261,30 @@ export class OrderDiscountService {
 			lines: perLine,
 			campaign: campaign?.snapshot ?? null,
 			campaign_reduction: campaign?.reduction ?? 0,
+		};
+	}
+
+	/**
+	 * An operator's order-wide discount, costed and apportioned the way a campaign is. No
+	 * `exchangeRate` for the same reason as on a line: the amount is in the document's currency.
+	 */
+	private applyManualOrderDiscount(
+		discount: ManualDiscount,
+		basis: readonly OrderDiscountBasis[],
+	): { snapshot: DiscountSnapshot; reductions: number[]; reduction: number } {
+		const reductions = computeOrderReductions(discount, basis);
+		const reduction = roundMoney(
+			reductions.reduce((sum, value) => sum + value, 0),
+		);
+
+		return {
+			snapshot: buildManualSnapshot(
+				discount,
+				DiscountScopeEnum.ORDER,
+				reduction,
+			),
+			reductions: reductions,
+			reduction: reduction,
 		};
 	}
 

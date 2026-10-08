@@ -12,7 +12,9 @@
 		"invalid_options": "Invalid product options",
 		"invalid_ref_code": "Invalid series code",
 		"invalid_ref_number": "Invalid document number",
-		"currency_needs_lines": "The currency can only be changed together with the order lines"
+		"currency_needs_lines": "The currency can only be changed together with the order lines",
+		"invalid_discount": "Invalid discount: percent must be between 0 and 100, amount must be positive",
+		"discount_needs_lines": "The order discount can only be changed together with the order lines"
 	},
 	"error": {
 		"not_found": "Order not found",
@@ -23,7 +25,8 @@
 		"lines_locked": "Only a pending order can have its lines changed",
 		"lines_invoiced": "The order has been invoiced; cancel or credit its invoice before changing the lines",
 		"lines_missing": "The order has no lines to take its currency from",
-		"exchange_rate_unavailable": "No exchange rate is available for {{currency}}; add one or wait for the daily import"
+		"exchange_rate_unavailable": "No exchange rate is available for {{currency}}; add one or wait for the daily import",
+		"discount_not_allowed": "You do not have permission to apply discounts to an order"
 	},
 	"success": {
 		"create": "Order created successfully",
@@ -39,5 +42,9 @@
 		"removed": "Order(s) {{entity_ids}} removed by user #{{auth_id}}",
 		"restored": "Order(s) {{entity_ids}} restored by user #{{auth_id}}",
 		"status": "Order #{{entity_id}} updated from {{oldStatus}} to {{newStatus}} by user #{{auth_id}}"
+	},
+	"discount": {
+		"manual_line": "Manual discount",
+		"manual_order": "Manual order discount"
 	}
 }

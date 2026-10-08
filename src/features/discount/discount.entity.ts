@@ -111,6 +111,17 @@ export type DiscountSnapshot = {
 	 */
 	discount_id?: number;
 	/**
+	 * Set when an operator typed this discount on a back-office document rather than a catalog
+	 * rule granting it - such a snapshot carries no `discount_id`. `type` and `value` are what the
+	 * operator stated, in the line currency; `scope` is `variant` for a line's own discount and
+	 * `order` for a share of an order-wide one.
+	 *
+	 * A line's own is written even when clamping left it worth nothing: the snapshot is the only
+	 * place it lives, and the dashboard reads it back to refill its form. An order-wide one keeps
+	 * its terms on `order.discount`, so its share is recorded only where it took something off.
+	 */
+	manual?: true;
+	/**
 	 * What this snapshot alone took off the line, in the line currency, after clamping.
 	 *
 	 * A line may carry several snapshots - its own best discount, then an order-wide campaign

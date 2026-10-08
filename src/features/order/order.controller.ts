@@ -34,7 +34,10 @@ class OrderController extends BaseController {
 
 		const data = this.validate(this.validator.create, req.body, res);
 
-		const entry = await this.orderService.createEntry(data);
+		const entry = await this.orderService.createEntry(
+			data,
+			this.policy.mayDiscount(res.locals.auth),
+		);
 
 		res.locals.output.data(entry);
 		res.locals.output.message(lang('order.success.create'));
@@ -83,7 +86,11 @@ class OrderController extends BaseController {
 
 		const existingEntry = await this.orderService.findById(data.id, false);
 
-		const entry = await this.orderService.updateData(existingEntry, data);
+		const entry = await this.orderService.updateData(
+			existingEntry,
+			data,
+			this.policy.mayDiscount(res.locals.auth),
+		);
 
 		res.locals.output.message(lang('order.success.update'));
 		res.locals.output.data(entry);

@@ -8,6 +8,10 @@ import {
 } from 'typeorm';
 import type ClientEntity from '@/features/client/client.entity';
 import type ClientAddressEntity from '@/features/client-address/client-address.entity';
+import type {
+	DiscountSnapshot,
+	DiscountType,
+} from '@/features/discount/discount.entity';
 import type OrderLineEntity from '@/features/order/order-line.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import type { StatusTransitions } from '@/shared/types/common.type';
@@ -62,6 +66,17 @@ export const STATUS_TRANSITIONS: StatusTransitions<OrderStatus> = {
  * How the client said they will pay. Recorded as a choice only - nothing here charges, captures or
  * reconciles a payment; `cash_flow` and `invoice` carry the money once it moves.
  */
+/**
+ * A discount an operator typed on a back-office document, in the document's currency.
+ *
+ * On a line an `amount` is per unit, as a catalog rule's is; order-wide it is taken off the basket
+ * once and apportioned like a campaign.
+ */
+export type ManualDiscount = {
+	type: DiscountType;
+	value: number;
+};
+
 export const OrderPaymentMethodEnum = {
 	CASH_ON_DELIVERY: 'cash_on_delivery',
 	CARD: 'card',
@@ -146,6 +161,23 @@ export default class OrderEntity extends EntityAbstract {
 
 	@Column('text', { nullable: true })
 	notes!: string | null;
+
+	/**
+	 * The order-wide discount an operator typed, in place of the catalog's campaign - the same
+	 * `DiscountSnapshot` each line carries a share of (`manual: true`, scope `order`), with
+	 * `reduction` stating what it took off the whole document. Written in the transaction that
+	 * writes those shares, so the two agree; the lines stay the figure VAT and totals are read
+	 * from, and this is the record of what was granted.
+	 *
+	 * Kept even at a zero `reduction` - where the floors absorbed it - because it is also the
+	 * operator's terms, carried over when the lines are next rewritten. Null on every checkout
+	 * order and on a back-office one left to the catalog, whose campaign lives on the lines alone.
+	 */
+	@Column('jsonb', {
+		nullable: true,
+		comment: 'Order-wide manual discount snapshot',
+	})
+	discount!: DiscountSnapshot | null;
 
 	// RELATIONS
 	@ManyToOne('ClientEntity', {

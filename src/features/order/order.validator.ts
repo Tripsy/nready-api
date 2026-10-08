@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Configuration } from '@/config/settings.config';
+import { DiscountTypeEnum } from '@/features/discount/discount.entity';
 import { OrderStatusEnum } from '@/features/order/order.entity';
 import { hasAtLeastOneValue } from '@/helpers/objects.helper';
 import { CURRENCY_CODE_CHARS, normalizeCurrency } from '@/helpers/shop.helper';
@@ -75,7 +76,9 @@ const validatorMessages = [
 	'invalid_options',
 	'invalid_ref_code',
 	'invalid_ref_number',
+	'invalid_discount',
 	'currency_needs_lines',
+	'discount_needs_lines',
 ] as const;
 
 export class OrderValidator extends BaseValidator<typeof validatorMessages> {
@@ -100,14 +103,15 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 	/**
 	 * Zero is legal, and not an oversight: a bundle header line carries no money of its own while
 	 * the component lines it explodes into carry all of it. `onlyPositive` would refuse the shape
-	 * the database's own `price >= 0` check allows.
+	 * the database's own `price >= 0` check allows. `validateNumber` defaults `onlyPositive` to
+	 * true, so it is switched off explicitly - here and on the VAT rate, which a header carries as 0.
 	 */
 	private priceSchema(): z.ZodType<number> {
 		const message = this.getMessage('invalid_price');
 
 		return this.validateNumber(
 			{ invalid: message, no_decimals: message },
-			{ required: true, allowDecimals: 2 },
+			{ required: true, onlyPositive: false, allowDecimals: 2 },
 		).refine((value) => value >= 0 && value <= PRICE_MAX, {
 			message: message,
 		});
@@ -118,7 +122,7 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 
 		return this.validateNumber(
 			{ invalid: message, no_decimals: message },
-			{ required: true, allowDecimals: 2 },
+			{ required: true, onlyPositive: false, allowDecimals: 2 },
 		).refine((value) => value >= 0 && value <= VAT_RATE_MAX, {
 			message: message,
 		});
@@ -129,6 +133,38 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 			required: false,
 			maxChars: ORDER_NOTES_MAX,
 		}).optional();
+	}
+
+	/**
+	 * A discount the operator types, in the document's currency - `percent` up to 100, `amount`
+	 * bounded like a price. Null clears it and the catalog's own pass applies again.
+	 *
+	 * Whether the caller may type one at all is not a shape question: it is the `discount`
+	 * permission, which `OrderService` checks against what the document already carries.
+	 */
+	private discountSchema() {
+		const message = this.getMessage('invalid_discount');
+
+		return z
+			.object({
+				type: this.validateEnum(DiscountTypeEnum, message),
+				value: this.validateNumber(
+					{
+						invalid: message,
+						only_positive: message,
+						no_decimals: message,
+					},
+					{ required: true, onlyPositive: true, allowDecimals: 2 },
+				),
+			})
+			.refine(
+				(data) =>
+					data.value <=
+					(data.type === DiscountTypeEnum.PERCENT ? 100 : PRICE_MAX),
+				{ message: message, path: ['value'] },
+			)
+			.nullable()
+			.optional();
 	}
 
 	/**
@@ -156,10 +192,10 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 	 * cannot record a label or a delta the catalog does not hold. Whether an id is one of the
 	 * product's is not a shape question and is answered there.
 	 *
-	 * **Discounts are absent because they are not the operator's to state.** `OrderService`
+	 * **`discount` is optional and replaces the catalog for this line only.** Left out, `OrderService`
 	 * resolves the catalog's own rules over the set as it is saved, the same ones the storefront
-	 * applies, and writes what they took off onto each line - so a campaign reaches a phone order
-	 * without anybody remembering it, and cannot be handed out by typing one into the payload.
+	 * applies - so a campaign reaches a phone order without anybody remembering it. Stated, it is
+	 * costed instead of the line's best rule, clamped to the same floor.
 	 *
 	 * `product_id` travels with `variant_id` because the row holds both under a composite foreign
 	 * key. The pair is checked before the insert (`OrderService.checkLines`) rather than left to
@@ -182,6 +218,7 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 					message: this.getMessage('invalid_options'),
 				})
 				.optional(),
+			discount: this.discountSchema(),
 			notes: this.notesSchema(),
 		});
 	}
@@ -214,6 +251,8 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 		currency: this.currencySchema(),
 		notes: this.notesSchema(),
 		lines: this.linesSchema(),
+		/** Order-wide, in place of the catalog's campaign - see `discountSchema`. */
+		discount: this.discountSchema(),
 	});
 
 	readonly read = z.object({
@@ -233,6 +272,11 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 	 * answers 409 for a line set on a confirmed order, so the currency cannot move past that point
 	 * either.
 	 *
+	 * **`discount` - the order-wide one - travels with `lines` too.** It is recorded on
+	 * `order.discount`, but the money it took off lives in the lines it was apportioned onto, so it
+	 * cannot change without them being rewritten. Left out alongside a line set it carries over and
+	 * is re-apportioned; `null` clears it.
+	 *
 	 * The rate is not a payload field on either action - `OrderService` reads it from
 	 * `exchange_rate` as of the document's creation.
 	 */
@@ -249,6 +293,7 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 			currency: this.currencySchema().optional(),
 			notes: this.notesSchema(),
 			lines: this.linesSchema().optional(),
+			discount: this.discountSchema(),
 		})
 		.refine(
 			(data) =>
@@ -271,6 +316,13 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 			{
 				message: this.getMessage('currency_needs_lines'),
 				path: ['currency'],
+			},
+		)
+		.refine(
+			(data) => data.lines !== undefined || data.discount === undefined,
+			{
+				message: this.getMessage('discount_needs_lines'),
+				path: ['discount'],
 			},
 		);
 

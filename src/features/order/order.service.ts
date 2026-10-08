@@ -19,6 +19,7 @@ import { DocumentTypeEnum } from '@/features/document-series/document-series.ent
 import { documentSeriesService } from '@/features/document-series/document-series.service';
 import { exchangeRateService } from '@/features/exchange-rate/exchange-rate.service';
 import OrderEntity, {
+	type ManualDiscount,
 	type OrderPaymentMethod,
 	type OrderStatus,
 	OrderStatusEnum,
@@ -130,6 +131,11 @@ export type OrderCreateInput = {
 	 */
 	billing_address_id?: number | null;
 	notes?: string | null;
+	/**
+	 * The snapshot of an order-wide discount an operator typed, as `OrderDiscountService` costed
+	 * it. The lines arrive with their shares of it already apportioned.
+	 */
+	discount?: DiscountSnapshot | null;
 };
 
 /**
@@ -195,6 +201,38 @@ export type OrderLineWithLabel = OrderLineEntity & {
 	label: string | null;
 };
 
+/**
+ * A line set's typed discounts as one comparable string: the order-wide one, then each line's by
+ * variant, sorted so the order the lines arrive in does not count as a change.
+ */
+function describeManualDiscounts(set: {
+	discount?: ManualDiscount | null;
+	lines: readonly { variant_id: number; discount?: ManualDiscount | null }[];
+}): string {
+	const describe = (discount: ManualDiscount | null | undefined) =>
+		discount ? `${discount.type}:${Number(discount.value)}` : '-';
+
+	return JSON.stringify({
+		order: describe(set.discount),
+		lines: set.lines
+			.filter((line) => line.discount)
+			.map((line) => `${line.variant_id}=${describe(line.discount)}`)
+			.sort(),
+	});
+}
+
+/**
+ * The terms a stored order-wide snapshot was costed from - to re-apportion it over a new line set,
+ * or to tell whether a payload changes it. Null for anything an operator did not type.
+ */
+function toManualTerms(
+	snapshot: DiscountSnapshot | null | undefined,
+): ManualDiscount | null {
+	return snapshot?.manual
+		? { type: snapshot.type, value: Number(snapshot.value) }
+		: null;
+}
+
 const ENTRY_COLUMNS = [
 	'order.id',
 	'order.client_id',
@@ -204,6 +242,7 @@ const ENTRY_COLUMNS = [
 	'order.payment_method',
 	'order.billing_address_id',
 	'order.notes',
+	'order.discount',
 	'order.created_at',
 	'order.updated_at',
 	'order.deleted_at',
@@ -268,6 +307,77 @@ export class OrderService {
 	 */
 	private async checkClientId(clientId: number): Promise<void> {
 		await this.clientService.findById(clientId, false);
+	}
+
+	/**
+	 * Refuses a caller without the `discount` permission who sets, changes or clears a typed
+	 * discount. Compared against what the document already carries rather than refused on sight:
+	 * the dashboard sends every line back on an edit, its typed discounts included, and an operator
+	 * correcting a quantity on a discounted order has not handed out a discount by doing so.
+	 *
+	 * Lines are matched by variant rather than position - a line set is replaced wholesale, so
+	 * position is not an identity, and reordering it changes nothing anybody agreed. The order-wide
+	 * one is compared against `order.discount`; `entry` is absent on a create, which carries none.
+	 */
+	private async assertMayDiscount(
+		canDiscount: boolean,
+		incoming: {
+			discount?: ManualDiscount | null;
+			lines: readonly {
+				variant_id: number;
+				discount?: ManualDiscount | null;
+			}[];
+		},
+		entry?: OrderEntity,
+	): Promise<void> {
+		if (canDiscount) {
+			return;
+		}
+
+		const stored = entry
+			? {
+					discount: toManualTerms(entry.discount),
+					lines: await this.readManualLineDiscounts(entry.id),
+				}
+			: { discount: null, lines: [] };
+
+		if (
+			describeManualDiscounts(incoming) !==
+			describeManualDiscounts(stored)
+		) {
+			throw new CustomError(
+				403,
+				lang('order.error.discount_not_allowed'),
+			);
+		}
+	}
+
+	/**
+	 * The discount typed on each stored line, read back off its snapshots - the only place a
+	 * line's own lives (see `DiscountSnapshot.manual`).
+	 */
+	private async readManualLineDiscounts(
+		orderId: number,
+	): Promise<{ variant_id: number; discount: ManualDiscount | null }[]> {
+		const rows = await dataSource.getRepository(OrderLineEntity).find({
+			select: { id: true, variant_id: true, discount: true },
+			where: { order_id: orderId },
+		});
+
+		return rows.map((row) => {
+			const found = row.discount?.find(
+				(snapshot) =>
+					snapshot.manual &&
+					snapshot.scope === DiscountScopeEnum.VARIANT,
+			);
+
+			return {
+				variant_id: row.variant_id,
+				discount: found
+					? { type: found.type, value: Number(found.value) }
+					: null,
+			};
+		});
 	}
 
 	/**
@@ -389,6 +499,7 @@ export class OrderService {
 				payment_method: data.payment_method ?? null,
 				billing_address_id: data.billing_address_id ?? null,
 				notes: data.notes ?? null,
+				discount: data.discount ?? null,
 			}),
 		);
 
@@ -487,9 +598,11 @@ export class OrderService {
 	 */
 	public async createEntry(
 		data: ValidatorOutput<OrderValidator, 'create'>,
+		canDiscount: boolean,
 	): Promise<OrderEntity> {
 		await this.checkClientId(data.client_id);
 		await this.checkLines(data.lines);
+		await this.assertMayDiscount(canDiscount, data);
 
 		const exchangeRate = await this.resolveExchangeRate(data.currency);
 
@@ -518,6 +631,7 @@ export class OrderService {
 				exchangeRate: exchangeRate,
 				now: new Date(),
 			},
+			data.discount,
 		);
 
 		return dataSource.transaction((manager) =>
@@ -527,6 +641,9 @@ export class OrderService {
 				exchange_rate: exchangeRate,
 				billing_address_id: data.billing_address_id ?? null,
 				notes: data.notes ?? null,
+				discount: discounts.campaign?.manual
+					? discounts.campaign
+					: null,
 				lines: data.lines.map((line, index) => ({
 					variant_id: line.variant_id,
 					product_id: line.product_id,
@@ -563,6 +680,7 @@ export class OrderService {
 	public async updateData(
 		entry: OrderEntity,
 		data: ValidatorOutput<OrderValidator, 'update'>,
+		canDiscount: boolean,
 	): Promise<OrderEntity> {
 		if (data.client_id) {
 			await this.checkClientId(data.client_id);
@@ -582,6 +700,24 @@ export class OrderService {
 			await this.checkLines(data.lines);
 		}
 
+		/*
+		 * Left out alongside a line set, the stored order-wide terms carry over and are
+		 * re-apportioned onto the new lines; `null` clears them. The validator refuses them without
+		 * a line set, so they never change without the lines they live in being rewritten.
+		 */
+		const orderDiscount =
+			data.discount === undefined
+				? toManualTerms(entry.discount)
+				: data.discount;
+
+		if (data.lines) {
+			await this.assertMayDiscount(
+				canDiscount,
+				{ discount: orderDiscount, lines: data.lines },
+				entry,
+			);
+		}
+
 		Object.assign(entry, pickValuesFromObject(data, paramsUpdateList));
 
 		/*
@@ -590,8 +726,17 @@ export class OrderService {
 		 * those queries buys nothing. What it reads is committed data either way.
 		 */
 		const lines = data.lines
-			? await this.buildLines(entry, data.lines, data.currency)
+			? await this.buildLines(
+					entry,
+					data.lines,
+					data.currency,
+					orderDiscount,
+				)
 			: undefined;
+
+		if (lines) {
+			entry.discount = lines.discount;
+		}
 
 		const saved = await dataSource.transaction(async (manager) => {
 			const order = await manager.save(entry);
@@ -634,10 +779,13 @@ export class OrderService {
 		entry: OrderEntity,
 		lines: readonly OrderLinePayload[],
 		currency?: string,
+		orderDiscount?: ManualDiscount | null,
 	): Promise<{
 		rows: OrderLineInput[];
 		currency: string;
 		exchange_rate: number;
+		/** The typed order-wide discount as costed over these lines, for `order.discount`. */
+		discount: DiscountSnapshot | null;
 	}> {
 		const denomination = await this.readLineDenomination(entry.id);
 
@@ -657,13 +805,17 @@ export class OrderService {
 				)
 			: null;
 
-		const discounts = await this.discountService.resolveForLines(lines, {
-			clientId: entry.client_id,
-			countryCode: countryCode,
-			currency: lineCurrency,
-			exchangeRate: exchangeRate,
-			now: entry.created_at,
-		});
+		const discounts = await this.discountService.resolveForLines(
+			lines,
+			{
+				clientId: entry.client_id,
+				countryCode: countryCode,
+				currency: lineCurrency,
+				exchangeRate: exchangeRate,
+				now: entry.created_at,
+			},
+			orderDiscount,
+		);
 
 		return {
 			rows: lines.map((line, index) => ({
@@ -679,6 +831,7 @@ export class OrderService {
 			})),
 			currency: lineCurrency,
 			exchange_rate: exchangeRate,
+			discount: discounts.campaign?.manual ? discounts.campaign : null,
 		};
 	}
 

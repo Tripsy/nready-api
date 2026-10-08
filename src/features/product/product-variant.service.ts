@@ -106,6 +106,8 @@ class ProductVariantService {
 				'price.id',
 				'price.currency',
 				'price.sale_price',
+				// The floor a discount stops at, for the order editor to warn before a save
+				'price.min_price',
 			])
 			.filterById(data.filter.id)
 			.filterBy('product_variant.product_id', data.filter.product_id)

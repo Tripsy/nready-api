@@ -23,6 +23,7 @@ export const orderSample: Record<string, unknown> = {
 	ref_number: 1183,
 	status: OrderStatusEnum.CONFIRMED,
 	notes: null,
+	discount: null,
 	created_at: '2026-08-14T11:32:00.000Z',
 	updated_at: null,
 	deleted_at: null,
@@ -82,7 +83,7 @@ const statusTransitionNote = Object.entries(STATUS_TRANSITIONS)
 export const totalsNote =
 	"`totals` sums `price x quantity` per line as `subtotal`, before any discount, and states what the discounts took off beside it as `discount_reduction`; VAT is charged per line on the difference, at that line's own rate, and `total` is `subtotal - discount_reduction + vat_amount`. `order_discount_reduction` says how much of that reduction came from an order-wide campaign rather than from the lines' own rules - it is **already inside** `discount_reduction`, stated separately so a reader can see what the campaign was worth, never to be subtracted a second time";
 
-const lineNote = `Each line names a variant and the product it belongs to - the pair is checked before the insert, so a mismatch answers 400 rather than a constraint violation. Prices are the caller's: the order records the figure that was agreed. Discounts are not - the catalog's own rules are resolved over the set as it is saved, clamped against \`product_price.min_price\`, and written to the line as snapshots plus the money they took off. A line carries its own best discount and, stacked on top, its apportioned share of any order-wide campaign, each snapshot stating what it alone was worth; \`discount_reduction\` is their sum and the figure VAT is charged on. \`options\` are \`product_option\` ids: each must belong to the line's product and every question on that product must receive between its \`min_select\` and \`max_select\` answers, or the request answers 400. They are stored as snapshots carrying the option id, today's wording and the delta in the document's currency; \`price\` is the unit figure with those deltas already folded in. Up to ${ORDER_LINES_MAX} lines`;
+const lineNote = `Each line names a variant and the product it belongs to - the pair is checked before the insert, so a mismatch answers 400 rather than a constraint violation. Prices are the caller's: the order records the figure that was agreed. Discounts are the catalog's unless typed - the catalog's own rules are resolved over the set as it is saved, clamped against \`product_price.min_price\`, and written to the line as snapshots plus the money they took off. A line carries its own best discount and, stacked on top, its apportioned share of any order-wide campaign, each snapshot stating what it alone was worth; \`discount_reduction\` is their sum and the figure VAT is charged on. A typed \`discount\` ({ type: percent|amount, value }, in the document's currency) replaces the catalog: on a line it stands in for that line's best rule, an \`amount\` per unit; at the top level it stands in for the order-wide campaign and is apportioned the same way. Both are clamped to the same floor and recorded as snapshots with \`manual: true\`. Setting, changing or clearing one needs the \`order.discount\` permission (admins hold it implicitly) and answers 403 otherwise. \`options\` are \`product_option\` ids: each must belong to the line's product and every question on that product must receive between its \`min_select\` and \`max_select\` answers, or the request answers 400. They are stored as snapshots carrying the option id, today's wording and the delta in the document's currency; \`price\` is the unit figure with those deltas already folded in. Up to ${ORDER_LINES_MAX} lines`;
 
 /**
  * An order is the document a business raises against a client. It is created here only for
@@ -122,7 +123,13 @@ export const docs: Record<keyof typeof orderController, ApiInputDocumentation> =
 					lines: {
 						type: 'array',
 						required: true,
-						condition: `1 to ${ORDER_LINES_MAX} entries of { variant_id, product_id, quantity, price, vat_rate, options, notes }; quantity above 0, price and vat_rate from 0, options an optional list of product option ids`,
+						condition: `1 to ${ORDER_LINES_MAX} entries of { variant_id, product_id, quantity, price, vat_rate, options, discount, notes }; quantity above 0, price and vat_rate from 0, options an optional list of product option ids, discount an optional { type, value } replacing the catalog for that line`,
+					},
+					discount: {
+						type: 'object',
+						required: false,
+						condition:
+							'{ type: percent|amount, value }; replaces the catalog order-wide campaign; needs order.discount',
 					},
 				},
 				sample: {
@@ -192,6 +199,12 @@ export const docs: Record<keyof typeof orderController, ApiInputDocumentation> =
 						type: 'array',
 						required: false,
 						condition: 'pending only; replaces every existing line',
+					},
+					discount: {
+						type: 'object',
+						required: false,
+						condition:
+							'only together with lines, and cleared when lines come without it; changing a typed discount needs order.discount',
 					},
 				},
 				sample: {
