@@ -1,0 +1,18 @@
+# Build context for docker/dockerfile.prod - only package metadata, src/, cli/ and the tsconfigs
+# are copied, but everything sent here is uploaded to the builder first
+node_modules
+dist
+logs
+backup
+.git
+.github
+.claude
+.idea
+.env
+.env.*
+!.env.example
+*.log
+audit.json
+__probe-*
+tsconfig.probe.json
+TODO.md

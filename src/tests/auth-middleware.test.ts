@@ -31,9 +31,11 @@ jest.unstable_mockModule('@/features/user/user.repository', () => ({
 // `findByToken` is stubbed below, so the query side of this repository is never reached -
 // only the `update` the middleware makes to slide the token's expiry forward, and the
 // fire-and-forget cleanup helper.
+const tokenUpdate = jest.fn();
+
 jest.unstable_mockModule('@/features/account/account-token.repository', () => ({
 	getAccountTokenRepository: () => ({
-		update: jest.fn(),
+		update: tokenUpdate,
 		removeTokenById: jest.fn(),
 	}),
 }));
@@ -56,6 +58,7 @@ const { UserStatusEnum } = await import('@/features/user/user.entity');
 const { createFutureDate, createPastDate } = await import(
 	'@/helpers/date.helper'
 );
+const { Configuration } = await import('@/config/settings.config');
 
 const PASSWORD_HASH =
 	'$2b$10$abcdefghijklmnopqrstuvwxyz01234567890123456789012';
@@ -185,5 +188,48 @@ describe('authMiddleware -> GET /account/me', () => {
 		const response = await request(app).get('/account/me');
 
 		expect(response.status).toBe(401);
+	});
+});
+
+describe('authMiddleware -> token expiry refresh', () => {
+	function mockTokenExpiringIn(seconds: number) {
+		jest.spyOn(accountTokenService, 'findByToken').mockResolvedValue({
+			id: 1,
+			user_id: 7,
+			ident: 'token-ident',
+			metadata: { 'user-agent': 'test-agent' },
+			created_at: createPastDate(86400),
+			used_at: createPastDate(60),
+			expire_at: createFutureDate(seconds),
+		} as AccountTokenEntity);
+	}
+
+	beforeEach(() => {
+		tokenUpdate.mockClear();
+		mockUser.query.first.mockResolvedValue(getAuthUserMock());
+	});
+
+	it('only touches used_at while the token has plenty of time left', async () => {
+		mockTokenExpiringIn(Configuration.get('user.authRefreshExpiresIn') * 2);
+
+		await request(app)
+			.get('/account/me')
+			.set('Authorization', 'Bearer some_token');
+
+		expect(tokenUpdate).toHaveBeenCalledTimes(1);
+		expect(tokenUpdate.mock.calls[0][1]).not.toHaveProperty('expire_at');
+	});
+
+	it('extends the expiry once the token is inside the refresh window', async () => {
+		mockTokenExpiringIn(
+			Math.floor(Configuration.get('user.authRefreshExpiresIn') / 2),
+		);
+
+		await request(app)
+			.get('/account/me')
+			.set('Authorization', 'Bearer some_token');
+
+		expect(tokenUpdate).toHaveBeenCalledTimes(1);
+		expect(tokenUpdate.mock.calls[0][1]).toHaveProperty('expire_at');
 	});
 });

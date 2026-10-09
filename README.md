@@ -230,6 +230,73 @@ $ pnpx tsx cli/feature.ts [feature] remove
 $ pnpx tsx cli/feature.ts [feature] upgrade
 ```
 
+# 🚢 Deployment
+
+Production runs one image (`docker/dockerfile.prod`) in three roles, wired up in
+`docker-compose.prod.yml`:
+
+| Service | Does | Replicas |
+|---|---|---|
+| `migrate` | Creates the schemas and applies pending migrations, then exits. The other two start only after it exits `0` | one-shot |
+| `api` | Serves HTTP. `CRON_ENABLED=false`, `WORKER_ENABLED=false` | as many as needed |
+| `scheduler` | Runs every cron job and the email queue worker. Answers `/health`, serves no traffic | exactly 1 |
+
+Postgres and Redis are not part of the stack - point `DB_*` and `REDIS_*` at them.
+
+### 1. Environment
+
+```
+$ cp .env.example .env.production
+```
+
+Set at least `APP_URL`, `FRONTEND_URL`, `ALLOWED_ORIGINS`, `CLIENT_API_KEYS`, the `DB_*` / `REDIS_*`
+connection, and every secret (`AUTH_JWT_SECRET`, `EMAIL_JWT_SECRET`, `IP_HASH_SECRET`). The defaults
+of those secrets are placeholders. `APP_ENV`, `NODE_ENV`, `APP_PORT`, `CRON_ENABLED` and
+`WORKER_ENABLED` are set by the compose file and override whatever this file says, so a copy of
+`.env.example` (which says `development`) cannot switch off what `APP_ENV=production` turns on -
+`trust proxy`, the session user-agent check, the warning for an empty `CLIENT_API_KEYS`.
+
+### 2. Build and start
+
+```
+$ docker compose -f docker-compose.prod.yml up -d --build
+```
+
+On an empty database, create the database itself first - `migrate` creates the `system` and `logs`
+schemas and everything inside them. Then, once, the reference data and the first administrator:
+
+```
+$ docker compose -f docker-compose.prod.yml run --rm api node src/features/template/database/template.seed.js
+$ docker compose -f docker-compose.prod.yml run --rm api node src/features/permission/database/permission.seed.js
+$ docker compose -f docker-compose.prod.yml run --rm -e ADMIN_EMAIL=... -e ADMIN_PASSWORD=... api node src/features/account/database/admin.seed.js
+```
+
+### 3. Scaling the API
+
+```
+$ API_REPLICAS=3 docker compose -f docker-compose.prod.yml up -d
+```
+
+A single published port binds one replica only: put a reverse proxy in front and drop the `ports`
+mapping, or publish a range (`"3000-3002:3000"`) sized to the replica count.
+
+### Why one scheduler
+
+Every process with `CRON_ENABLED=true` schedules every job, so N API replicas would each run each job
+N times - N overdue-invoice passes, N comment digests. Running the jobs in one dedicated process
+keeps them off the request path too.
+
+A misconfigured replica does not double a run. Each run takes a Redis lock keyed by the job's name,
+so whichever process takes the lock runs the tick and the others skip it. The lock also stops a run
+starting while the previous one is still going, on any instance. A lock left by a process that died
+expires after the larger of 20x the job's `EXPECTED_RUN_TIME` and 5 minutes. The hourly
+`cron-stuck-check` then closes that run's `running` row in `cron_history` as an error, and the daily
+`cron-error-count` email reports it. With Redis unreachable, ticks are skipped rather than run
+unguarded.
+
+`cli/` is not compiled into the image. To run a job by hand, use `tsx cli/cron.ts run <name>` from a
+checkout pointed at the same database and Redis. It takes the same lock; `--force` bypasses it.
+
 # 🖥 Commands
 
 > **⚠ Warning**

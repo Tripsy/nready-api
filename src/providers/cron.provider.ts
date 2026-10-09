@@ -18,6 +18,7 @@ import {
 	getFileNameWithoutExtension,
 	getSharedFilePathsByExtension,
 } from '@/helpers/system.helper';
+import { createLock, type Lock } from '@/providers/lock.provider';
 import { getCronLogger, getSystemLogger } from '@/providers/logger.provider';
 
 export function getCronJobsPaths() {
@@ -39,6 +40,8 @@ export function getCronJobsPaths() {
 }
 
 export async function startCronJobs() {
+	setCronLogger();
+
 	const cronJobsPaths = getCronJobsPaths();
 
 	const promises = cronJobsPaths.map(async (filePath) => {
@@ -80,31 +83,66 @@ export async function startCronJobs() {
 	}
 }
 
-/**
- * Execute a cron job and save history
- *
- * @param action - Should return cron_history `content`
- * @param expectedRunTime - Expected run time in seconds
+/*
+ * How long a job's lock survives a holder that never releases it - a process killed mid-run,
+ * or a job that hangs. Generous on purpose: a job still running when its lease expires loses the
+ * lock without knowing, and the next tick, on this instance or another, starts a second copy.
+ * The floor keeps the short jobs (`EXPECTED_RUN_TIME` of a few seconds) clear of a slow
+ * database day.
  */
-async function executeCron<R extends Record<string, unknown>>(
-	action: () => Promise<R>,
-	expectedRunTime: number,
-) {
+const LOCK_LEASE_MULTIPLIER = 20;
+const LOCK_LEASE_FLOOR_MS = 5 * 60 * 1000;
+
+// `cron_history.run_time` is a smallint
+export const MAX_RUN_TIME = 32767;
+
+export function getCronLockLease(expectedRunTime: number): number {
+	return Math.max(
+		expectedRunTime * 1000 * LOCK_LEASE_MULTIPLIER,
+		LOCK_LEASE_FLOOR_MS,
+	);
+}
+
+export function createCronLock(data: CronJobData): Lock {
+	return createLock(
+		`cron:${data.name}`,
+		getCronLockLease(data.expected_run_time),
+	);
+}
+
+/**
+ * Run a cron job and record it in `cron_history`.
+ *
+ * The row is written as `running` before the job starts and completed after it ends, so a job
+ * that hangs - or a process that dies mid-run - leaves a `running` row behind instead of
+ * nothing; `cron-stuck-check` reports those.
+ *
+ * Takes no lock: the scheduler holds one through its run coordinator, the CLI takes its own.
+ */
+export async function executeCron(
+	data: CronJobData,
+): Promise<CronHistoryEntity> {
 	return requestContext.run(
 		{
 			auth_id: 0,
-			performed_by: action.name,
+			performed_by: data.name,
 			source: RequestContextSourceEnum.CRON,
 			request_id: uuid(),
 			language: 'en',
 		},
 		async () => {
+			const repository = getCronHistoryRepository();
+
 			const cronHistoryEntity = new CronHistoryEntity();
-			cronHistoryEntity.label = action.name;
+			cronHistoryEntity.label = data.name;
 			cronHistoryEntity.start_at = createCurrentDate();
+			cronHistoryEntity.end_at = null;
+			cronHistoryEntity.status = CronHistoryStatusEnum.RUNNING;
+
+			await repository.save(cronHistoryEntity);
 
 			try {
-				cronHistoryEntity.content = await action();
+				cronHistoryEntity.content = await data.jobFunction();
 				cronHistoryEntity.status = CronHistoryStatusEnum.OK;
 			} catch (error) {
 				if (error instanceof NotFoundError) {
@@ -129,26 +167,32 @@ async function executeCron<R extends Record<string, unknown>>(
 				}
 			} finally {
 				cronHistoryEntity.end_at = createCurrentDate();
-				cronHistoryEntity.run_time = dateDiff(
-					cronHistoryEntity.end_at,
-					cronHistoryEntity.start_at,
-					'seconds',
+				// Clamped to the smallint column; a run that long is a WARNING regardless
+				cronHistoryEntity.run_time = Math.min(
+					dateDiff(
+						cronHistoryEntity.start_at,
+						cronHistoryEntity.end_at,
+						'seconds',
+					),
+					MAX_RUN_TIME,
 				);
 
 				if (
-					cronHistoryEntity.run_time > expectedRunTime &&
+					cronHistoryEntity.run_time > data.expected_run_time &&
 					cronHistoryEntity.status !== CronHistoryStatusEnum.ERROR
 				) {
 					cronHistoryEntity.status = CronHistoryStatusEnum.WARNING;
 				}
 
-				await getCronHistoryRepository().save(cronHistoryEntity);
+				await repository.save(cronHistoryEntity);
 			}
+
+			return cronHistoryEntity;
 		},
 	);
 }
 
-type CronJobData = {
+export type CronJobData = {
 	name: string;
 	filePath: string;
 	schedule_expression: string;
@@ -156,7 +200,7 @@ type CronJobData = {
 	jobFunction: () => Promise<Record<string, unknown>>;
 };
 
-async function loadCronJob(filePath: string): Promise<CronJobData> {
+export async function loadCronJob(filePath: string): Promise<CronJobData> {
 	if (!fs.existsSync(filePath)) {
 		throw new ModuleError();
 	}
@@ -199,16 +243,86 @@ async function loadCronJob(filePath: string): Promise<CronJobData> {
 	};
 }
 
+/**
+ * Two guards, one per scope:
+ *
+ * - `noOverlap` stops this process starting a tick while its previous run is still going,
+ *   without a Redis round trip.
+ * - The run coordinator stops every *other* process: a tick runs only on the instance that takes
+ *   the job's lock, which is keyed by job name rather than by tick. So a second replica neither
+ *   repeats the tick nor starts the next one while the first is still running.
+ *
+ * Fail-closed: with Redis unreachable `shouldRun` rejects and node-cron skips the tick - a missed
+ * run is recovered by the next one, a duplicate run (two invoice reminders, two digests) is not.
+ */
 function scheduleCronJob(data: CronJobData) {
-	cron.schedule(
+	const lock = createCronLock(data);
+
+	const task = cron.schedule(
 		data.schedule_expression,
 		async () => {
-			await executeCron(data.jobFunction, 1);
+			await executeCron(data);
 		},
 		{
+			name: data.name,
 			timezone: Configuration.get('app.timezone') || 'UTC',
+			noOverlap: true,
+			distributed: true,
+			runCoordinator: {
+				shouldRun: () => lock.acquire(),
+				onComplete: () => lock.release(),
+			},
 		},
 	);
+
+	task.on('execution:overlap', () => {
+		getCronLogger().warn(
+			`Cron ${data.name} skipped: the previous run is still in progress`,
+		);
+	});
+
+	task.on('execution:skipped', (context) => {
+		if (context.reason === 'coordinator-error') {
+			getCronLogger().error(
+				`Cron ${data.name} skipped: its lock could not be checked`,
+			);
+
+			return;
+		}
+
+		// Normal with several instances - one of them took the tick
+		getCronLogger().debug(
+			`Cron ${data.name} skipped: the lock is held elsewhere`,
+		);
+	});
+}
+
+/**
+ * Route node-cron's own messages (a task that throws past `executeCron`, a missed tick) to the
+ * cron log instead of the console.
+ */
+function setCronLogger() {
+	cron.setLogger({
+		info: (message) => getCronLogger().info(message),
+		warn: (message) => getCronLogger().warn(message),
+		error: (message, error) =>
+			getCronLogger().error(
+				error ?? message,
+				typeof message === 'string' ? message : message.message,
+			),
+		debug: (message) =>
+			getCronLogger().debug(
+				typeof message === 'string' ? message : message.message,
+			),
+	});
+}
+
+/**
+ * Stop scheduling and wait up to `timeout` ms for the runs in progress, so the shutdown that
+ * follows does not close the database under a job still writing to it.
+ */
+export async function stopCronJobs(timeout: number): Promise<void> {
+	await cron.shutdown(timeout);
 }
 
 export default startCronJobs;

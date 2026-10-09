@@ -6,6 +6,18 @@ import type { Request } from 'express';
 export const ROOT_PATH = process.cwd();
 export const SRC_PATH = path.join(ROOT_PATH, 'src');
 
+/**
+ * The extension of the source files this process runs: `ts` under tsx and ts-jest, `js` in the
+ * compiled build. Every discovery glob (entities, migrations, routes, crons, ...) matches on it.
+ *
+ * Read off this module's own URL rather than off `APP_ENV`: the two are independent, and a build
+ * started with `APP_ENV=development` would otherwise look for `.ts` files in `dist/`, find none,
+ * and boot with no entities, routes or jobs - and no error.
+ */
+export const SOURCE_EXTENSION: 'ts' | 'js' = import.meta.url.endsWith('.ts')
+	? 'ts'
+	: 'js';
+
 export function buildRootPath(...args: string[]) {
 	return path.join(ROOT_PATH, ...args);
 }

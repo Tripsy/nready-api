@@ -1,8 +1,8 @@
 import 'dotenv/config';
 import { DataSource } from 'typeorm';
-import { buildSrcPath } from '@/helpers/system.helper';
+import { buildSrcPath, SOURCE_EXTENSION } from '@/helpers/system.helper';
 
-const filesExtension = process.env.APP_ENV === 'production' ? 'js' : 'ts';
+const filesExtension = SOURCE_EXTENSION;
 
 const dataSource = new DataSource({
 	type: 'postgres',

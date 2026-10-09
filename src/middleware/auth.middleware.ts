@@ -174,13 +174,13 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
 		}
 
 		// Refresh the token if it's close to expiration
-		const diffInSeconds = dateDiff(
-			activeToken.expire_at,
+		const secondsRemaining = dateDiff(
 			createCurrentDate(),
+			activeToken.expire_at,
 			'seconds',
 		);
 
-		if (diffInSeconds < Configuration.get('user.authRefreshExpiresIn')) {
+		if (secondsRemaining < Configuration.get('user.authRefreshExpiresIn')) {
 			await getAccountTokenRepository().update(activeToken.id, {
 				used_at: createCurrentDate(),
 				expire_at: createFutureDate(

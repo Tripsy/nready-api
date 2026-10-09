@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { hostname } from 'node:os';
 import { getObjectValue, type ObjectValue } from '@/helpers/objects.helper';
+import { SOURCE_EXTENSION } from '@/helpers/system.helper';
 import type { LogDataLevel } from '@/shared/types/log-data.type';
 import type { LogHistoryDestination } from '@/shared/types/log-history.type';
 
@@ -96,6 +97,21 @@ function loadSettings() {
 			 * to solve it.
 			 */
 			keyPrefix: process.env.REDIS_KEY_PREFIX || 'nready-api',
+		},
+		/*
+		 * Which background roles this process takes on. Both default to on - unlike the opt-in
+		 * booleans elsewhere here - because a single process doing everything is the setup a
+		 * fresh checkout runs, and turning either off by default would silently stop the jobs.
+		 *
+		 * With several API replicas, run them with both `false` and give the roles to one
+		 * dedicated process. Each cron job also takes a Redis lock per run, so a replica left
+		 * with crons on does not double a run - it only competes for it.
+		 */
+		cron: {
+			enabled: process.env.CRON_ENABLED !== 'false',
+		},
+		worker: {
+			enabled: process.env.WORKER_ENABLED !== 'false',
 		},
 		cache: {
 			ttl:
@@ -437,7 +453,7 @@ export const Configuration = {
 	},
 
 	resolveExtension: () => {
-		return Configuration.environment() === 'production' ? 'js' : 'ts';
+		return SOURCE_EXTENSION;
 	},
 
 	/**

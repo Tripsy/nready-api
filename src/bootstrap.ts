@@ -36,8 +36,12 @@ export async function bootstrap(): Promise<void> {
 		await setupListeners();
 		await initQueues();
 
-		import('@/workers/email.worker').catch(console.error);
+		if (Configuration.get('worker.enabled')) {
+			import('@/workers/email.worker').catch(console.error);
+		}
 
-		await startCronJobs();
+		if (Configuration.get('cron.enabled')) {
+			await startCronJobs();
+		}
 	}
 }
