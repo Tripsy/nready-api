@@ -909,17 +909,34 @@ export class CartService {
 	 * basket names none of them, so nothing is assumed here - but once the checkout screen has one
 	 * chosen, pricing against it is what stops a client-scoped discount appearing for the first
 	 * time on the order. The caller is what proves the client belongs to the buyer.
+	 *
+	 * `billingAddressId` does the same for the buyer's country: the billing address `toOrder` will
+	 * copy names the country an `applicable_countries` rule is judged against, here as there. It is
+	 * read only with a client, and has to be one of that client's billing addresses - somebody
+	 * else's answers the same 404 checkout gives.
 	 */
 	public async withPricing(
 		cart: CartEntity,
 		language?: string,
 		clientId?: number | null,
 		delivery?: CartDeliveryChoice | null,
+		billingAddressId?: number | null,
 	): Promise<CartWithPricing> {
 		const items = await this.getItems(cart.id);
 
+		const countryCode =
+			clientId && billingAddressId
+				? (
+						await this.clientAddressService.getBillingCopy(
+							billingAddressId,
+							clientId,
+						)
+					).country_code
+				: null;
+
 		const pricing = await this.pricing.price(cart, items, language, {
 			clientId: clientId ?? null,
+			countryCode: countryCode,
 		});
 
 		return {
@@ -931,7 +948,12 @@ export class CartService {
 			pricing: pricing,
 			delivery:
 				clientId && delivery
-					? await this.previewDelivery(pricing, clientId, delivery)
+					? await this.previewDelivery(
+							pricing,
+							clientId,
+							delivery,
+							countryCode,
+						)
 					: null,
 		};
 	}
@@ -940,14 +962,17 @@ export class CartService {
 	 * The checkout screen's delivery figure, priced the way `toOrder` will price it.
 	 *
 	 * Needs a client: the delivery address has to be proven one of theirs before its country may
-	 * decide a rate, and a client-targeted shipping discount has nobody to match without one. The
-	 * billing country is not known here, so a rule limited by `applicable_countries` fails closed
-	 * until the order is placed - the same point a country-limited goods discount first appears.
+	 * decide a rate, and a client-targeted shipping discount has nobody to match without one.
+	 *
+	 * Two countries, as in `toOrder`: the destination's decides the rate, the buyer's
+	 * (`billingCountryCode`, from the billing address) decides an `applicable_countries` rule.
+	 * Until a billing address is chosen the latter is null and such a rule fails closed.
 	 */
 	private async previewDelivery(
 		pricing: CartPricing,
 		clientId: number,
 		delivery: CartDeliveryChoice,
+		billingCountryCode: string | null,
 	): Promise<ShippingPricing | null> {
 		const isCourier = delivery.method === ShippingMethodEnum.COURIER;
 
@@ -980,7 +1005,7 @@ export class CartService {
 			},
 			{
 				clientId: clientId,
-				countryCode: null,
+				countryCode: billingCountryCode,
 				orderValue: pricing.subtotal,
 			},
 		);
@@ -1109,9 +1134,9 @@ export class CartService {
 		const countryCode = billingAddress.country_code;
 
 		/*
-		 * Priced against the client being billed and their country, neither of which the basket
-		 * could name: a discount targeting that buyer, or their market, applies here and nowhere
-		 * earlier - so the figures the order is written at can sit below the ones last quoted.
+		 * Priced against the client being billed and their country, as the checkout screen quotes
+		 * them once both are chosen (`withPricing`). A basket priced without them - browsed, or
+		 * quoted before a billing address was picked - can sit above the figures written here.
 		 */
 		const pricing = await this.pricing.price(cart, items, language, {
 			clientId: client.id,

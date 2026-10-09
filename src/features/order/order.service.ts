@@ -28,10 +28,13 @@ import OrderEntity, {
 } from '@/features/order/order.entity';
 import {
 	type AfterCommit,
+	cancelOrderPayment,
 	isOrderClientLocked,
 	isOrderInvoiced,
+	notifyOrderCanceled,
 	notifyOrderConfirmed,
 	notifyOrderFulfillmentReleased,
+	syncOrderDelivery,
 	syncOrderPayment,
 } from '@/features/order/order.hooks';
 import {
@@ -905,8 +908,8 @@ export class OrderService {
 			entry.discount = lines.discount;
 		}
 
-		// A holder rather than a `let`: TypeScript does not see the assignment inside the callback
-		const after: { run: AfterCommit | null } = { run: null };
+		// Filled inside the callback, run once it has committed
+		const after: AfterCommit[] = [];
 
 		const saved = await dataSource.transaction(async (manager) => {
 			const order = await manager.save(entry);
@@ -920,8 +923,18 @@ export class OrderService {
 					lines.exchange_rate,
 				);
 
-				// A payment request still pending follows the new total, in this transaction
-				after.run = await syncOrderPayment(manager, order.id);
+				/*
+				 * In this transaction, the payment request still pending follows the new total, and
+				 * the delivery not yet shipped the new goods.
+				 */
+				for (const run of [
+					await syncOrderPayment(manager, order.id),
+					await syncOrderDelivery(manager, order.id),
+				]) {
+					if (run) {
+						after.push(run);
+					}
+				}
 			}
 
 			return order;
@@ -929,8 +942,8 @@ export class OrderService {
 
 		await cleanEntityCache(OrderEntity, saved.id);
 
-		if (after.run) {
-			await after.run();
+		for (const run of after) {
+			await run();
 		}
 
 		return saved;
@@ -1082,6 +1095,10 @@ export class OrderService {
 		entry: OrderEntity,
 		newStatus: OrderStatus,
 	): Promise<OrderEntity> {
+		if (newStatus === OrderStatusEnum.CANCELLED) {
+			return this.cancel(entry, { byBuyer: false });
+		}
+
 		assertValidStatusTransition(
 			STATUS_TRANSITIONS,
 			entry.status,
@@ -1103,6 +1120,88 @@ export class OrderService {
 				order_id: saved.id,
 			});
 		}
+
+		return saved;
+	}
+
+	/**
+	 * Cancels an order and withdraws what still waits on it: the payment requests not yet acted on
+	 * (`cancelOrderPayment`, answered by `cart`, in this transaction) and, after the commit, the
+	 * deliveries that have not left (`notifyOrderCanceled`, answered by `shipping`).
+	 *
+	 * **A buyer cancels only what nothing has acted on yet**: a pending order with no invoice and
+	 * no money past a request - each of those has to be reversed or refunded, which is the
+	 * business's call. An operator cancels past both; the documents and money stay as they are,
+	 * for the operator to reverse or refund.
+	 *
+	 * The order row is locked for the transaction and its status read again under the lock, so a
+	 * capture that confirms the order concurrently either lands first - and the cancel is refused -
+	 * or finds its request already canceled.
+	 */
+	public async cancel(
+		entry: OrderEntity,
+		options: { byBuyer: boolean },
+	): Promise<OrderEntity> {
+		if (options.byBuyer && (await isOrderInvoiced(entry.id))) {
+			throw new CustomError(
+				409,
+				lang('order.error.not_cancelable_invoiced'),
+			);
+		}
+
+		const { saved, after } = await dataSource.transaction(
+			async (manager) => {
+				const locked = await manager
+					.getRepository(OrderEntity)
+					.findOneOrFail({
+						where: { id: entry.id },
+						lock: { mode: 'pessimistic_write' },
+					});
+
+				if (
+					options.byBuyer &&
+					locked.status !== OrderStatusEnum.PENDING
+				) {
+					throw new CustomError(
+						409,
+						lang('order.error.not_cancelable'),
+					);
+				}
+
+				assertValidStatusTransition(
+					STATUS_TRANSITIONS,
+					locked.status,
+					OrderStatusEnum.CANCELLED,
+				);
+
+				const payment = await cancelOrderPayment(manager, locked.id);
+
+				// Thrown inside the transaction, so the requests withdrawn above roll back with it
+				if (options.byBuyer && payment.hasProcessed) {
+					throw new CustomError(
+						409,
+						lang('order.error.not_cancelable_paid'),
+					);
+				}
+
+				locked.status = OrderStatusEnum.CANCELLED;
+
+				return {
+					saved: await manager.save(locked),
+					after: payment.after,
+				};
+			},
+		);
+
+		await cleanEntityCache(OrderEntity, saved.id);
+
+		if (after) {
+			await after();
+		}
+
+		await notifyOrderCanceled({
+			order_id: saved.id,
+		});
 
 		return saved;
 	}

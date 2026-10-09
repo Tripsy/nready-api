@@ -668,13 +668,16 @@ export class CashFlowService {
 
 	/**
 	 * The movements filed under an order in the given statuses, read through the caller's manager.
+	 * `lockRows` takes a write lock on the movements alone (`FOR UPDATE OF cash_flow`) - the
+	 * record rows they are joined through are not written.
 	 */
 	private findForOrder(
 		manager: EntityManager,
 		orderId: number,
 		statuses: readonly CashFlowStatus[],
+		lockRows = false,
 	): Promise<CashFlowEntity[]> {
-		return manager
+		const query = manager
 			.getRepository(CashFlowEntity)
 			.createQueryBuilder('cash_flow')
 			.innerJoin(
@@ -686,8 +689,13 @@ export class CashFlowService {
 			.where('cash_flow.status IN (:...statuses)', {
 				statuses: [...statuses],
 			})
-			.orderBy('cash_flow.id')
-			.getMany();
+			.orderBy('cash_flow.id');
+
+		if (lockRows) {
+			query.setLock('pessimistic_write', undefined, ['cash_flow']);
+		}
+
+		return query.getMany();
 	}
 
 	/**
@@ -765,6 +773,60 @@ export class CashFlowService {
 		});
 
 		return request.id;
+	}
+
+	/**
+	 * @description Used by `cart`'s answer to `cancelOrderPayment`, inside the cancel transaction
+	 *
+	 * Cancels the payment requests still `pending` for an order, and reports whether money under it
+	 * got further - authorized, awaiting the payer's action or captured. Those are left as they
+	 * are: an authorization is released and a capture refunded at the gateway, neither by a status
+	 * written here. The rows read are locked, so a gateway callback racing the cancel waits for it
+	 * and then finds the request canceled.
+	 *
+	 * Returns the ids it canceled, for the caller to drop their cache once the transaction commits.
+	 */
+	public async cancelPendingForOrder(
+		manager: EntityManager,
+		orderId: number,
+	): Promise<{ hasProcessed: boolean; canceledIds: number[] }> {
+		const rows = (
+			await this.findForOrder(
+				manager,
+				orderId,
+				[
+					CashFlowStatusEnum.PENDING,
+					CashFlowStatusEnum.AUTHORIZED,
+					CashFlowStatusEnum.REQUIRES_ACTION,
+					CashFlowStatusEnum.COMPLETED,
+				],
+				true,
+			)
+		).filter((row) => row.direction === CashFlowDirectionEnum.IN);
+
+		const pending = rows.filter(
+			(row) => row.status === CashFlowStatusEnum.PENDING,
+		);
+
+		for (const row of pending) {
+			assertValidStatusTransition(
+				STATUS_TRANSITIONS,
+				row.status,
+				CashFlowStatusEnum.CANCELED,
+			);
+		}
+
+		if (pending.length > 0) {
+			await manager.getRepository(CashFlowEntity).update(
+				pending.map((row) => row.id),
+				{ status: CashFlowStatusEnum.CANCELED },
+			);
+		}
+
+		return {
+			hasProcessed: rows.length > pending.length,
+			canceledIds: pending.map((row) => row.id),
+		};
 	}
 
 	/**

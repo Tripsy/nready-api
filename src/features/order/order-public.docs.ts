@@ -108,4 +108,20 @@ export const docs: Record<
 			},
 		},
 	}),
+	cancel: helperApiInputDocumentation({
+		description: "Cancel one of the caller's own pending orders",
+		withBearerAuth: true,
+		success: {
+			status: 200,
+			description: 'Order canceled',
+		},
+		withAuthErrors: true,
+		withErrors: [404, 409],
+		request: {
+			notes: "Requires an account. An order billed to somebody else's client answers 404. Answers 409 when the order is no longer pending, has been invoiced, or has a payment past a request (authorized, awaiting action or captured) - those are the business's to undo. The order's pending payment requests are canceled with it, and its deliveries that have not shipped move to `canceled`",
+			params: {
+				id: { type: 'number', required: true },
+			},
+		},
+	}),
 };

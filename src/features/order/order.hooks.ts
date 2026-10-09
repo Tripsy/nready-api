@@ -111,3 +111,66 @@ export const registerOrderPaymentSync = orderPaymentSync.register;
  * has no request to follow it - nothing moves.
  */
 export const syncOrderPayment = orderPaymentSync.ask;
+
+/** What withdrawing an order's payment found, and the work left for after the commit. */
+export type OrderPaymentCancelResult = {
+	/**
+	 * Money under the order got further than a request - authorized, awaiting the buyer's action
+	 * or captured. Nothing of it is touched; whether that blocks the cancel is the caller's call.
+	 */
+	hasProcessed: boolean;
+	after: AfterCommit | null;
+};
+
+/*
+ * Asked **inside** the transaction that cancels an order, for the reason `orderPaymentSync` is:
+ * the requests withdrawn go with the status change or not at all, and a gateway callback that
+ * arrives after the commit finds them canceled rather than capturable.
+ */
+const orderPaymentCancel = createQuery<
+	[manager: EntityManager, orderId: number],
+	OrderPaymentCancelResult
+>(() => ({ hasProcessed: false, after: null }));
+
+export const registerOrderPaymentCancel = orderPaymentCancel.register;
+
+/**
+ * Withdraws the payment requests still `pending` for an order being canceled. Answered by `cart`,
+ * which raised them at checkout; with nothing registered there is nothing to withdraw.
+ */
+export const cancelOrderPayment = orderPaymentCancel.ask;
+
+/** An order has just been canceled, whoever canceled it - its buyer or an operator. */
+export type OrderCanceledPayload = {
+	order_id: number;
+};
+
+const orderCanceled = createNotification<OrderCanceledPayload>(
+	'Failed to withdraw the deliveries of a canceled order',
+);
+
+export const registerOrderCanceledHandler = orderCanceled.register;
+
+/**
+ * Answered by `shipping`, which cancels the deliveries that have not left yet; without it they
+ * stay where they are, for the operator to settle.
+ */
+export const notifyOrderCanceled = orderCanceled.notify;
+
+/*
+ * Asked **inside** the transaction that rewrites a pending order's lines, next to
+ * `orderPaymentSync`: the goods the delivery carries move with the lines or not at all, so a
+ * delivery never lists what the order no longer holds. Propagates for the same reason.
+ */
+const orderDeliverySync = createQuery<
+	[manager: EntityManager, orderId: number],
+	AfterCommit | null
+>(() => null);
+
+export const registerOrderDeliverySync = orderDeliverySync.register;
+
+/**
+ * Brings the goods of an order's one delivery not yet shipped in line with its rewritten lines.
+ * Answered by `shipping`; with nothing registered the delivery keeps what it listed.
+ */
+export const syncOrderDelivery = orderDeliverySync.ask;

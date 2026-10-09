@@ -39,7 +39,7 @@ const publicSample: Record<string, unknown> = {
 };
 
 /**
- * The storefront half: delivery tracking for one of the caller's own orders. Documented as its own
+ * The storefront half: delivery tracking for the caller's own orders. Documented as its own
  * module because docs are registered under the route file's own name.
  */
 export const docs: Record<
@@ -61,6 +61,28 @@ export const docs: Record<
 			notes: "Requires an account. An order billed to somebody else's client answers 404, the same as a missing one. Unpaginated. `destination_data` is null until the movement ships - the address is frozen at that transition. `pickup_warehouse` is where a `self_pickup` is collected from. `price` excludes VAT; what the client paid is `(price - discount_reduction) x (1 + vat_rate / 100)`",
 			params: {
 				order_id: { type: 'number', required: true },
+			},
+		},
+	}),
+	findByOrders: helperApiInputDocumentation({
+		description: "The movements of several of the caller's own orders",
+		withBearerAuth: true,
+		success: {
+			status: 200,
+			description:
+				'Deliveries and returns against the orders asked about, oldest first',
+			dataSample: { entries: [publicSample] },
+		},
+		withAuthErrors: true,
+		withErrors: [422],
+		request: {
+			notes: "Requires an account. Built for a page of the order history: one request for every row instead of one per order. Up to 50 ids, repeated as `order_id=1&order_id=2`. An id that is missing or billed to somebody else's client is not an error - it contributes no entries. Group by `order_id`. Unpaginated; the entry shape is the one `find` returns",
+			query: {
+				order_id: {
+					type: 'array' as const,
+					required: true,
+					format: 'number[]',
+				},
 			},
 		},
 	}),

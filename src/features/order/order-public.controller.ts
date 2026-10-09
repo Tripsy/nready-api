@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import { lang } from '@/config/message.setup';
 import { type OrderPolicy, orderPolicy } from '@/features/order/order.policy';
 import {
 	type OrderService,
@@ -13,8 +14,9 @@ import { BaseController } from '@/shared/abstracts/controller.abstract';
  * but an account is - an order belongs to the account through `client.user_id`, the same link
  * checkout and review verification read, and every read here is scoped by it in the query itself.
  *
- * Read-only. What a buyer may still change about an order is nothing: the lines are adjusted by
- * the business while it is pending, and the status moves on the business's decisions.
+ * Read-only but for one move: a buyer may withdraw an order nothing has acted on yet - see
+ * `OrderService.cancel`. The lines are adjusted by the business while it is pending, and every
+ * other status moves on the business's decisions.
  */
 class OrderPublicController extends BaseController {
 	constructor(
@@ -67,6 +69,21 @@ class OrderPublicController extends BaseController {
 		const entry = await this.orderService.getOwnEntryData(data.id, userId);
 
 		res.locals.output.data(entry);
+
+		res.json(res.locals.output);
+	});
+
+	public cancel = asyncHandler(async (req: Request, res: Response) => {
+		const userId = this.resolveOwner(res);
+
+		const data = this.validate(this.validator.read, req.params, res);
+
+		// Somebody else's order answers 404 here, before anything about it is weighed
+		const entry = await this.orderService.findOwnById(data.id, userId);
+
+		await this.orderService.cancel(entry, { byBuyer: true });
+
+		res.locals.output.message(lang('order.success.canceled'));
 
 		res.json(res.locals.output);
 	});

@@ -63,13 +63,19 @@ export const docs: Record<
 					required: false,
 					values: Object.values(ShippingMethodEnum),
 					condition:
-						'with client_id, quotes the delivery into `delivery`: the flat rate for the destination country (domestic or international, VAT included, converted into the cart currency) with the best `shipping` discount for that client applied. A self pickup is free. `delivery` stays null without client_id, for a courier with no delivery_address_id, or when nothing in the cart is physical. A rule limited by applicable_countries does not show here - the billing country is only known at checkout. `pricing.total` stays the goods alone',
+						'with client_id, quotes the delivery into `delivery`: the flat rate for the destination country (domestic or international, VAT included, converted into the cart currency) with the best `shipping` discount for that client applied. A self pickup is free. `delivery` stays null without client_id, for a courier with no delivery_address_id, or when nothing in the cart is physical. A rule limited by applicable_countries shows only once billing_address_id names the billing country. `pricing.total` stays the goods alone',
 				},
 				delivery_address_id: {
 					type: 'number',
 					required: false,
 					condition:
 						"a `delivery` address filed under client_id, read for a courier only; somebody else's answers 404",
+				},
+				billing_address_id: {
+					type: 'number',
+					required: false,
+					condition:
+						"a `billing` address filed under client_id, read with client_id only. Its country decides discounts limited by applicable_countries - on the goods and on the delivery - as checkout applies them, so the quote matches the order. Somebody else's answers 404",
 				},
 			},
 		},

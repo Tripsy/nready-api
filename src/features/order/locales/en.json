@@ -40,14 +40,18 @@
 		"bundle_discount": "Bundle variant #{{variant_id}}: a typed discount is not offered on a bundle line; use the order discount",
 		"client_locked": "The order is already invoiced or has a payment under its client; reverse or cancel those before moving it to another client",
 		"billing_locked": "The order has been invoiced; its billing details were frozen on the invoice - reverse or cancel it before changing them",
-		"billing_country_unknown": "No country is recorded under the code {{code}}"
+		"billing_country_unknown": "No country is recorded under the code {{code}}",
+		"not_cancelable": "Only a pending order can be canceled",
+		"not_cancelable_invoiced": "The order has already been invoiced; contact us to cancel it",
+		"not_cancelable_paid": "A payment for this order is already being processed; contact us to cancel it"
 	},
 	"success": {
 		"create": "Order created successfully",
 		"update": "Order updated successfully",
 		"delete": "Order deleted successfully",
 		"restore": "Order restored successfully",
-		"status_update": "Order status updated successfully"
+		"status_update": "Order status updated successfully",
+		"canceled": "Order canceled"
 	},
 	"history": {
 		"created": "Order #{{entity_id}} created by user #{{auth_id}}",

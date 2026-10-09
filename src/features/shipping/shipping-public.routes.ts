@@ -7,18 +7,26 @@ export default async () => {
 	);
 
 	const config: FeatureRoutesModule<typeof shippingPublicController> = {
-		/*
-		 * Nested under the buyer's order rather than addressed by shipment id: the order is what the
-		 * caller is proven to own, and every movement read here is filtered by it. A `/:id` on the
-		 * movement itself would need its own ownership check.
-		 */
-		basePath: '/public/orders',
+		basePath: '/public',
 		controller: shippingPublicController,
 		routes: {
+			/*
+			 * Nested under the buyer's order rather than addressed by shipment id: the order is what
+			 * the caller is proven to own, and every movement read here is filtered by it. A `/:id`
+			 * on the movement itself would need its own ownership check.
+			 */
 			find: {
-				path: '/:order_id/shipments',
+				path: '/orders/:order_id/shipments',
 				method: 'get',
 				handlers: [validateParamsWhenId('order_id')],
+			},
+			/*
+			 * Not `/orders/shipments`: `order-public.routes.ts` owns `/orders/:id`, which would
+			 * take `shipments` for an id.
+			 */
+			findByOrders: {
+				path: '/shipments',
+				method: 'get',
 			},
 		},
 	};

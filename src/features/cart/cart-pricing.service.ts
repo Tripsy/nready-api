@@ -162,9 +162,9 @@ export type CartPricingContext = {
 	 * ISO 3166-1 alpha-2, from the country the billing address resolves to, for
 	 * `conditions.applicable_countries`.
 	 *
-	 * Stated only at checkout, for the same reason `clientId` is: a basket being browsed names no
-	 * address, so there is no buyer country to judge against and every country condition fails
-	 * closed until one is chosen.
+	 * Stated only on the checkout screen and at checkout, for the same reason `clientId` is: a
+	 * basket being browsed names no address, so there is no buyer country to judge against and
+	 * every country condition fails closed until a billing address is chosen.
 	 */
 	countryCode?: string | null;
 	/**

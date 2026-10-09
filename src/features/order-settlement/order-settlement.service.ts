@@ -245,7 +245,8 @@ export class OrderSettlementService {
 			(delivery) =>
 				delivery.status !== ShippingStatusEnum.DELIVERED &&
 				delivery.status !== ShippingStatusEnum.FAILED &&
-				delivery.status !== ShippingStatusEnum.RETURNED,
+				delivery.status !== ShippingStatusEnum.RETURNED &&
+				delivery.status !== ShippingStatusEnum.CANCELED,
 		);
 
 		if (underWay) {
