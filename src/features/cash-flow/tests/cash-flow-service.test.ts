@@ -490,3 +490,82 @@ describe('CashFlowService', () => {
 		cashFlowOutputPayloads.find,
 	);
 });
+
+describe('CashFlowService.restatePendingForOrder', () => {
+	const service = new CashFlowService(
+		createMockRepository<CashFlowEntity, CashFlowQuery>()
+			.repository as unknown as ReturnType<typeof getCashFlowRepository>,
+	);
+
+	/**
+	 * A manager whose movement reads return `rows`, recording the lock the read asked for, and
+	 * where the lock sat relative to running the read.
+	 */
+	const managerReturning = (rows: CashFlowEntity[]) => {
+		const calls: string[] = [];
+		const builder = {
+			innerJoin: jest.fn(() => builder),
+			where: jest.fn(() => builder),
+			orderBy: jest.fn(() => builder),
+			setLock: jest.fn(() => {
+				calls.push('setLock');
+
+				return builder;
+			}),
+			getMany: jest.fn(async () => {
+				calls.push('getMany');
+
+				return rows;
+			}),
+		};
+		const update = jest.fn(async () => ({}));
+
+		const manager = {
+			getRepository: jest.fn(() => ({
+				createQueryBuilder: jest.fn(() => builder),
+				update: update,
+			})),
+		} as unknown as EntityManager;
+
+		return { manager, builder, update, calls };
+	};
+
+	beforeEach(() => {
+		jest.restoreAllMocks();
+	});
+
+	// A gateway callback racing the edit has to wait for the restated amount, or land first
+	it('locks the pending request before restating it', async () => {
+		const request = getCashFlowEntityMock({
+			id: 7,
+			status: CashFlowStatusEnum.PENDING,
+			vat_rate: 0,
+		});
+		const { manager, builder, update, calls } = managerReturning([request]);
+
+		await expect(
+			service.restatePendingForOrder(manager, 1, 150),
+		).resolves.toBe(7);
+
+		expect(builder.setLock).toHaveBeenCalledWith(
+			'pessimistic_write',
+			undefined,
+			['cash_flow'],
+		);
+		expect(calls).toEqual(['setLock', 'getMany']);
+		expect(update).toHaveBeenCalledWith(7, {
+			amount: service.inputAmount(150),
+		});
+	});
+
+	// The callback committed first: the request is no longer pending and keeps its amount
+	it('moves nothing when no request is still pending under the lock', async () => {
+		const { manager, update } = managerReturning([]);
+
+		await expect(
+			service.restatePendingForOrder(manager, 1, 150),
+		).resolves.toBeNull();
+
+		expect(update).not.toHaveBeenCalled();
+	});
+});

@@ -245,6 +245,41 @@ function describeManualDiscounts(set: {
 }
 
 /**
+ * Every field of a stored billing address - typed as a full record so a field added to
+ * `OrderBillingAddress` fails to compile here until it is compared too.
+ */
+const BILLING_ADDRESS_FIELDS = Object.keys({
+	details: true,
+	postal_code: true,
+	address_city: true,
+	address_region: true,
+	address_country: true,
+	country_code: true,
+	notes: true,
+} satisfies Record<
+	keyof OrderBillingAddress,
+	true
+>) as (keyof OrderBillingAddress)[];
+
+/**
+ * Whether two billing addresses state the same thing, field by field. Not by serializing them:
+ * `jsonb` gives the stored one back with its keys in its own order (shortest first), so a payload
+ * restating it unchanged would never compare equal. An absent field reads as `null`.
+ */
+function isSameBillingAddress(
+	a: OrderBillingAddress | null,
+	b: OrderBillingAddress | null,
+): boolean {
+	if (!a || !b) {
+		return a === b;
+	}
+
+	return BILLING_ADDRESS_FIELDS.every(
+		(field) => (a[field] ?? null) === (b[field] ?? null),
+	);
+}
+
+/**
  * The terms a stored order-wide snapshot was costed from - to re-apportion it over a new line set,
  * or to tell whether a payload changes it. Null for anything an operator did not type.
  */
@@ -850,10 +885,7 @@ export class OrderService {
 				? entry.billing_address
 				: await this.toBillingAddress(data.billing_address);
 
-		if (
-			JSON.stringify(billingAddress) !==
-			JSON.stringify(entry.billing_address)
-		) {
+		if (!isSameBillingAddress(billingAddress, entry.billing_address)) {
 			// The issued document froze the billing details; the order would stop agreeing with it
 			if (await isOrderInvoiced(entry.id)) {
 				throw new CustomError(409, lang('order.error.billing_locked'));
@@ -1105,6 +1137,11 @@ export class OrderService {
 	 * the document leaves behind. Confirming the order is the part that must not fail: billing details
 	 * an invoice refuses on are the client's to fix, and none of that is a reason to refuse an
 	 * operator the status change.
+	 *
+	 * The order row is locked and its status read again under the lock, the same as `cancel()`
+	 * does - checked against `entry` alone, a confirm racing a cancel would write over it and bill
+	 * an order whose payment requests were just withdrawn. `entry.status` is brought up to date, so
+	 * a caller moving the same entity on twice checks the second move from where the first left it.
 	 */
 	public async updateStatus(
 		entry: OrderEntity,
@@ -1114,15 +1151,26 @@ export class OrderService {
 			return this.cancel(entry, { byBuyer: false });
 		}
 
-		assertValidStatusTransition(
-			STATUS_TRANSITIONS,
-			entry.status,
-			newStatus,
-		);
+		const saved = await dataSource.transaction(async (manager) => {
+			const locked = await manager
+				.getRepository(OrderEntity)
+				.findOneOrFail({
+					where: { id: entry.id },
+					lock: { mode: 'pessimistic_write' },
+				});
 
-		entry.status = newStatus;
+			assertValidStatusTransition(
+				STATUS_TRANSITIONS,
+				locked.status,
+				newStatus,
+			);
 
-		const saved = await this.repository.save(entry);
+			locked.status = newStatus;
+
+			return manager.save(locked);
+		});
+
+		entry.status = saved.status;
 
 		await cleanEntityCache(OrderEntity, saved.id);
 

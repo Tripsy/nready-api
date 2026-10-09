@@ -836,6 +836,9 @@ export class CashFlowService {
 	 * never moved; nor is a request when the order has several pending, since which of them the new
 	 * total belongs to is not this method's to guess.
 	 *
+	 * The request is locked when read, so a gateway callback moving it on concurrently either
+	 * lands first - and the request is no longer `pending` here - or waits for the restated amount.
+	 *
 	 * Returns the id it moved, for the caller to drop its cache once the transaction commits.
 	 */
 	public async restatePendingForOrder(
@@ -844,9 +847,12 @@ export class CashFlowService {
 		grossTotal: number,
 	): Promise<number | null> {
 		const pending = (
-			await this.findForOrder(manager, orderId, [
-				CashFlowStatusEnum.PENDING,
-			])
+			await this.findForOrder(
+				manager,
+				orderId,
+				[CashFlowStatusEnum.PENDING],
+				true,
+			)
 		).filter((row) => row.direction === CashFlowDirectionEnum.IN);
 
 		if (pending.length !== 1) {
