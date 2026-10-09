@@ -161,9 +161,6 @@ vocabulary: the registry and the image feature deal in image *types*, while "cov
 own word for the role it casts the first gallery image in - `cover_image` is an article payload
 field, not a kind of image.
 
-Features are categorized as core and additional; further projects are started from this one and more
-additional features are expected over time.
-
 ### Convention-based auto-discovery
 
 The framework scans the filesystem at startup instead of using a central registry. Follow the naming
@@ -184,9 +181,6 @@ suffix and a file is picked up automatically:
   on the shared emitter. A handler the caller awaits, with one owner per step, is registered from
   bootstrap. And not for work: it is startup latency on every deployment.
 
-Listeners and bootstraps both run through `runFeatureModules()` (`src/config/feature-modules.setup.ts`),
-which owns the scan, the import, the "no default export" error and the one-line-per-pass logging.
-
 **Where a slot lives decides the dependency direction.** Slots are built with the domain-free
 factories in `helpers/hook.helper.ts` - `createNotification` (after commit, logs and swallows),
 `createQuery` (propagates, fallback when empty; also the in-transaction shape),
@@ -194,18 +188,8 @@ factories in `helpers/hook.helper.ts` - `createNotification` (after commit, logs
 
 - **`<feature>.hooks.ts` - the default.** A slot lives in the feature that *raises* it, and the
   answering feature - which already depends on it - registers from its bootstrap. The coupling
-  then runs along a manifest edge and vanishes with the answering feature. `order.hooks.ts`
-  (confirmed, `isOrderInvoiced`; placed is raised but deliberately unanswered - billing waits for
-  confirmation), `shipping.hooks.ts` (changed) and `cash-flow.hooks.ts` (completed after commit;
-  `recordLedgerMovement` **inside the caller's transaction**, answered by `client-ledger` - keep it
-  in-transaction; `resolveOperationalRecordOrder` names the order a movement is filed under, which
-  `cash-flow` holds only as an id) are answered by `invoice`; `order.hooks.ts` `syncOrderPayment` (in-transaction,
-  restates a pending order's payment request after a line edit) is answered by `cart`;
-  `order.hooks.ts` `notifyOrderFulfillmentReleased` (after confirmed and its billing, moves pending
-  deliveries to `preparing`) is answered by `shipping`; `invoice.hooks.ts`
-  (`notifyOrderStateChanged`, answered by the optional `order-settlement`; billable-source
-  providers keyed by `invoice_source.source_type`) holds the chain's design notes. See
-  `rules/settlement.md`.
+  then runs along a manifest edge and vanishes with the answering feature. The current slots and
+  who answers each are in `rules/settlement.md`; the chain's design notes are in `invoice.hooks.ts`.
 - **A provider the raiser itself depends on cannot register** (it would import back): the raiser
   registers it from its own subfolder - `invoice/sources/shipping.source.ts`.
 - **`src/shared/registries/` - polymorphic slots only**, asked by several features of one optional
@@ -214,17 +198,13 @@ factories in `helpers/hook.helper.ts` - `createNotification` (after commit, logs
   `target-image.registry.ts` (`article` / `product` ask, `image` provides). Don't add a registry
   here when one feature raises the hook - give it a `.hooks.ts`.
 
-The dev/prod file extension is resolved by `Configuration.resolveExtension()` (`ts` in dev, `js` in
-production), so discovery works against built output too.
-
 ### Configuration
 
 `src/config/settings.config.ts` centralizes all settings behind `Configuration.get('dot.path')`,
 sourced from env vars with defaults, built once and cached. The key is **type-checked** against the
 shape of `loadSettings()` and the return type is inferred - don't add `as string` / `as number` at
 call sites and don't pass an explicit generic; a cast re-hides the errors the typing exists to catch.
-Helpers: `Configuration.isEnvironment(env)`, `.environment()`, `.language()`, `.currency()`,
-`.resolveExtension()`. Prefer this over reading `process.env` directly.
+Prefer this over reading `process.env` directly.
 
 ### Response envelope, errors, and messages
 

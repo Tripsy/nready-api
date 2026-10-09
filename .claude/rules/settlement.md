@@ -138,6 +138,8 @@ register:
   `status = completed` on a cash flow by hand: go through `completeWithin`, or the entry is
   missed until `client-ledger-reconcile.cron.ts` (and the demo seed) back-fill it.
 - Allocation writes nothing to it - matching moves no money.
+- `cash-flow` holds the order a movement is filed under only as an id: reads name it through
+  `resolveOperationalRecordOrder` (`cash-flow.hooks.ts`), answered by `invoice`.
 - **An issued invoice is never canceled** - `STATUS_TRANSITIONS` gives `issued` no move. It is taken
   back only by a reversal, which numbers a document and refunds what was paid. Only a draft
   cancels, and a draft has no number or allocation to undo.
