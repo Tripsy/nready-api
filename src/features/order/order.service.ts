@@ -22,6 +22,7 @@ import OrderEntity, {
 	type ManualDiscount,
 	type OrderBillingAddress,
 	type OrderPaymentMethod,
+	OrderPaymentMethodEnum,
 	type OrderStatus,
 	OrderStatusEnum,
 	STATUS_TRANSITIONS,
@@ -29,6 +30,7 @@ import OrderEntity, {
 import {
 	type AfterCommit,
 	cancelOrderPayment,
+	findOrdersAwaitingPayment,
 	isOrderClientLocked,
 	isOrderInvoiced,
 	notifyOrderCanceled,
@@ -280,6 +282,19 @@ const CLIENT_COLUMNS = [
 	'client.company_name',
 	'client.person_name',
 	'client.contact_email',
+];
+
+/**
+ * What the buyer's own order page states about who it was billed to, beyond the listing's name:
+ * the company's registration and the contact phone. The personal identification number stays
+ * off - a buyer has no need to be shown it back, and it is the one column here worth not
+ * repeating on a page.
+ */
+const PUBLIC_DETAIL_CLIENT_COLUMNS = [
+	...CLIENT_COLUMNS,
+	'client.company_cui',
+	'client.company_reg_com',
+	'client.contact_phone',
 ];
 
 /**
@@ -1095,7 +1110,7 @@ export class OrderService {
 		entry: OrderEntity,
 		newStatus: OrderStatus,
 	): Promise<OrderEntity> {
-		if (newStatus === OrderStatusEnum.CANCELLED) {
+		if (newStatus === OrderStatusEnum.CANCELED) {
 			return this.cancel(entry, { byBuyer: false });
 		}
 
@@ -1171,7 +1186,7 @@ export class OrderService {
 				assertValidStatusTransition(
 					STATUS_TRANSITIONS,
 					locked.status,
-					OrderStatusEnum.CANCELLED,
+					OrderStatusEnum.CANCELED,
 				);
 
 				const payment = await cancelOrderPayment(manager, locked.id);
@@ -1184,7 +1199,7 @@ export class OrderService {
 					);
 				}
 
-				locked.status = OrderStatusEnum.CANCELLED;
+				locked.status = OrderStatusEnum.CANCELED;
 
 				return {
 					saved: await manager.save(locked),
@@ -1434,18 +1449,56 @@ export class OrderService {
 	): Promise<OrderWithLines> {
 		const order = await this.repository
 			.createQuery()
-			.select([...PUBLIC_ENTRY_COLUMNS, ...CLIENT_COLUMNS])
+			.select([...PUBLIC_ENTRY_COLUMNS, ...PUBLIC_DETAIL_CLIENT_COLUMNS])
 			.joinAndSelect('order.client', 'client', 'INNER')
 			.filterById(id)
 			.filterBy('client.user_id', userId)
 			.firstOrFail();
 
 		const lines = await this.getLines(order.id);
+		const [withPayment] = await this.attachAwaitingPayment([order]);
 
-		return Object.assign(order, {
+		return Object.assign(withPayment, {
 			lines: lines,
 			totals: this.computeTotals(lines),
 		});
+	}
+
+	/**
+	 * Marks the orders whose buyer still owes the payment they started - `awaiting_payment`, which
+	 * the storefront shows in place of `pending`. Not a status: the order is pending either way, and
+	 * what moves it on is the capture, through `order-settlement`.
+	 *
+	 * Only a pending order paid by card or transfer can be waiting. Cash on delivery is collected
+	 * with the parcel, so its open request says nothing about the buyer, and an order with no
+	 * method - one raised in the back office - was never asked to pay through one. One question
+	 * for the whole page, and none at all when no order on it qualifies.
+	 */
+	private async attachAwaitingPayment<
+		T extends {
+			id: number;
+			status: OrderStatus;
+			payment_method: OrderPaymentMethod | null;
+		},
+	>(orders: T[]): Promise<(T & { awaiting_payment: boolean })[]> {
+		const candidates = orders
+			.filter(
+				(order) =>
+					order.status === OrderStatusEnum.PENDING &&
+					order.payment_method !== null &&
+					order.payment_method !==
+						OrderPaymentMethodEnum.CASH_ON_DELIVERY,
+			)
+			.map((order) => order.id);
+
+		const awaiting =
+			candidates.length === 0
+				? new Set<number>()
+				: await findOrdersAwaitingPayment(candidates);
+
+		return orders.map((order) =>
+			Object.assign(order, { awaiting_payment: awaiting.has(order.id) }),
+		);
 	}
 
 	/**
@@ -1453,23 +1506,41 @@ export class OrderService {
 	 *
 	 * Every order billed to any of the account's clients. The listing carries no lines or totals,
 	 * for the reason `findByFilter` gives - the detail read attaches them.
+	 *
+	 * Without a status filter a canceled order is left out: a buyer's history is what is still
+	 * coming or already came, and an order withdrawn is reached by asking for `canceled` itself.
 	 */
 	public async findOwnByFilter(
 		data: ValidatorOutput<OrderValidator, 'publicFind'>,
 		userId: number,
-	): Promise<[(OrderEntity & { totals: OrderTotals })[], number]> {
+	): Promise<
+		[
+			(OrderEntity & {
+				totals: OrderTotals;
+				awaiting_payment: boolean;
+			})[],
+			number,
+		]
+	> {
 		const [entries, total] = await this.repository
 			.createQuery()
 			.select([...PUBLIC_ENTRY_COLUMNS, ...CLIENT_COLUMNS])
 			.joinAndSelect('order.client', 'client', 'INNER')
 			.filterBy('client.user_id', userId)
-			.filterBy('status', data.filter.status)
+			.filterBy(
+				'status',
+				data.filter.status ?? OrderStatusEnum.CANCELED,
+				data.filter.status ? '=' : '!=',
+			)
 			.orderBy(data.order_by, data.direction)
 			.orderBy('id', data.direction)
 			.pagination(data.page, data.limit)
 			.all(true);
 
-		return [await this.attachTotals(entries), total];
+		return [
+			await this.attachAwaitingPayment(await this.attachTotals(entries)),
+			total,
+		];
 	}
 
 	/**

@@ -88,6 +88,12 @@ the containers up, launches `pnpm run dev` detached in each, waits on the health
 writes `<project>/logs/dev.log` (gitignored, readable from the host). Use it instead of
 `docker exec -it … pnpm run dev`, which blocks the session and leaves no log to diagnose from.
 
+**UI serving Next's own 404 for dynamic routes while static pages load** (`/account/orders/:id`,
+`/status/:type`) is a corrupted Turbopack cache, usually after the container ran out of memory
+(`dev-stack.sh doctor ui` shows `oom=true`). A restart - even a container `down`/`start` - does not
+clear it: `dev-stack.sh stop ui`, `docker exec nready-ui.test rm -rf /var/www/html/.next`, then
+`dev-stack.sh start ui`.
+
 ## Commands
 
 Run inside the container (`docker exec $DOCKER_CONTAINER ...`):

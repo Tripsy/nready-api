@@ -189,6 +189,51 @@ export type WithComposition<T> = T & {
 	bundle_items: PublicBundleComponent[];
 };
 
+/** A term reference narrowed to the served language - the shape every public prompt takes. */
+type PublicTermRef = {
+	id: number;
+	contents: { language: string; value: string }[];
+} | null;
+
+/**
+ * One answer to a product's question, as the storefront needs it: the wording in the served
+ * language and the signed per-currency delta, excluding VAT - the figure `CartPricingService`
+ * folds into the line's unit price. Per currency for the reason `PublicBundleComponent` gives.
+ */
+export type PublicProductOption = {
+	id: number;
+	label_id: number;
+	position: number;
+	is_default: boolean;
+	prices: { currency: string; price_delta: number }[];
+	label: PublicTermRef;
+};
+
+/** A question asked at order time, with its bounds and answers - see `attachPublicOptions`. */
+export type PublicProductOptionGroup = {
+	id: number;
+	label_id: number;
+	min_select: number;
+	max_select: number | null;
+	position: number;
+	label: PublicTermRef;
+	options: PublicProductOption[];
+};
+
+/**
+ * A product's questions as the storefront reads them, and the rate its line is taxed at.
+ *
+ * `vat_rate` is the product's own, which is what a simple line - options included - is taxed at
+ * (`CartPricingService` taxes the unit price after the deltas are folded in). The client knows no
+ * rates, they are deployment configuration, so a page quoting a configured product VAT-inclusive
+ * needs it to reach the figure the cart will charge. A bundle's own class is unused (`product.md`
+ * §8.4), and so is this figure on one.
+ */
+export type WithPublicOptions<T> = T & {
+	option_groups: PublicProductOptionGroup[];
+	vat_rate: number;
+};
+
 /**
  * Every picture the product and each of its variants carry - see `attachPublicGalleries`.
  *
@@ -1885,8 +1930,13 @@ export class ProductService {
 			language,
 		);
 
-		const [entryWithCover] = await this.attachCoverImages([
+		const entryWithOptions = this.attachPublicOptions(
 			entryWithComposition,
+			language,
+		);
+
+		const [entryWithCover] = await this.attachCoverImages([
+			entryWithOptions,
 		]);
 
 		return await this.attachPublicGalleries(entryWithCover);
@@ -2028,6 +2078,70 @@ export class ProductService {
 			...entry,
 			bundle_groups: publicGroups,
 			bundle_items: publicItems,
+		};
+	}
+
+	/**
+	 * A product's questions, projected for the storefront so a page can ask them.
+	 *
+	 * Replaces the rows `attachBranches` left on the entry, as `attachPublicComposition` does for
+	 * the same reason: those are the dashboard's shape - every translation of every prompt,
+	 * timestamps, the owning ids. Built from what is already in memory, so it costs no query; the
+	 * order `attachBranches` read them in (`position`, then id, on both levels) is kept.
+	 */
+	private attachPublicOptions<
+		T extends {
+			vat_category: Parameters<typeof resolveVatRate>[0];
+			option_groups?: ProductOptionGroupEntity[];
+		},
+	>(entry: T, language: string | undefined): WithPublicOptions<T> {
+		const narrow = (
+			term:
+				| {
+						id: number;
+						contents?: { language: string; value: string }[];
+				  }
+				| null
+				| undefined,
+		): PublicTermRef =>
+			term
+				? {
+						id: term.id,
+						contents: (term.contents ?? [])
+							.filter(
+								(content) =>
+									language === undefined ||
+									content.language === language,
+							)
+							.map((content) => ({
+								language: content.language,
+								value: content.value,
+							})),
+					}
+				: null;
+
+		return {
+			...entry,
+			option_groups: (entry.option_groups ?? []).map((group) => ({
+				id: group.id,
+				label_id: group.label_id,
+				min_select: group.min_select,
+				max_select: group.max_select,
+				position: group.position,
+				label: narrow(group.label),
+				options: (group.options ?? []).map((option) => ({
+					id: option.id,
+					label_id: option.label_id,
+					position: option.position,
+					is_default: option.is_default,
+					prices: (option.prices ?? []).map((price) => ({
+						currency: price.currency,
+						price_delta: Number(price.price_delta),
+					})),
+					label: narrow(option.label),
+				})),
+			})),
+			vat_rate: resolveVatRate(entry.vat_category),
 		};
 	}
 

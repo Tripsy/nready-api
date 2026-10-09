@@ -651,4 +651,9 @@ export class InvoiceValidator extends BaseValidator<typeof validatorMessages> {
 		id: this.validateId(this.getMessage('invalid_id', { name: 'id' })),
 		payment_id: this.validateId(this.getMessage('invalid_payment_id')),
 	});
+
+	/** The buyer's own order whose documents and payments are asked for. */
+	readonly publicBilling = z.object({
+		order_id: this.validateId(this.getMessage('invalid_order_id')),
+	});
 }

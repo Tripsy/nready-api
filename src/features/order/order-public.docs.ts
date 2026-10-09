@@ -35,12 +35,14 @@ export const docs: Record<
 		withBearerAuth: true,
 		success: {
 			status: 200,
-			description: 'Orders billed to any client linked to the account',
+			description:
+				'Orders billed to any client linked to the account - without a status filter, every one but the canceled',
 			dataSample: {
 				entries: [
 					{
 						...withoutDeletedAt(orderSample),
 						totals: orderWithLinesSample.totals,
+						awaiting_payment: false,
 					},
 				],
 				pagination: {
@@ -97,12 +99,15 @@ export const docs: Record<
 		success: {
 			status: 200,
 			description: 'The order, with its client, lines and totals',
-			dataSample: withoutDeletedAt(orderWithLinesSample),
+			dataSample: {
+				...withoutDeletedAt(orderWithLinesSample),
+				awaiting_payment: false,
+			},
 		},
 		withAuthErrors: true,
 		withErrors: [404],
 		request: {
-			notes: `Requires an account. An order billed to somebody else's client answers 404, the same as a missing one. ${totalsNote}`,
+			notes: `Requires an account. An order billed to somebody else's client answers 404, the same as a missing one. The client carries its \`company_cui\`, \`company_reg_com\` and \`contact_phone\` here, beyond what the listing shows. \`awaiting_payment\` is true on a pending order not paid cash on delivery whose payment is still open - requested, authorized or waiting on the buyer - and false otherwise; it is not a status. ${totalsNote}`,
 			params: {
 				id: { type: 'number', required: true },
 			},

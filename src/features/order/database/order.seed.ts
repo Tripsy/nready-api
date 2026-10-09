@@ -48,7 +48,7 @@ const STATUSES: readonly OrderStatus[] = [
 	OrderStatusEnum.CONFIRMED,
 	OrderStatusEnum.CONFIRMED,
 	OrderStatusEnum.PENDING,
-	OrderStatusEnum.CANCELLED,
+	OrderStatusEnum.CANCELED,
 ];
 
 /**

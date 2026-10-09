@@ -4,6 +4,7 @@ import { cashFlowService } from '@/features/cash-flow/cash-flow.service';
 import {
 	registerOrderPaymentCancel,
 	registerOrderPaymentSync,
+	registerOrdersAwaitingPaymentResolver,
 } from '@/features/order/order.hooks';
 import { shippingService } from '@/features/shipping/shipping.service';
 import {
@@ -23,6 +24,9 @@ import {
  * When the order is canceled, its requests still `pending` are canceled with it, in the same
  * transaction (`CashFlowService.cancelPendingForOrder`); whether money past a request blocks the
  * cancel is `OrderService.cancel`'s call.
+ *
+ * And it says which orders still have that request open, for the buyer's order list
+ * (`CashFlowService.findOrdersWithOpenPayment`).
  *
  * Registered here because `cart` raised the request and already depends on `order`, `cash-flow`
  * and `shipping`; `order` cannot import any of them.
@@ -64,5 +68,9 @@ export default function registerCartBootstrap() {
 								),
 			};
 		},
+	);
+
+	registerOrdersAwaitingPaymentResolver((orderIds: readonly number[]) =>
+		cashFlowService.findOrdersWithOpenPayment(orderIds),
 	);
 }

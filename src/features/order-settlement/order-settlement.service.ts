@@ -208,7 +208,7 @@ export class OrderSettlementService {
 					});
 
 		const live = documents.filter(
-			(document) => document.status !== InvoiceStatusEnum.CANCELLED,
+			(document) => document.status !== InvoiceStatusEnum.CANCELED,
 		);
 
 		return (

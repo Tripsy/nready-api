@@ -34,6 +34,7 @@ const publicSample: Record<string, unknown> = {
 	delivered_at: null,
 	estimated_delivery_at: '2026-08-17T00:00:00.000Z',
 	created_at: '2026-08-14T11:32:00.000Z',
+	updated_at: '2026-08-15T09:10:00.000Z',
 	pickup_warehouse: { id: 1, name: 'Main warehouse' },
 	carrier: { id: 3, name: 'Fan Courier' },
 };

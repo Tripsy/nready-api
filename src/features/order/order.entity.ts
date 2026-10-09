@@ -20,7 +20,7 @@ export const OrderStatusEnum = {
 	PENDING: 'pending', // Placed - by a checkout or from the back office - and awaiting acceptance; lines may still be adjusted
 	CONFIRMED: 'confirmed', // Accepted by the business; shipping may begin
 	COMPLETED: 'completed', // Fulfilled and settled
-	CANCELLED: 'canceled', // Withdrawn before fulfilment
+	CANCELED: 'canceled', // Withdrawn before fulfillment
 } as const;
 
 export type OrderStatus =
@@ -48,16 +48,16 @@ export type OrderStatus =
 export const STATUS_TRANSITIONS: StatusTransitions<OrderStatus> = {
 	[OrderStatusEnum.PENDING]: [
 		OrderStatusEnum.CONFIRMED,
-		OrderStatusEnum.CANCELLED,
+		OrderStatusEnum.CANCELED,
 	],
 	[OrderStatusEnum.CONFIRMED]: [
 		OrderStatusEnum.COMPLETED,
-		OrderStatusEnum.CANCELLED,
+		OrderStatusEnum.CANCELED,
 	],
 	[OrderStatusEnum.COMPLETED]: [
 		// Allow nothing
 	],
-	[OrderStatusEnum.CANCELLED]: [
+	[OrderStatusEnum.CANCELED]: [
 		// Allow nothing
 	],
 };

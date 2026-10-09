@@ -561,8 +561,10 @@ export class CartService {
 		if (problem?.reason === 'selection') {
 			throw new BadRequestError(
 				lang('cart.error.option_selection', {
-					min: String(problem.min),
-					max: problem.max === null ? 'any' : String(problem.max),
+					bounds: ProductOptionSelectionService.describeBounds(
+						problem.min,
+						problem.max,
+					),
 				}),
 			);
 		}

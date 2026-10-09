@@ -174,3 +174,22 @@ export const registerOrderDeliverySync = orderDeliverySync.register;
  * Answered by `shipping`; with nothing registered the delivery keeps what it listed.
  */
 export const syncOrderDelivery = orderDeliverySync.ask;
+
+/*
+ * Display-only, so it propagates like every query here rather than guessing: a list that fails
+ * says so, where a quiet `false` would show an order as pending while its buyer is mid-payment.
+ */
+const ordersAwaitingPayment = createQuery<
+	[orderIds: readonly number[]],
+	Set<number>
+>(() => new Set());
+
+export const registerOrdersAwaitingPaymentResolver =
+	ordersAwaitingPayment.register;
+
+/**
+ * Which of the given orders have a payment open under them - asked for, not yet captured nor
+ * withdrawn. Answered by `cart`, which raised that request at checkout; with nothing registered
+ * no order has one.
+ */
+export const findOrdersAwaitingPayment = ordersAwaitingPayment.ask;

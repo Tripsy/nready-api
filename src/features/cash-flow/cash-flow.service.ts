@@ -8,6 +8,7 @@ import CashFlowEntity, {
 	CashFlowCategoryTypeEnum,
 	type CashFlowDirection,
 	CashFlowDirectionEnum,
+	type CashFlowMethod,
 	type CashFlowStatus,
 	CashFlowStatusEnum,
 	getExpectedCategoryType,
@@ -696,6 +697,94 @@ export class CashFlowService {
 		}
 
 		return query.getMany();
+	}
+
+	/**
+	 * @description Used by `InvoicePublicController.billing`, once the order is known to be the caller's
+	 *
+	 * The money filed under an order, as its buyer is shown it: how it was paid, where it stands
+	 * and how much, gross. A refund is a movement out, inherits its parent's records and so is
+	 * listed here too - `direction` tells them apart, and `gross_amount` is unsigned. Every status
+	 * is listed, a failed or canceled attempt included, since the buyer made it and may look for it.
+	 *
+	 * Not filtered by client here: the caller has already resolved the order through its owner, and
+	 * a movement filed under an order belongs to that order's client.
+	 */
+	public async findPublicForOrder(orderId: number): Promise<
+		{
+			id: number;
+			direction: CashFlowDirection;
+			method: CashFlowMethod;
+			status: CashFlowStatus;
+			gross_amount: number;
+			currency: string;
+			created_at: Date;
+			updated_at: Date | null;
+		}[]
+	> {
+		const rows = await this.findForOrder(
+			dataSource.manager,
+			orderId,
+			Object.values(CashFlowStatusEnum),
+		);
+
+		return rows.map((row) => ({
+			id: row.id,
+			direction: row.direction,
+			method: row.method,
+			status: row.status,
+			gross_amount: toGrossAmount(
+				Number(row.amount),
+				Number(row.vat_rate),
+			),
+			currency: row.currency,
+			created_at: row.created_at,
+			updated_at: row.updated_at,
+		}));
+	}
+
+	/**
+	 * @description Used by `cart`'s answer to `findOrdersAwaitingPayment`
+	 *
+	 * Which of the given orders have money in still open under them: requested, authorized or
+	 * waiting on the payer's action, and so neither captured nor gone. One read for the whole set,
+	 * since a buyer's order list asks it per page.
+	 */
+	public async findOrdersWithOpenPayment(
+		orderIds: readonly number[],
+	): Promise<Set<number>> {
+		if (orderIds.length === 0) {
+			return new Set();
+		}
+
+		const rows = await dataSource
+			.getRepository(OperationalRecordEntity)
+			.createQueryBuilder('record')
+			.innerJoin(
+				CashFlowEntity,
+				'cash_flow',
+				'cash_flow.id = record.cash_flow_id',
+			)
+			.select('DISTINCT record.entity_id', 'order_id')
+			.where('record.operational_record_type = :type', {
+				type: OperationalRecordTypeEnum.ORDER,
+			})
+			.andWhere('record.entity_id IN (:...orderIds)', {
+				orderIds: [...orderIds],
+			})
+			.andWhere('cash_flow.direction = :direction', {
+				direction: CashFlowDirectionEnum.IN,
+			})
+			.andWhere('cash_flow.status IN (:...statuses)', {
+				statuses: [
+					CashFlowStatusEnum.PENDING,
+					CashFlowStatusEnum.AUTHORIZED,
+					CashFlowStatusEnum.REQUIRES_ACTION,
+				],
+			})
+			.getRawMany<{ order_id: number | string }>();
+
+		return new Set(rows.map((row) => Number(row.order_id)));
 	}
 
 	/**

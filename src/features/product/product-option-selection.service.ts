@@ -1,5 +1,6 @@
 import { In } from 'typeorm';
 import dataSource from '@/config/data-source.config';
+import { lang } from '@/config/message.setup';
 import { Configuration } from '@/config/settings.config';
 import ProductOptionEntity from '@/features/product/product-option.entity';
 import ProductOptionGroupEntity from '@/features/product/product-option-group.entity';
@@ -151,6 +152,30 @@ export class ProductOptionSelectionService {
 		}
 
 		return null;
+	}
+
+	/**
+	 * A group's bounds as a phrase - "exactly 1", "at least 2", "between 2 and 4" - for the
+	 * messages that refuse a selection. The pair is read as a whole because each half alone
+	 * misreads an edge: `1..1` is not a range and `1..null` has no upper end to name.
+	 */
+	public static describeBounds(min: number, max: number | null): string {
+		if (max === null) {
+			return lang('product.option_bounds.at_least', { min: String(min) });
+		}
+
+		if (min === max) {
+			return lang('product.option_bounds.exactly', { min: String(min) });
+		}
+
+		if (min === 0) {
+			return lang('product.option_bounds.at_most', { max: String(max) });
+		}
+
+		return lang('product.option_bounds.between', {
+			min: String(min),
+			max: String(max),
+		});
 	}
 }
 

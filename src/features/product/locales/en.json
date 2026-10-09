@@ -86,6 +86,12 @@
 		"attribute_definition_delete": "Attribute definition deleted successfully",
 		"attribute_definition_restore": "Attribute definition restored successfully"
 	},
+	"option_bounds": {
+		"exactly": "exactly {{min}}",
+		"at_least": "at least {{min}}",
+		"at_most": "at most {{max}}",
+		"between": "between {{min}} and {{max}}"
+	},
 	"history": {
 		"created": "Product #{{entity_id}} created by user #{{auth_id}}",
 		"updated": "Product #{{entity_id}} updated by user #{{auth_id}}",

@@ -160,6 +160,7 @@ const PUBLIC_ENTRY_COLUMNS = [
 	'shipping.delivered_at',
 	'shipping.estimated_delivery_at',
 	'shipping.created_at',
+	'shipping.updated_at',
 ];
 
 /** Only the name: a self-pickup buyer needs to know where to collect, not the warehouse code. */

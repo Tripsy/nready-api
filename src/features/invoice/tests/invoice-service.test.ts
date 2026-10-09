@@ -329,7 +329,7 @@ describe('InvoiceService', () => {
 			// `order` ships no mock factory, and the guard reads one column
 			jest.spyOn(orderService, 'findById').mockResolvedValue({
 				id: 1,
-				status: OrderStatusEnum.CANCELLED,
+				status: OrderStatusEnum.CANCELED,
 			} as unknown as OrderEntity);
 
 			await expect(
@@ -1411,7 +1411,7 @@ describe('InvoiceService', () => {
 
 			expect(update).toHaveBeenCalledWith({
 				id: entry.id,
-				status: InvoiceStatusEnum.CANCELLED,
+				status: InvoiceStatusEnum.CANCELED,
 			});
 		});
 	});
@@ -1647,7 +1647,7 @@ describe('InvoiceService', () => {
 			await expect(
 				invoiceService.updateStatus(
 					getInvoiceEntityMock({
-						status: InvoiceStatusEnum.CANCELLED,
+						status: InvoiceStatusEnum.CANCELED,
 					}),
 					InvoiceStatusEnum.ISSUED,
 				),
@@ -1690,7 +1690,7 @@ describe('InvoiceService', () => {
 
 			await invoiceService.updateStatus(
 				entry,
-				InvoiceStatusEnum.CANCELLED,
+				InvoiceStatusEnum.CANCELED,
 			);
 
 			expect(cancel).toHaveBeenCalledWith(entry);
@@ -1703,7 +1703,7 @@ describe('InvoiceService', () => {
 			await expect(
 				invoiceService.updateStatus(
 					getInvoiceEntityMock({ status: InvoiceStatusEnum.ISSUED }),
-					InvoiceStatusEnum.CANCELLED,
+					InvoiceStatusEnum.CANCELED,
 				),
 			).rejects.toThrow();
 			expect(cancel).not.toHaveBeenCalled();

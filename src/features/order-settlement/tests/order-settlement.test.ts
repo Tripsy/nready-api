@@ -149,7 +149,7 @@ describe('OrderSettlementService.evaluate', () => {
 
 	it('never moves a canceled order', async () => {
 		const { result, updateStatus } = await run(
-			OrderStatusEnum.CANCELLED,
+			OrderStatusEnum.CANCELED,
 			state({}),
 		);
 

@@ -350,7 +350,7 @@ export class InvoiceService {
 					OR (invoice.is_reversal = true AND invoice.status = :issued)
 				)`,
 				{
-					canceled: InvoiceStatusEnum.CANCELLED,
+					canceled: InvoiceStatusEnum.CANCELED,
 					issued: InvoiceStatusEnum.ISSUED,
 				},
 			)
@@ -413,7 +413,7 @@ export class InvoiceService {
 					)
 				)`,
 				{
-					canceled: InvoiceStatusEnum.CANCELLED,
+					canceled: InvoiceStatusEnum.CANCELED,
 					issued: InvoiceStatusEnum.ISSUED,
 				},
 			)
@@ -995,6 +995,63 @@ export class InvoiceService {
 	}
 
 	/**
+	 * @description Used by `InvoicePublicController.billing`, once the order is known to be the caller's
+	 *
+	 * The documents an order's buyer is shown: those billing its goods, those billing the fee of
+	 * one of its movements, and the reversals of either - a reversal carries its original's
+	 * sources, so the one filter finds both. Issued only: a draft is still the business's to
+	 * change and holds no number, and a canceled document was never valid.
+	 *
+	 * The header and nothing else. The lines restate the order the buyer already sees, and the
+	 * seller and billing snapshots are the document's own business until it can be downloaded.
+	 */
+	public findPublicForOrder(orderId: number): Promise<InvoiceEntity[]> {
+		return this.repository
+			.createQuery()
+			.select([
+				'invoice.id',
+				'invoice.ref_code',
+				'invoice.ref_number',
+				'invoice.status',
+				'invoice.payment_status',
+				'invoice.scope',
+				'invoice.is_reversal',
+				'invoice.parent_invoice_id',
+				'invoice.currency',
+				'invoice.total_net',
+				'invoice.total_vat',
+				'invoice.total_gross',
+				'invoice.issued_at',
+				'invoice.due_at',
+				'invoice.paid_at',
+			])
+			.filterRaw(
+				`invoice.id IN (
+					SELECT invoice_source.invoice_id FROM invoice_source
+					WHERE invoice_source.deleted_at IS NULL
+						AND (
+							(invoice_source.source_type = :public_order_type
+								AND invoice_source.source_id = :public_order_id)
+							OR (invoice_source.source_type = :public_shipping_type
+								AND invoice_source.source_id IN (
+									SELECT shipping.id FROM shipping
+									WHERE shipping.order_id = :public_order_id
+								))
+						)
+				)`,
+				{
+					public_order_type: InvoiceSourceTypeEnum.ORDER,
+					public_shipping_type: InvoiceSourceTypeEnum.SHIPPING,
+					public_order_id: orderId,
+				},
+			)
+			.filterBy('status', InvoiceStatusEnum.ISSUED)
+			.orderBy('issued_at')
+			.orderBy('id')
+			.all();
+	}
+
+	/**
 	 * @description Answers `isOrderInvoiced` on the settlement registry, for `OrderService.updateData`
 	 *
 	 * Any live `order` document locks the lines, draft included: a draft already froze the
@@ -1013,7 +1070,7 @@ export class InvoiceService {
 			.filterRaw(orderFilter.condition, orderFilter.parameters)
 			.filterBy('scope', InvoiceScopeEnum.ORDER)
 			.filterBy('is_reversal', false)
-			.filterBy('status', InvoiceStatusEnum.CANCELLED, '!=')
+			.filterBy('status', InvoiceStatusEnum.CANCELED, '!=')
 			.count();
 
 		return count > 0;
@@ -1186,7 +1243,7 @@ export class InvoiceService {
 				parentId: parentId,
 			})
 			.andWhere('invoice.status <> :canceled', {
-				canceled: InvoiceStatusEnum.CANCELLED,
+				canceled: InvoiceStatusEnum.CANCELED,
 			})
 			.andWhere('line.parent_line_id IS NOT NULL')
 			.groupBy('line.parent_line_id')
@@ -2271,7 +2328,7 @@ export class InvoiceService {
 
 		return this.update({
 			id: entry.id,
-			status: InvoiceStatusEnum.CANCELLED,
+			status: InvoiceStatusEnum.CANCELED,
 		});
 	}
 
@@ -2592,7 +2649,7 @@ export class InvoiceService {
 						})
 						.andWhere('reversal.is_reversal = true')
 						.andWhere('reversal.status <> :canceled', {
-							canceled: InvoiceStatusEnum.CANCELLED,
+							canceled: InvoiceStatusEnum.CANCELED,
 						})
 						.groupBy('reversal.parent_invoice_id')
 						.getRawMany<{
