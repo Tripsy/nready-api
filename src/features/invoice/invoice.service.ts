@@ -59,6 +59,7 @@ import InvoiceSourceEntity, {
 } from '@/features/invoice/invoice-source.entity';
 import OrderEntity from '@/features/order/order.entity';
 import { orderService } from '@/features/order/order.service';
+import { shippingService } from '@/features/shipping/shipping.service';
 import { createFutureDate } from '@/helpers/date.helper';
 import { arrayHasValue, pickValuesFromObject } from '@/helpers/objects.helper';
 import { roundMoney } from '@/helpers/shop.helper';
@@ -100,6 +101,16 @@ export type InvoiceWithDetails = InvoiceEntity & {
 	 */
 	resolved_billing_details?: BillingDetails | null;
 	resolved_seller_details?: SellerDetails;
+};
+
+/**
+ * A document as it prints - see `InvoiceService.buildDocument`. The lines carry their label and
+ * arithmetic only.
+ */
+export type InvoiceDocument = InvoiceEntity & {
+	lines: InvoiceLineEntity[];
+	order: Awaited<ReturnType<typeof orderService.findReferenceById>>;
+	shipping: Awaited<ReturnType<typeof shippingService.findDocumentDetails>>;
 };
 
 /** The four stored header figures, summed from the lines. */
@@ -997,17 +1008,13 @@ export class InvoiceService {
 	/**
 	 * @description Used by `InvoicePublicController.billing`, once the order is known to be the caller's
 	 *
-	 * The documents an order's buyer is shown: those billing its goods, those billing the fee of
-	 * one of its movements, and the reversals of either - a reversal carries its original's
-	 * sources, so the one filter finds both. Issued only: a draft is still the business's to
-	 * change and holds no number, and a canceled document was never valid.
+	 * The documents an order's buyer is shown - see `publicOrderDocumentsQuery`.
 	 *
-	 * The header and nothing else. The lines restate the order the buyer already sees, and the
-	 * seller and billing snapshots are the document's own business until it can be downloaded.
+	 * The header and nothing else: the lines, the party snapshots and the sources are what
+	 * `getPublicDocument` reads, for the one document the buyer opens to print.
 	 */
 	public findPublicForOrder(orderId: number): Promise<InvoiceEntity[]> {
-		return this.repository
-			.createQuery()
+		return this.publicOrderDocumentsQuery(orderId)
 			.select([
 				'invoice.id',
 				'invoice.ref_code',
@@ -1025,6 +1032,127 @@ export class InvoiceService {
 				'invoice.due_at',
 				'invoice.paid_at',
 			])
+			.orderBy('issued_at')
+			.orderBy('id')
+			.all();
+	}
+
+	/**
+	 * @description Used by `InvoiceController.document` - the back office's printable copy
+	 */
+	public getDocument(invoiceId: number): Promise<InvoiceDocument> {
+		return this.buildDocument(
+			this.repository.createQuery().filterById(invoiceId),
+		);
+	}
+
+	/**
+	 * @description Used by `InvoicePublicController.document`, once the order is known to be the caller's
+	 *
+	 * One of the documents `findPublicForOrder` lists, as `buildDocument` reads it. A document of
+	 * another order - or a draft, or a canceled one - answers the same 404 as a missing id.
+	 */
+	public getPublicDocument(
+		orderId: number,
+		invoiceId: number,
+	): Promise<InvoiceDocument> {
+		return this.buildDocument(
+			this.publicOrderDocumentsQuery(orderId).filterById(invoiceId),
+		);
+	}
+
+	/**
+	 * A document whole enough to print: the frozen parties, the lines and the figures as stored,
+	 * plus what it was raised from - the order it bills, and on a shipping document the movement.
+	 * Those two are read live rather than frozen: an order's reference never changes, and a
+	 * delivery date lands after the fee was invoiced.
+	 *
+	 * The buyer prints the same shape, so nothing here is for the back office alone: `notes` is
+	 * left out, on the header and on the lines - it is written in the back office and nothing marks
+	 * it as meant for the buyer - and so is where each line came from.
+	 */
+	private async buildDocument(
+		query: ReturnType<typeof this.repository.createQuery>,
+	): Promise<InvoiceDocument> {
+		const invoice = await query
+			.select([
+				'invoice.id',
+				'invoice.ref_code',
+				'invoice.ref_number',
+				'invoice.status',
+				'invoice.payment_status',
+				'invoice.scope',
+				'invoice.is_reversal',
+				'invoice.parent_invoice_id',
+				'invoice.currency',
+				'invoice.total_net',
+				'invoice.total_discount_reduction',
+				'invoice.total_vat',
+				'invoice.total_gross',
+				'invoice.issued_at',
+				'invoice.due_at',
+				'invoice.paid_at',
+				'invoice.billing_details',
+				'invoice.seller_details',
+			])
+			// A reversal prints the reference of the document it takes back
+			.join('invoice.parent_invoice', 'parent_invoice', 'LEFT')
+			.addSelect([
+				'parent_invoice.id',
+				'parent_invoice.ref_code',
+				'parent_invoice.ref_number',
+				'parent_invoice.issued_at',
+			])
+			.firstOrFail();
+
+		// A reversal carries its original's sources, so it names the same order and movement
+		const [sources] = await this.withSources([invoice]);
+
+		const [lines, shipping] = await Promise.all([
+			this.lineRepository
+				.createQuery()
+				.select([
+					'invoice_line.id',
+					'invoice_line.kind',
+					'invoice_line.is_value_reversal',
+					'invoice_line.label',
+					'invoice_line.quantity',
+					'invoice_line.unit_price',
+					'invoice_line.vat_rate',
+					'invoice_line.discount_reduction',
+					'invoice_line.line_net',
+					'invoice_line.line_vat',
+					'invoice_line.line_total',
+				])
+				.filterBy('invoice_id', invoice.id)
+				.orderBy('id')
+				.all(),
+			sources.shipping_id
+				? shippingService.findDocumentDetails(sources.shipping_id)
+				: Promise.resolve(null),
+		]);
+
+		// A shipping document names its movement only; the order is the movement's
+		const orderId = sources.order_id ?? shipping?.order_id ?? null;
+
+		return Object.assign(invoice, {
+			lines: lines,
+			order: orderId
+				? await orderService.findReferenceById(orderId)
+				: null,
+			shipping: shipping,
+		});
+	}
+
+	/**
+	 * The issued documents an order's buyer may see: those billing its goods, those billing the
+	 * fee of one of its movements, and the reversals of either - a reversal carries its original's
+	 * sources, so the one filter finds both. Issued only: a draft is still the business's to
+	 * change and holds no number, and a canceled document was never valid.
+	 */
+	private publicOrderDocumentsQuery(orderId: number) {
+		return this.repository
+			.createQuery()
 			.filterRaw(
 				`invoice.id IN (
 					SELECT invoice_source.invoice_id FROM invoice_source
@@ -1045,10 +1173,7 @@ export class InvoiceService {
 					public_order_id: orderId,
 				},
 			)
-			.filterBy('status', InvoiceStatusEnum.ISSUED)
-			.orderBy('issued_at')
-			.orderBy('id')
-			.all();
+			.filterBy('status', InvoiceStatusEnum.ISSUED);
 	}
 
 	/**
@@ -2828,11 +2953,16 @@ export class InvoiceService {
 	 * office, changes bank or re-registers, and a document already handed over keeps showing
 	 * what it showed on the day.
 	 */
-	private buildSellerDetails(): SellerDetails {
+	/**
+	 * The seller as configuration states it today - what a document freezes on issue unless an
+	 * operator stated it by hand. Also what the demo seed issues its documents with.
+	 */
+	public buildSellerDetails(): SellerDetails {
 		return {
 			company_name: Configuration.get('company.name'),
 			company_cui: Configuration.get('company.cui'),
 			company_reg_com: Configuration.get('company.regCom'),
+			company_vat_number: Configuration.get('company.vatNumber'),
 			address_country: Configuration.get('company.addressCountry'),
 			address_region: Configuration.get('company.addressRegion'),
 			address_city: Configuration.get('company.addressCity'),

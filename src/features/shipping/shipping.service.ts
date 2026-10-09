@@ -1328,6 +1328,66 @@ export class ShippingService {
 	}
 
 	/**
+	 * @description Used by `InvoiceService` to describe the movement a printed shipping document bills
+	 *
+	 * Who carries it, between which ends, and when it left and arrived. Read live, not frozen with
+	 * the document: the delivery date lands after the fee was invoiced, and the ends are frozen on
+	 * the movement itself once it ships (`pickup_data` / `destination_data`). Before that an end is
+	 * named by its warehouse or client address.
+	 *
+	 * Names only, never codes or notes - the buyer reads this. Soft-deleted movements included: the
+	 * document stays valid whatever became of the row. Null when the id points at nothing.
+	 */
+	public async findDocumentDetails(id: number): Promise<
+		| (ShippingEntity & {
+				pickup_client_address_label: string | null;
+				destination_client_address_label: string | null;
+		  })
+		| null
+	> {
+		const entry = await this.repository
+			.createQuery()
+			.select([
+				'shipping.id',
+				'shipping.scope',
+				'shipping.order_id',
+				'shipping.method',
+				'shipping.pickup_client_address_id',
+				'shipping.destination_client_address_id',
+				'shipping.pickup_data',
+				'shipping.destination_data',
+				'shipping.tracking_number',
+				'shipping.shipped_at',
+				'shipping.delivered_at',
+				'shipping.estimated_delivery_at',
+				'pickup_warehouse.id',
+				'pickup_warehouse.name',
+				'destination_warehouse.id',
+				'destination_warehouse.name',
+				...CARRIER_COLUMNS,
+			])
+			// `join` for the reason `findForOwnOrder` gives
+			.join('shipping.pickup_warehouse', 'pickup_warehouse', 'LEFT')
+			.join(
+				'shipping.destination_warehouse',
+				'destination_warehouse',
+				'LEFT',
+			)
+			.join('shipping.carrier', 'carrier', 'LEFT')
+			.withDeleted(true)
+			.filterById(id)
+			.first();
+
+		if (!entry) {
+			return null;
+		}
+
+		const [labeled] = await this.attachClientAddressLabels([entry]);
+
+		return labeled;
+	}
+
+	/**
 	 * The movements of several of the buyer's orders at once - a page of the order history, read in
 	 * one query rather than one per row.
 	 *

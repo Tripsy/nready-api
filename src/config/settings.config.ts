@@ -244,6 +244,11 @@ function loadSettings() {
 			name: process.env.COMPANY_NAME || 'Example SRL',
 			cui: process.env.COMPANY_CUI || null,
 			regCom: process.env.COMPANY_REG_COM || null,
+			/*
+			 * The VAT registration code (`RO` + CUI for a Romanian VAT payer). Empty means the
+			 * business is not registered for VAT, and the invoice says so.
+			 */
+			vatNumber: process.env.COMPANY_VAT_NUMBER || null,
 			iban: process.env.COMPANY_IBAN || null,
 			bankName: process.env.COMPANY_BANK_NAME || null,
 			addressCountry: (

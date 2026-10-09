@@ -190,6 +190,12 @@ export type SellerDetails = PartySnapshot & {
 	company_name: string;
 	company_cui?: string | null;
 	company_reg_com?: string | null;
+	/**
+	 * The VAT registration code; `null` states the seller is not registered for VAT. Absent on a
+	 * snapshot frozen before the field existed, which therefore states nothing either way - a
+	 * printed copy must not claim a status the document never recorded.
+	 */
+	company_vat_number?: string | null;
 };
 
 /**

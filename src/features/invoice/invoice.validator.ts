@@ -236,6 +236,10 @@ export class InvoiceValidator extends BaseValidator<typeof validatorMessages> {
 						this.getMessage('invalid_party_identifier'),
 						50,
 					),
+					company_vat_number: this.partyText(
+						this.getMessage('invalid_party_identifier'),
+						50,
+					),
 					...this.partyFields(),
 				},
 				{ message: this.getMessage('invalid_seller_details') },
@@ -655,5 +659,11 @@ export class InvoiceValidator extends BaseValidator<typeof validatorMessages> {
 	/** The buyer's own order whose documents and payments are asked for. */
 	readonly publicBilling = z.object({
 		order_id: this.validateId(this.getMessage('invalid_order_id')),
+	});
+
+	/** One document of the buyer's own order, read to print. */
+	readonly publicDocument = z.object({
+		order_id: this.validateId(this.getMessage('invalid_order_id')),
+		id: this.validateId(this.getMessage('invalid_id', { name: 'id' })),
 	});
 }

@@ -19,6 +19,14 @@ export default async () => {
 				method: 'get',
 				handlers: [validateParamsWhenId('order_id')],
 			},
+			document: {
+				path: '/orders/:order_id/invoices/:id',
+				method: 'get',
+				handlers: [
+					validateParamsWhenId('order_id'),
+					validateParamsWhenId('id'),
+				],
+			},
 		},
 	};
 

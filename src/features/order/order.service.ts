@@ -1241,18 +1241,28 @@ export class OrderService {
 	}
 
 	/**
-	 * @description Used by `invoice` to name the order a cash flow movement is filed under
+	 * @description Used by `invoice` to name the order a cash flow movement is filed under, and the
+	 * order a printed document bills
 	 *
-	 * The reference alone, soft-deleted orders included - the movement was raised for the
-	 * document whatever became of it since. Null when the id points at nothing: the link is a
-	 * plain id, with no foreign key to keep it honest.
+	 * The reference and the date it was placed, soft-deleted orders included - the movement was
+	 * raised for the document whatever became of it since. Also what a printed invoice names its
+	 * order by. Null when the id points at nothing: the link is a plain id, with no foreign key to
+	 * keep it honest.
 	 */
 	public findReferenceById(
 		id: number,
-	): Promise<Pick<OrderEntity, 'id' | 'ref_code' | 'ref_number'> | null> {
+	): Promise<Pick<
+		OrderEntity,
+		'id' | 'ref_code' | 'ref_number' | 'created_at'
+	> | null> {
 		return this.repository
 			.createQuery()
-			.select(['order.id', 'order.ref_code', 'order.ref_number'])
+			.select([
+				'order.id',
+				'order.ref_code',
+				'order.ref_number',
+				'order.created_at',
+			])
 			.withDeleted(true)
 			.filterById(id)
 			.first();

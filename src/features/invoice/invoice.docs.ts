@@ -13,6 +13,7 @@ import {
 } from '@/features/invoice/invoice.mock';
 import { OrderByEnum } from '@/features/invoice/invoice.validator';
 import { InvoiceLineKindEnum } from '@/features/invoice/invoice-line.entity';
+import { documentSample } from '@/features/invoice/invoice-public.docs';
 import {
 	type ApiInputDocumentation,
 	helperApiInputDocumentation,
@@ -155,6 +156,25 @@ export const docs: Record<
 		withAuthErrors: true,
 		withErrors: [404, 422],
 		request: {
+			params: {
+				id: idParam,
+			},
+		},
+	}),
+
+	document: helperApiInputDocumentation({
+		description: 'Read an invoice as it prints',
+		withBearerAuth: true,
+		success: {
+			status: 200,
+			description:
+				'The document with its frozen parties, its lines, the order it bills and, on a shipping document, the movement',
+			dataSample: documentSample,
+		},
+		withAuthErrors: true,
+		withErrors: [404, 422],
+		request: {
+			notes: 'The same shape the buyer prints through `GET /public/orders/:order_id/invoices/:id` - see that action. Any status is answered; only an issued document is meant to print',
 			params: {
 				id: idParam,
 			},

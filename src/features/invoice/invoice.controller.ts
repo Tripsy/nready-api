@@ -90,6 +90,20 @@ class InvoiceController extends BaseController {
 		res.json(res.locals.output);
 	});
 
+	/**
+	 * The printable copy - the same shape the buyer prints through `InvoicePublicController`. Not
+	 * cached: it reads the order and the movement live, and neither cleans this feature's cache.
+	 */
+	public document = asyncHandler(async (req: Request, res: Response) => {
+		this.policy.canRead(res.locals.auth);
+
+		const data = this.validate(this.validator.read, req.params, res);
+
+		res.locals.output.data(await this.invoiceService.getDocument(data.id));
+
+		res.json(res.locals.output);
+	});
+
 	public update = asyncHandler(async (req: Request, res: Response) => {
 		this.policy.canUpdate(res.locals.auth);
 

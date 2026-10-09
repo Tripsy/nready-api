@@ -27,6 +27,11 @@ export default async () => {
 				method: 'get',
 				handlers: [validateParamsWhenId('id')],
 			},
+			document: {
+				path: '/:id/document',
+				method: 'get',
+				handlers: [validateParamsWhenId('id')],
+			},
 			update: {
 				path: '/:id',
 				method: 'put',

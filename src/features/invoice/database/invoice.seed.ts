@@ -24,8 +24,8 @@ import InvoiceEntity, {
 	InvoiceScopeEnum,
 	InvoiceStatusEnum,
 	resolvePaymentStatus,
-	type SellerDetails,
 } from '@/features/invoice/invoice.entity';
+import { invoiceService } from '@/features/invoice/invoice.service';
 import InvoiceLineEntity, {
 	InvoiceLineKindEnum,
 } from '@/features/invoice/invoice-line.entity';
@@ -95,24 +95,6 @@ function buildBillingDetails(client: ClientEntity): BillingDetails {
 				person_name: client.person_name ?? 'Person',
 				person_identification_number: null,
 			};
-}
-
-function buildSellerDetails(): SellerDetails {
-	return {
-		company_name: Configuration.get('company.name'),
-		company_cui: Configuration.get('company.cui'),
-		company_reg_com: Configuration.get('company.regCom'),
-		address_country: Configuration.get('company.addressCountry'),
-		address_region: Configuration.get('company.addressRegion'),
-		address_city: Configuration.get('company.addressCity'),
-		details: Configuration.get('company.addressDetails'),
-		postal_code: Configuration.get('company.postalCode'),
-		contact_name: Configuration.get('company.contactName'),
-		contact_email: Configuration.get('company.contactEmail'),
-		contact_phone: Configuration.get('company.contactPhone'),
-		iban: Configuration.get('company.iban'),
-		bank_name: Configuration.get('company.bankName'),
-	};
 }
 
 /**
@@ -298,7 +280,9 @@ export const invoiceSeed: SeedDefinition = {
 					billing_details: isDraft
 						? null
 						: buildBillingDetails(client),
-					seller_details: isDraft ? null : buildSellerDetails(),
+					seller_details: isDraft
+						? null
+						: invoiceService.buildSellerDetails(),
 					notes: null,
 				}),
 			);

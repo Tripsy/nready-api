@@ -14,8 +14,8 @@ import asyncHandler from '@/helpers/async.handler';
 import { BaseController } from '@/shared/abstracts/controller.abstract';
 
 /**
- * The billing side of an order, for its buyer: the documents raised for it and the money filed
- * under it. No permission is checked, but an account is, and the order has to be billed to one of
+ * The billing side of an order, for its buyer: the documents raised for it, each one whole enough
+ * to print, and the money filed under it. No permission is checked, but an account is, and the order has to be billed to one of
  * its clients - resolved through `OrderService.findOwnById` first, so somebody else's order
  * answers the same 404 as a missing one and no row of theirs is read.
  *
@@ -54,6 +54,31 @@ class InvoicePublicController extends BaseController {
 			invoices: invoices,
 			payments: payments,
 		});
+
+		res.json(res.locals.output);
+	});
+
+	/**
+	 * One issued document of the order, whole enough to print. Not cached, for the reason
+	 * `OrderService.getOwnEntryData` gives: the ownership read runs on every request regardless.
+	 */
+	public document = asyncHandler(async (req: Request, res: Response) => {
+		this.policy.requiredAuth(res.locals.auth);
+
+		const data = this.validate(
+			this.validator.publicDocument,
+			req.params,
+			res,
+		);
+
+		await orderService.findOwnById(
+			data.order_id,
+			this.policy.getId(res.locals.auth) ?? 0,
+		);
+
+		res.locals.output.data(
+			await this.invoiceService.getPublicDocument(data.order_id, data.id),
+		);
 
 		res.json(res.locals.output);
 	});
