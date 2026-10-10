@@ -113,6 +113,14 @@ function loadSettings() {
 		worker: {
 			enabled: process.env.WORKER_ENABLED !== 'false',
 		},
+		/*
+		 * Off only by an explicit `false`, for a load test that has to measure the API rather
+		 * than the limiter. An operator setting, never a request-side one - see the allowlist
+		 * note in `rate-limit.config.ts`.
+		 */
+		rateLimit: {
+			enabled: process.env.RATE_LIMIT_ENABLED !== 'false',
+		},
 		cache: {
 			ttl:
 				process.env.CACHE_TTL &&
@@ -300,6 +308,8 @@ function loadSettings() {
 			authExpiresIn: Number(process.env.AUTH_JWT_EXPIRES_IN) || 86400,
 			authRefreshExpiresIn:
 				Number(process.env.AUTH_JWT_REFRESH_EXPIRES_IN) || 28800,
+			// Seconds between two `used_at` writes for one session - see `touchSession`
+			authTouchInterval: 60,
 			emailConfirmationSecret:
 				(process.env.EMAIL_JWT_SECRET as string) || 'secret',
 			emailConfirmationExpiresIn:

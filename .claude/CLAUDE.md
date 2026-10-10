@@ -27,7 +27,7 @@ context yet. Read the relevant one *before* proposing an approach in that area, 
 | File | Covers | Loads for |
 |---|---|---|
 | `api.md` | Express app setup, route registration, controller structure, response envelope | `*.routes.ts`, `*.controller.ts`, `app.ts`, output/param middleware |
-| `auth.md` | Token model, `res.locals.auth`, policy layer, passwords, rate limiting, social login | `account`/`user-permission` features, `*.policy.ts`, auth middleware |
+| `auth.md` | Token model, session/user cache and what must drop it, `res.locals.auth`, policy layer, passwords, Redis-backed rate limiting, social login | `account`/`user-permission` features, `*.policy.ts`, auth middleware, `rate-limit.*` |
 | `comment.md` | Comment status model, guest vs member writes, automatic flagging at 3 distinct reporters, thread cache, the target-participation registry a target closes itself with | `src/features/comment/**`, `src/features/complaint/**`, `event.config.ts`, `target-participation.registry.ts` |
 | `database.md` | Entities, repository/query layer, transactions, migrations, seeds | `*.entity.ts`, `*.repository.ts`, `*.service.ts`, `*.subscriber.ts`, migrations |
 | `discount.md` | Discount scopes and targets, the two resolution passes and how they stack, the gross `min_order_value` base, order-wide apportionment, where the money sits on a line | `src/features/discount/**`, `cart-pricing.service.ts`, `order-discount.service.ts` |
