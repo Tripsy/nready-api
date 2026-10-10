@@ -153,6 +153,11 @@ feature nobody can evaluate. Conventions (top-up, seeded PRNG, natural keys) are
 `.claude/rules/database.md` §5.4. Features that hold no table of their own - or reference data with
 a fixed canonical list, like `permission` and `template` - are the exception.
 
+**A new or completed feature gets its `README.md` entry** - the Features checklist (unchecked
+while it holds entities only), and the commerce chain or Setup notes when it changes either. Part
+of the feature, like the seed: the README is what someone starting a project from this boilerplate
+reads first.
+
 **`image` is genuinely optional.** Nothing imports it: a feature wanting the picture that stands
 for one of its rows asks `target-image.registry.ts` for an image of a given type (`logo` /
 `gallery`), and with the feature absent the registry answers empty. Keep it that way - a direct
