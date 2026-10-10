@@ -507,7 +507,7 @@ describe('CashFlowService.restatePendingForOrder', () => {
 			innerJoin: jest.fn(() => builder),
 			where: jest.fn(() => builder),
 			orderBy: jest.fn(() => builder),
-			setLock: jest.fn(() => {
+			setLock: jest.fn((..._args: unknown[]) => {
 				calls.push('setLock');
 
 				return builder;
@@ -518,7 +518,7 @@ describe('CashFlowService.restatePendingForOrder', () => {
 				return rows;
 			}),
 		};
-		const update = jest.fn(async () => ({}));
+		const update = jest.fn(async (..._args: unknown[]) => ({}));
 
 		const manager = {
 			getRepository: jest.fn(() => ({

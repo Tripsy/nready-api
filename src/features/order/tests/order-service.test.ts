@@ -108,7 +108,7 @@ describe('OrderService.updateStatus', () => {
 	 * caller holds says.
 	 */
 	const lockedAt = (current: OrderStatus) => {
-		const findOneOrFail = jest.fn(async () =>
+		const findOneOrFail = jest.fn(async (..._args: unknown[]) =>
 			orderWith({ status: current }),
 		);
 		const { manager } = setupTransactionMock({ findOneOrFail });
