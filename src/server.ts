@@ -9,6 +9,7 @@ import {
 } from '@/config/init-websocket.setup';
 import { getRoutesInfo } from '@/config/routes.setup';
 import { Configuration } from '@/config/settings.config';
+import { stopCronJobs } from '@/providers/cron.provider';
 import { destroyDatabase } from '@/providers/database.provider';
 import { getLogStream, getSystemLogger } from '@/providers/logger.provider';
 import { queueFactory } from '@/queues/queue.factory';
@@ -19,6 +20,9 @@ let isShuttingDown = false;
 const FORCE_SHUTDOWN_TIMEOUT = Number(
 	process.env.FORCE_SHUTDOWN_TIMEOUT ?? 10000,
 );
+
+// Under the force timeout, so the close operations still get their turn after it
+const CRON_SHUTDOWN_TIMEOUT = Math.floor(FORCE_SHUTDOWN_TIMEOUT * 0.6);
 
 async function start() {
 	// 1. Infrastructure first
@@ -92,8 +96,18 @@ async function shutdown(signal: string): Promise<void> {
 		process.exit(0);
 	}
 
+	/*
+	 * Stops new ticks at once, alongside the HTTP drain rather than after it, and gives a run in
+	 * progress part of the grace period - the connections it writes through are closed only once
+	 * it has settled or timed out.
+	 */
+	const cronsStopped = stopCronJobs(CRON_SHUTDOWN_TIMEOUT).catch((error) => {
+		getSystemLogger().warn(error, 'Cron jobs stop warning');
+	});
+
 	server.close(() => {
-		closeHandler()
+		cronsStopped
+			.then(() => closeHandler())
 			.then(() => {
 				getSystemLogger().debug('Shutdown complete');
 				process.exit(0);

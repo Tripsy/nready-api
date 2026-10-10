@@ -5,17 +5,14 @@ import {
 	type TargetImage,
 	type TargetImageProvider,
 	TargetImageTypeEnum,
-} from '@/config/target-image.config';
+} from '@/shared/registries/target-image.registry';
 
-/**
- * The registry that keeps `image` optional. Its own file because the provider slot is module
- * state with no way to unregister - a suite sharing the module with tests that expect the
- * unregistered default would have to depend on execution order to get it.
- *
- * Order matters within this file for the same reason: the empty-registry case runs first, since
- * every later test leaves a provider behind.
- */
-describe('target-image.config', () => {
+/** The registry that keeps `image` optional. Each test starts from the unregistered slot. */
+describe('target-image.registry', () => {
+	afterEach(() => {
+		registerTargetImageProvider(null);
+	});
+
 	const image: TargetImage = {
 		id: 1,
 		path: '/articles/cover.jpg',

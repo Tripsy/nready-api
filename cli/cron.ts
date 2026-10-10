@@ -1,17 +1,15 @@
 import { Command } from 'commander';
 import { setupFeatureBootstrap } from '@/config/bootstrap.setup';
 import { setupListeners } from '@/config/listeners.setup';
-import archiveArticle from '@/features/article/cron-jobs/archive-article.cron';
-import expireFeaturedArticle from '@/features/article/cron-jobs/expire-featured-article.cron';
-import publicRestrictedArticle from '@/features/article/cron-jobs/public-restricted-article.cron';
-import publishScheduledArticle from '@/features/article/cron-jobs/publish-scheduled-article.cron';
-import notifyCommentSubscribers from '@/features/comment/cron-jobs/notify-comment-subscribers.cron';
-import cronTimeCheck from '@/features/cron-history/cron-jobs/cron-time-check.cron';
-import importExchangeRate from '@/features/exchange-rate/cron-jobs/import-exchange-rate.cron';
+import { initializeMessages } from '@/config/message.setup';
 import dataSource from '../src/config/data-source.config';
-import { getCronJobsPaths } from '../src/providers/cron.provider';
-
-type CronJob = () => Promise<unknown>;
+import {
+	type CronJobData,
+	createCronLock,
+	executeCron,
+	getCronJobsPaths,
+	loadCronJob,
+} from '../src/providers/cron.provider';
 
 const BACKGROUND_DRAIN_MS = 500;
 
@@ -22,26 +20,40 @@ function drainBackgroundWork(): Promise<void> {
 
 const program = new Command();
 
-const cronJobs: Record<string, CronJob> = {
-	'cron-time-check': cronTimeCheck,
-	'archive-article': archiveArticle,
-	'expire-featured-article': expireFeaturedArticle,
-	'public-restricted-article': publicRestrictedArticle,
-	'publish-scheduled-article': publishScheduledArticle,
-	'notify-comment-subscribers': notifyCommentSubscribers,
-	'import-exchange-rate': importExchangeRate,
-};
+/**
+ * Every job the scheduler would register - the same discovery, so a new `*.cron.ts` is runnable
+ * here without being listed anywhere.
+ */
+async function loadCronJobs(): Promise<Map<string, CronJobData>> {
+	// Some job modules build validators or messages at import time, which reads the locales
+	await initializeMessages();
+
+	const jobs = new Map<string, CronJobData>();
+
+	for (const filePath of getCronJobsPaths()) {
+		const job = await loadCronJob(filePath);
+
+		jobs.set(job.name, job);
+	}
+
+	return jobs;
+}
 
 program
 	.command('run <cron-name>')
 	.description('Run a specific cron job manually')
-	.action(async (cronName: string) => {
-		const cronFn = cronJobs[cronName];
+	.option(
+		'-f, --force',
+		'Run even while the job holds its lock (a scheduled run is in progress)',
+	)
+	.action(async (cronName: string, options: { force?: boolean }) => {
+		const jobs = await loadCronJobs();
+		const job = jobs.get(cronName);
 
-		if (!cronFn) {
+		if (!job) {
 			console.error(`Unknown cron: ${cronName}`);
 			console.debug(
-				`Available cron jobs: ${Object.keys(cronJobs).join(', ')}`,
+				`Available cron jobs: ${[...jobs.keys()].join(', ')}`,
 			);
 
 			process.exit(1);
@@ -59,9 +71,24 @@ program
 		await setupFeatureBootstrap();
 		await setupListeners();
 
-		console.debug(`Running ${cronName}...`);
-		const result = await cronFn();
-		console.debug('Result: ', result);
+		// The lock the scheduler takes, so a manual run cannot overlap a scheduled one
+		const lock = createCronLock(job);
+
+		if (!options.force && !(await lock.acquire())) {
+			console.error(
+				`${cronName} is already running (lock ${lock.key}); use --force to run anyway`,
+			);
+
+			process.exit(1);
+		}
+
+		try {
+			console.debug(`Running ${cronName}...`);
+			const result = await executeCron(job);
+			console.debug('Result: ', result);
+		} finally {
+			await lock.release();
+		}
 
 		/*
 		 * Listeners write through `runInBackground`, which is deliberately not awaited - a
@@ -77,7 +104,7 @@ program
 	.command('list')
 	.description('List all available cron jobs')
 	.option('-s, --system', 'List cron jobs from system (filesystem)')
-	.action((options) => {
+	.action(async (options) => {
 		if (options.system) {
 			console.debug('System cron jobs:');
 
@@ -89,11 +116,16 @@ program
 			return;
 		}
 
-		console.debug('Testable cron jobs:');
+		const jobs = await loadCronJobs();
 
-		Object.keys(cronJobs).forEach((name) => {
-			console.debug(`  - ${name}`);
+		console.debug('Cron jobs:');
+
+		jobs.forEach((job) => {
+			console.debug(`  - ${job.name} (${job.schedule_expression})`);
 		});
+
+		// Importing the jobs opens connections (Redis, queues) that keep the process alive
+		process.exit(0);
 	});
 
-program.parse();
+program.parseAsync();

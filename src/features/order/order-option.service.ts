@@ -78,8 +78,10 @@ export class OrderOptionService {
 				throw new BadRequestError(
 					lang('order.error.option_selection', {
 						variant_id: String(line.variant_id),
-						min: String(problem.min),
-						max: problem.max === null ? 'any' : String(problem.max),
+						bounds: ProductOptionSelectionService.describeBounds(
+							problem.min,
+							problem.max,
+						),
 					}),
 				);
 			}

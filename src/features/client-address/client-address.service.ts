@@ -15,14 +15,17 @@ import {
 import ClientAddressEntity, {
 	type ClientAddressSnapshot,
 	type ClientAddressType,
+	ClientAddressTypeEnum,
 } from '@/features/client-address/client-address.entity';
 import { getClientAddressRepository } from '@/features/client-address/client-address.repository';
 import {
 	type ClientAddressValidator,
 	paramsUpdateList,
 } from '@/features/client-address/client-address.validator';
-import type PlaceEntity from '@/features/place/place.entity';
-import { type PlaceType, PlaceTypeEnum } from '@/features/place/place.entity';
+import PlaceEntity, {
+	type PlaceType,
+	PlaceTypeEnum,
+} from '@/features/place/place.entity';
 import { pickValuesFromObject } from '@/helpers/objects.helper';
 import { cleanEntityCache } from '@/shared/abstracts/service.abstract';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
@@ -333,6 +336,115 @@ export class ClientAddressService {
 	}
 
 	/**
+	 * @description Used by checkout and the back office to copy a client's billing address onto an order
+	 *
+	 * The snapshot `getOrderSnapshot` takes, plus the country's ISO 3166-1 alpha-2 code, which an
+	 * order keeps beside the name for discount country conditions. Scoped to the client and to
+	 * billing addresses, so somebody else's id answers the same 404 as a missing one.
+	 */
+	public async getBillingCopy(
+		id: number,
+		clientId: number,
+	): Promise<ClientAddressSnapshot & { country_code: string | null }> {
+		const entry = await this.createPlaceQuery(Configuration.language())
+			.filterById(id)
+			.filterBy('client_address.client_id', clientId)
+			.filterBy('client_address.type', ClientAddressTypeEnum.BILLING)
+			.firstOrFail();
+
+		return this.toCopy(entry);
+	}
+
+	/** The snapshot plus the country's alpha-2 code - what an order keeps as its billing address. */
+	private toCopy(
+		entry: ClientAddressEntity,
+	): ClientAddressSnapshot & { country_code: string | null } {
+		const city = entry.address?.city ?? null;
+		const country = [city, city?.parent, city?.parent?.parent].find(
+			(place) => place?.place_type === PlaceTypeEnum.COUNTRY,
+		);
+
+		return {
+			...this.toSnapshot(entry),
+			country_code: country?.alpha2_code ?? null,
+		};
+	}
+
+	/**
+	 * @description Used by `OrderService` to fill in an order's billing address from its country code
+	 *
+	 * The country an ISO 3166-1 alpha-2 code names, with its name in the default content language -
+	 * the language every snapshot is written in. Null for a code no country place carries.
+	 */
+	public async resolveCountry(
+		code: string,
+	): Promise<{ code: string; name: string } | null> {
+		const place = await dataSource.getRepository(PlaceEntity).findOne({
+			where: {
+				place_type: PlaceTypeEnum.COUNTRY,
+				alpha2_code: code.toUpperCase(),
+			},
+			relations: { contents: true },
+		});
+
+		if (!place?.alpha2_code) {
+			return null;
+		}
+
+		const language = Configuration.language();
+		const name =
+			place.contents?.find((content) => content.language === language)
+				?.name ??
+			place.contents?.[0]?.name ??
+			place.alpha2_code;
+
+		return { code: place.alpha2_code, name: name };
+	}
+
+	/**
+	 * @description Used by `ShippingService` to name the client-address ends of the movements it reads
+	 *
+	 * One line per address, most specific first - street and flat, postal code, then city, region,
+	 * country - so a form or a list can show which address an id is. One query for the whole set, so
+	 * a page of movements costs one lookup rather than one per row. An id that no longer resolves is
+	 * absent from the map: the shipment's key is `SET NULL`, but a read can race a removal.
+	 */
+	public async describeByIds(
+		ids: readonly number[],
+	): Promise<Map<number, string>> {
+		const unique = [...new Set(ids)];
+
+		if (!unique.length) {
+			return new Map();
+		}
+
+		const entries = await this.createPlaceQuery(Configuration.language())
+			.filterBy('id', unique, 'IN')
+			.all();
+
+		const labels = new Map<number, string>();
+
+		for (const entry of entries) {
+			const snapshot = this.toSnapshot(entry);
+			const label = [
+				snapshot.details,
+				snapshot.postal_code,
+				snapshot.address_city,
+				snapshot.address_region,
+				snapshot.address_country,
+			]
+				.filter((part): part is string => !!part)
+				.join(', ');
+
+			if (label) {
+				labels.set(entry.id, label);
+			}
+		}
+
+		return labels;
+	}
+
+	/**
 	 * @description Used in `updateStatus` method from `ShippingService`; the address as a shipped document freezes it
 	 *
 	 * By id alone: a shipment reached this point through its own `client_address_id`, and whose
@@ -344,6 +456,29 @@ export class ClientAddressService {
 			.firstOrFail();
 
 		return this.toSnapshot(entry);
+	}
+
+	/**
+	 * @description Used in `raiseForCashFlow` method from `InvoiceService`; where to bill a client
+	 * when no order named an address
+	 *
+	 * The oldest billing address the client holds, which is the one they registered with. A client
+	 * keeping several is an ambiguity nothing on a bare movement resolves - the caller that needs
+	 * a specific one names an order instead, and `getOrderSnapshot` reads it from there.
+	 *
+	 * Null rather than a throw: the caller states what a missing address means for the document it
+	 * is building.
+	 */
+	public async getBillingSnapshotForClient(
+		clientId: number,
+	): Promise<ClientAddressSnapshot | null> {
+		const entry = await this.createPlaceQuery(Configuration.language())
+			.filterBy('client_address.client_id', clientId)
+			.filterBy('client_address.type', ClientAddressTypeEnum.BILLING)
+			.orderBy('id')
+			.first();
+
+		return entry ? this.toSnapshot(entry) : null;
 	}
 
 	/**
@@ -377,6 +512,20 @@ export class ClientAddressService {
 	 * `language` selects the translation the joined city is returned in.
 	 */
 	public async getEntryData(data: { id: number; language: string }) {
+		const [entry, placed] = await Promise.all([
+			this.readEntry(data),
+			// The flattened copy the order form fills a billing address from
+			this.createPlaceQuery(Configuration.language())
+				.filterById(data.id)
+				.first(),
+		]);
+
+		return Object.assign(entry, {
+			snapshot: placed ? this.toCopy(placed) : null,
+		});
+	}
+
+	private async readEntry(data: { id: number; language: string }) {
 		return await this.repository
 			.createQuery()
 			.joinAndSelect('client_address.client', 'client', 'LEFT')

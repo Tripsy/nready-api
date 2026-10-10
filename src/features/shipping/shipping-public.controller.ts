@@ -43,6 +43,27 @@ class ShippingPublicController extends BaseController {
 
 		res.json(res.locals.output);
 	});
+
+	public findByOrders = asyncHandler(async (req: Request, res: Response) => {
+		this.policy.requiredAuth(res.locals.auth);
+
+		const data = this.validate(
+			this.validator.publicFindByOrders,
+			req.query,
+			res,
+		);
+
+		const entries = await this.shippingService.findForOwnOrders(
+			data.order_id,
+			this.policy.getId(res.locals.auth) ?? 0,
+		);
+
+		res.locals.output.data({
+			entries: entries,
+		});
+
+		res.json(res.locals.output);
+	});
 }
 
 export const shippingPublicController = new ShippingPublicController(

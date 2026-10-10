@@ -16,7 +16,7 @@ import type { StatusTransitions } from '@/shared/types/common.type';
 export const GrnStatusEnum = {
 	DRAFT: 'draft', // Being entered; nothing has moved
 	CONFIRMED: 'confirmed', // Stock is in, lots are open, cost has been averaged
-	CANCELLED: 'canceled', // Withdrawn; if it had been confirmed, reversing movements were posted
+	CANCELED: 'canceled', // Withdrawn; if it had been confirmed, reversing movements were posted
 } as const;
 
 export type GrnStatus = (typeof GrnStatusEnum)[keyof typeof GrnStatusEnum];
@@ -29,9 +29,9 @@ export type GrnStatus = (typeof GrnStatusEnum)[keyof typeof GrnStatusEnum];
  * having done none of that. Canceling posts the reversals instead.
  */
 export const STATUS_TRANSITIONS: StatusTransitions<GrnStatus> = {
-	[GrnStatusEnum.DRAFT]: [GrnStatusEnum.CONFIRMED, GrnStatusEnum.CANCELLED],
-	[GrnStatusEnum.CONFIRMED]: [GrnStatusEnum.CANCELLED],
-	[GrnStatusEnum.CANCELLED]: [
+	[GrnStatusEnum.DRAFT]: [GrnStatusEnum.CONFIRMED, GrnStatusEnum.CANCELED],
+	[GrnStatusEnum.CONFIRMED]: [GrnStatusEnum.CANCELED],
+	[GrnStatusEnum.CANCELED]: [
 		// Allow nothing
 	],
 };

@@ -16,6 +16,7 @@ export const ShippingStatusEnum = {
 	DELIVERED: 'delivered',
 	FAILED: 'failed',
 	RETURNED: 'returned',
+	CANCELED: 'canceled',
 } as const;
 
 export type ShippingStatus =
@@ -35,15 +36,20 @@ export type ShippingStatus =
  * and once they have arrived the delivery is what happened. **`delivered` is terminal**, like
  * `failed` and `returned`: goods that arrive and are later sent back are the return leg of a
  * different movement, which is its own `return` row, not this one reopened.
+ *
+ * **`canceled` is the movement withdrawn before it left** - its order was canceled, so there is
+ * nothing to send. Reachable only while the goods are still in the warehouse, and terminal.
  */
 export const STATUS_TRANSITIONS: StatusTransitions<ShippingStatus> = {
 	[ShippingStatusEnum.PENDING]: [
 		ShippingStatusEnum.PREPARING,
 		ShippingStatusEnum.FAILED,
+		ShippingStatusEnum.CANCELED,
 	],
 	[ShippingStatusEnum.PREPARING]: [
 		ShippingStatusEnum.SHIPPED,
 		ShippingStatusEnum.FAILED,
+		ShippingStatusEnum.CANCELED,
 	],
 	[ShippingStatusEnum.SHIPPED]: [
 		ShippingStatusEnum.DELIVERED,
@@ -57,6 +63,9 @@ export const STATUS_TRANSITIONS: StatusTransitions<ShippingStatus> = {
 		// Allow nothing
 	],
 	[ShippingStatusEnum.RETURNED]: [
+		// Allow nothing
+	],
+	[ShippingStatusEnum.CANCELED]: [
 		// Allow nothing
 	],
 };

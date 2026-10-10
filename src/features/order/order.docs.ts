@@ -2,7 +2,6 @@ import { Configuration } from '@/config/settings.config';
 import type { orderController } from '@/features/order/order.controller';
 import {
 	OrderStatusEnum,
-	OrderTypeEnum,
 	STATUS_TRANSITIONS,
 } from '@/features/order/order.entity';
 import { ORDER_LINES_MAX, OrderByEnum } from '@/features/order/order.validator';
@@ -23,9 +22,8 @@ export const orderSample: Record<string, unknown> = {
 	ref_code: 'ORD',
 	ref_number: 1183,
 	status: OrderStatusEnum.CONFIRMED,
-	type: OrderTypeEnum.STANDARD,
-	issued_at: '2026-08-14T11:32:00.000Z',
 	notes: null,
+	discount: null,
 	created_at: '2026-08-14T11:32:00.000Z',
 	updated_at: null,
 	deleted_at: null,
@@ -42,11 +40,14 @@ export const orderSample: Record<string, unknown> = {
 /** What `read` adds on top: the lines, and what they add up to. */
 export const orderWithLinesSample: Record<string, unknown> = {
 	...orderSample,
+	is_invoiced: false,
+	is_client_locked: false,
 	lines: [
 		{
 			id: 402,
 			order_id: 118,
 			parent_id: null,
+			bundle_item_id: null,
 			variant_id: 91,
 			product_id: 44,
 			quantity: 2,
@@ -85,7 +86,7 @@ const statusTransitionNote = Object.entries(STATUS_TRANSITIONS)
 export const totalsNote =
 	"`totals` sums `price x quantity` per line as `subtotal`, before any discount, and states what the discounts took off beside it as `discount_reduction`; VAT is charged per line on the difference, at that line's own rate, and `total` is `subtotal - discount_reduction + vat_amount`. `order_discount_reduction` says how much of that reduction came from an order-wide campaign rather than from the lines' own rules - it is **already inside** `discount_reduction`, stated separately so a reader can see what the campaign was worth, never to be subtracted a second time";
 
-const lineNote = `Each line names a variant and the product it belongs to - the pair is checked before the insert, so a mismatch answers 400 rather than a constraint violation. Prices are the caller's: the order records the figure that was agreed. Discounts are not - the catalog's own rules are resolved over the set as it is saved, clamped against \`product_price.min_price\`, and written to the line as snapshots plus the money they took off. A line carries its own best discount and, stacked on top, its apportioned share of any order-wide campaign, each snapshot stating what it alone was worth; \`discount_reduction\` is their sum and the figure VAT is charged on. \`options\` are \`product_option\` ids: each must belong to the line's product and every question on that product must receive between its \`min_select\` and \`max_select\` answers, or the request answers 400. They are stored as snapshots carrying the option id, today's wording and the delta in the document's currency; \`price\` is the unit figure with those deltas already folded in. Up to ${ORDER_LINES_MAX} lines`;
+const lineNote = `Each line names a variant and the product it belongs to - the pair is checked before the insert, so a mismatch answers 400 rather than a constraint violation. Prices are the caller's: the order records the figure that was agreed. Discounts are the catalog's unless typed - the catalog's own rules are resolved over the set as it is saved, clamped against \`product_price.min_price\`, and written to the line as snapshots plus the money they took off. A line carries its own best discount and, stacked on top, its apportioned share of any order-wide campaign, each snapshot stating what it alone was worth; \`discount_reduction\` is their sum and the figure VAT is charged on. A typed \`discount\` ({ type: percent|amount, value }, in the document's currency) replaces the catalog: on a line it stands in for that line's best rule, an \`amount\` per unit; at the top level it stands in for the order-wide campaign and is apportioned the same way. Both are clamped to the same floor and recorded as snapshots with \`manual: true\`. Setting, changing or clearing one needs the \`order.discount\` permission (admins hold it implicitly) and answers 403 otherwise. \`options\` are \`product_option\` ids: each must belong to the line's product and every question on that product must receive between its \`min_select\` and \`max_select\` answers, or the request answers 400. They are stored as snapshots carrying the option id, today's wording and the delta in the document's currency; \`price\` is the unit figure with those deltas already folded in. **A bundle is one line**: \`price\` is what one bundle costs as composed and \`components\` ([{ item_id, units? }], the cart's shape - the choices only, never a component that comes with the kit) says which candidates and extras it takes; it is exploded into a header at price and VAT 0 plus one line per component, the price divided pro-rata by the components' standalone prices, each at its own VAT rate. A bad choice answers 400 naming the bundle, its \`vat_rate\` is ignored, and a typed \`discount\` on it is refused. Up to ${ORDER_LINES_MAX} lines`;
 
 /**
  * An order is the document a business raises against a client. It is created here only for
@@ -108,7 +109,7 @@ export const docs: Record<keyof typeof orderController, ApiInputDocumentation> =
 			withAuthErrors: true,
 			withErrors: [400, 404, 422],
 			request: {
-				notes: `The order starts as \`${OrderStatusEnum.PENDING}\`, exactly as a checkout's order does, and is given its reference straight away, allocated from the \`ORD\` series - an order canceled before confirmation leaves that number spent. A \`client_id\` that resolves to nothing answers 404. The exchange rate is not a field: it is read from the published \`exchange-rate\` series as of \`issued_at\`, and a currency with no rate published answers 400. ${lineNote}`,
+				notes: `The order starts as \`${OrderStatusEnum.PENDING}\`, exactly as a checkout's order does, and is given its reference straight away, allocated from the \`ORD\` series - an order canceled before confirmation leaves that number spent. A \`client_id\` that resolves to nothing answers 404. The exchange rate is not a field: it is read from the published \`exchange-rate\` series as of now, and a currency with no rate published answers 400. ${lineNote}`,
 				body: {
 					client_id: {
 						type: 'number',
@@ -116,28 +117,28 @@ export const docs: Record<keyof typeof orderController, ApiInputDocumentation> =
 						condition:
 							'must resolve to a client that is not deleted',
 					},
+					billing_address: {
+						type: 'object',
+						required: false,
+						condition:
+							'{ details, postal_code, address_city, address_region, country_code, notes }; the country name is filled in from country_code',
+					},
 					currency: {
 						type: 'string',
 						required: true,
 						condition: 'ISO 4217 code, three letters',
 					},
-					type: {
-						type: 'enum',
-						required: false,
-						values: Object.values(OrderTypeEnum),
-						default: OrderTypeEnum.STANDARD,
-					},
-					issued_at: {
-						type: 'string',
-						required: false,
-						condition:
-							'ISO date; defaults to now, backdating is allowed',
-					},
 					notes: { type: 'string', required: false },
 					lines: {
 						type: 'array',
 						required: true,
-						condition: `1 to ${ORDER_LINES_MAX} entries of { variant_id, product_id, quantity, price, vat_rate, options, notes }; quantity above 0, price and vat_rate from 0, options an optional list of product option ids`,
+						condition: `1 to ${ORDER_LINES_MAX} entries of { variant_id, product_id, quantity, price, vat_rate, options, discount, components, notes }; quantity above 0, price and vat_rate from 0, options an optional list of product option ids, discount an optional { type, value } replacing the catalog for that line, components the choices of a bundle line`,
+					},
+					discount: {
+						type: 'object',
+						required: false,
+						condition:
+							'{ type: percent|amount, value }; replaces the catalog order-wide campaign; needs order.discount',
 					},
 				},
 				sample: {
@@ -167,7 +168,7 @@ export const docs: Record<keyof typeof orderController, ApiInputDocumentation> =
 			withAuthErrors: true,
 			withErrors: [404],
 			request: {
-				notes: `A deleted order is only visible to a caller holding order delete. ${totalsNote}`,
+				notes: `A deleted order is only visible to a caller holding order delete. \`is_invoiced\` says whether a live goods document bills the order - read fresh on every call, never cached - and while it is true a new line set answers 409. \`is_client_locked\` says whether the order is invoiced or has a payment filed under it - pending, authorized or completed - and while it is true a different \`client_id\` answers 409. A bundle is a header line at price 0 with its components after it, each carrying \`parent_id\` and the \`bundle_item_id\` it was taken from. ${totalsNote}`,
 				params: {
 					id: {
 						type: 'number',
@@ -187,7 +188,7 @@ export const docs: Record<keyof typeof orderController, ApiInputDocumentation> =
 			withAuthErrors: true,
 			withErrors: [400, 404, 409, 422],
 			request: {
-				notes: `Provide at least one of client_id, currency, type, issued_at, notes or lines. A \`status\` in the body is ignored - it has its own route. **\`lines\` replaces the whole set and is accepted only while the order is \`${OrderStatusEnum.PENDING}\`** - checkout orders included; on any other status it answers 409, because the business has accepted what the document says. Every line re-states its \`options\` as ids and they are re-resolved from the catalog, so a checkout line keeps its options only when they are sent back. \`currency\` is refused without \`lines\`: no order row holds a currency - each line carries its own - so re-denominating a document means re-stating its prices in the new one, and nothing here converts a figure. Its rate is read from the published \`exchange-rate\` series as of the order's \`issued_at\`, never taken from the body`,
+				notes: `Provide at least one of client_id, billing_address, currency, notes or lines. \`billing_address\` is the order's own copy - { details, postal_code, address_city, address_region, country_code, notes }, each optional, null clearing it - and changing it answers 409 once the order is invoiced, since the invoice froze its billing details. \`country_code\` is ISO 3166-1 alpha-2; the country's name is filled in from it, and a code no country carries answers 400. Moving the order to another client without sending one clears the address on file. A \`status\` in the body is ignored - it has its own route. **\`lines\` replaces the whole set and is accepted only while the order is \`${OrderStatusEnum.PENDING}\`** - checkout orders included; on any other status it answers 409, because the business has accepted what the document says. Every line re-states its \`options\` as ids and they are re-resolved from the catalog, so a checkout line keeps its options only when they are sent back. \`currency\` is refused without \`lines\`: no order row holds a currency - each line carries its own - so re-denominating a document means re-stating its prices in the new one, and nothing here converts a figure. Its rate is read from the published \`exchange-rate\` series as of the order's \`created_at\`, never taken from the body`,
 				params: {
 					id: {
 						type: 'number',
@@ -196,23 +197,29 @@ export const docs: Record<keyof typeof orderController, ApiInputDocumentation> =
 				},
 				body: {
 					client_id: { type: 'number', required: false },
+					billing_address: {
+						type: 'object',
+						required: false,
+						condition:
+							'{ details, postal_code, address_city, address_region, country_code, notes }; null clears it; 409 once the order is invoiced',
+					},
 					currency: {
 						type: 'string',
 						required: false,
 						condition:
 							'ISO 4217 code, three letters; only together with lines',
 					},
-					type: {
-						type: 'enum',
-						required: false,
-						values: Object.values(OrderTypeEnum),
-					},
-					issued_at: { type: 'string', required: false },
 					notes: { type: 'string', required: false },
 					lines: {
 						type: 'array',
 						required: false,
 						condition: 'pending only; replaces every existing line',
+					},
+					discount: {
+						type: 'object',
+						required: false,
+						condition:
+							'only together with lines, and cleared when lines come without it; changing a typed discount needs order.discount',
 					},
 				},
 				sample: {
@@ -271,7 +278,7 @@ export const docs: Record<keyof typeof orderController, ApiInputDocumentation> =
 						total: 0,
 					},
 					query: {
-						order_by: OrderByEnum.ISSUED_AT,
+						order_by: OrderByEnum.CREATED_AT,
 						direction: OrderDirectionEnum.DESC,
 						limit: 5,
 						page: 1,
@@ -302,7 +309,7 @@ export const docs: Record<keyof typeof orderController, ApiInputDocumentation> =
 						type: 'enum',
 						required: false,
 						values: Object.values(OrderByEnum),
-						default: OrderByEnum.ISSUED_AT,
+						default: OrderByEnum.CREATED_AT,
 					},
 					direction: {
 						type: 'enum',
@@ -326,13 +333,8 @@ export const docs: Record<keyof typeof orderController, ApiInputDocumentation> =
 							required: false,
 							values: Object.values(OrderStatusEnum),
 						},
-						type: {
-							type: 'enum',
-							required: false,
-							values: Object.values(OrderTypeEnum),
-						},
-						issued_at_start: { type: 'string', required: false },
-						issued_at_end: { type: 'string', required: false },
+						create_at_start: { type: 'string', required: false },
+						create_at_end: { type: 'string', required: false },
 						is_deleted: {
 							type: 'boolean',
 							required: false,

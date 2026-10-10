@@ -18,6 +18,18 @@ import {
 	cartPricingService,
 } from '@/features/cart/cart-pricing.service';
 import {
+	CashFlowCategoryTypeEnum,
+	CashFlowDirectionEnum,
+	type CashFlowMethod,
+	CashFlowMethodEnum,
+} from '@/features/cash-flow/cash-flow.entity';
+import {
+	type CashFlowService,
+	cashFlowService,
+} from '@/features/cash-flow/cash-flow.service';
+import { CashFlowCategoryEnum } from '@/features/cash-flow/cash-flow-category.enum';
+import { OperationalRecordTypeEnum } from '@/features/cash-flow/operational-record.entity';
+import {
 	type ClientService,
 	clientService,
 } from '@/features/client/client.service';
@@ -27,6 +39,11 @@ import {
 	clientAddressService,
 } from '@/features/client-address/client-address.service';
 import type OrderEntity from '@/features/order/order.entity';
+import {
+	type OrderPaymentMethod,
+	OrderPaymentMethodEnum,
+} from '@/features/order/order.entity';
+import { notifyOrderPlaced } from '@/features/order/order.hooks';
 import {
 	type OrderLineInput,
 	type OrderService,
@@ -66,6 +83,7 @@ import {
 	warehouseService,
 } from '@/features/warehouse/warehouse.service';
 import { createFutureDate } from '@/helpers/date.helper';
+import { roundMoney } from '@/helpers/shop.helper';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
@@ -216,6 +234,7 @@ function toOrderLines(lines: readonly CartLine[]): OrderLineInput[] {
 		discount_reduction: line.discount_reduction,
 		options: line.options,
 		notes: line.notes,
+		bundle_item_id: line.bundle_item_id ?? null,
 	});
 
 	return lines
@@ -274,6 +293,24 @@ function toShippingLines(
 	return [...byVariant.values()];
 }
 
+/**
+ * How a shopper's stated intent becomes a movement on the ledger.
+ *
+ * The two enums are deliberately not the same list: `order.payment_method` is what a checkout
+ * screen offers, while `cash_flow.method` is how the money actually arrived, and the ledger knows
+ * instruments the checkout does not name. A card is recorded as `credit_card` because the checkout
+ * cannot tell the two kinds apart; a gateway that later reports otherwise corrects the movement
+ * while it is still `pending`, which `MUTABLE_STATUSES` allows.
+ */
+const CASH_FLOW_METHOD_BY_PAYMENT_METHOD: Record<
+	OrderPaymentMethod,
+	CashFlowMethod
+> = {
+	[OrderPaymentMethodEnum.CASH_ON_DELIVERY]: CashFlowMethodEnum.CASH,
+	[OrderPaymentMethodEnum.CARD]: CashFlowMethodEnum.CREDIT_CARD,
+	[OrderPaymentMethodEnum.BANK_TRANSFER]: CashFlowMethodEnum.BANK_TRANSFER,
+};
+
 export class CartService {
 	constructor(
 		private repository: ReturnType<typeof getCartRepository>,
@@ -287,6 +324,7 @@ export class CartService {
 		private clientAddressService: ClientAddressService,
 		private shippingService: ShippingService,
 		private shippingRateService: ShippingRateService,
+		private cashFlowService: CashFlowService,
 	) {}
 
 	/**
@@ -523,8 +561,10 @@ export class CartService {
 		if (problem?.reason === 'selection') {
 			throw new BadRequestError(
 				lang('cart.error.option_selection', {
-					min: String(problem.min),
-					max: problem.max === null ? 'any' : String(problem.max),
+					bounds: ProductOptionSelectionService.describeBounds(
+						problem.min,
+						problem.max,
+					),
 				}),
 			);
 		}
@@ -871,17 +911,34 @@ export class CartService {
 	 * basket names none of them, so nothing is assumed here - but once the checkout screen has one
 	 * chosen, pricing against it is what stops a client-scoped discount appearing for the first
 	 * time on the order. The caller is what proves the client belongs to the buyer.
+	 *
+	 * `billingAddressId` does the same for the buyer's country: the billing address `toOrder` will
+	 * copy names the country an `applicable_countries` rule is judged against, here as there. It is
+	 * read only with a client, and has to be one of that client's billing addresses - somebody
+	 * else's answers the same 404 checkout gives.
 	 */
 	public async withPricing(
 		cart: CartEntity,
 		language?: string,
 		clientId?: number | null,
 		delivery?: CartDeliveryChoice | null,
+		billingAddressId?: number | null,
 	): Promise<CartWithPricing> {
 		const items = await this.getItems(cart.id);
 
+		const countryCode =
+			clientId && billingAddressId
+				? (
+						await this.clientAddressService.getBillingCopy(
+							billingAddressId,
+							clientId,
+						)
+					).country_code
+				: null;
+
 		const pricing = await this.pricing.price(cart, items, language, {
 			clientId: clientId ?? null,
+			countryCode: countryCode,
 		});
 
 		return {
@@ -893,7 +950,12 @@ export class CartService {
 			pricing: pricing,
 			delivery:
 				clientId && delivery
-					? await this.previewDelivery(pricing, clientId, delivery)
+					? await this.previewDelivery(
+							pricing,
+							clientId,
+							delivery,
+							countryCode,
+						)
 					: null,
 		};
 	}
@@ -902,14 +964,17 @@ export class CartService {
 	 * The checkout screen's delivery figure, priced the way `toOrder` will price it.
 	 *
 	 * Needs a client: the delivery address has to be proven one of theirs before its country may
-	 * decide a rate, and a client-targeted shipping discount has nobody to match without one. The
-	 * billing country is not known here, so a rule limited by `applicable_countries` fails closed
-	 * until the order is placed - the same point a country-limited goods discount first appears.
+	 * decide a rate, and a client-targeted shipping discount has nobody to match without one.
+	 *
+	 * Two countries, as in `toOrder`: the destination's decides the rate, the buyer's
+	 * (`billingCountryCode`, from the billing address) decides an `applicable_countries` rule.
+	 * Until a billing address is chosen the latter is null and such a rule fails closed.
 	 */
 	private async previewDelivery(
 		pricing: CartPricing,
 		clientId: number,
 		delivery: CartDeliveryChoice,
+		billingCountryCode: string | null,
 	): Promise<ShippingPricing | null> {
 		const isCourier = delivery.method === ShippingMethodEnum.COURIER;
 
@@ -942,7 +1007,7 @@ export class CartService {
 			},
 			{
 				clientId: clientId,
-				countryCode: null,
+				countryCode: billingCountryCode,
 				orderValue: pricing.subtotal,
 			},
 		);
@@ -1020,11 +1085,12 @@ export class CartService {
 	 * An order with nothing physical in it - only digital products or services - raises no
 	 * shipment: there is nothing to pick, and an empty parcel would sit in the dispatch queue.
 	 *
-	 * **Both addresses are referenced, not copied** - `order.billing_address_id` and the shipment's
-	 * `destination_client_address_id`. They have to be filed under the billed client with the
-	 * matching type; anything else is the client-address 404. The destination is frozen into
-	 * `shipping.destination_data` when the shipment ships, which is the point after which
-	 * re-addressing a parcel already on its way would be a lie.
+	 * **The billing address is copied, the delivery address referenced.** `order.billing_address`
+	 * is the order's own snapshot - an operator may correct it on the order while it is unbilled,
+	 * without touching the client's address book. The shipment keeps
+	 * `destination_client_address_id`, frozen into `shipping.destination_data` when it ships, the
+	 * point after which re-addressing a parcel already on its way would be a lie. Both have to be
+	 * filed under the billed client with the matching type; anything else is the client-address 404.
 	 */
 	public async toOrder(
 		cart: CartEntity,
@@ -1038,14 +1104,12 @@ export class CartService {
 		);
 
 		/*
-		 * Resolved for what they prove, not for what they return: each call refuses an address that
-		 * is not filed under this client with the matching type, which is the whole ownership check
-		 * behind the two ids below. The rows themselves are referenced, not copied.
+		 * Copied with its country code - and refused, as a 404, when it is not one of this client's
+		 * billing addresses, which is the whole ownership check.
 		 */
-		await this.clientAddressService.getOrderSnapshot(
+		const billingAddress = await this.clientAddressService.getBillingCopy(
 			data.billing_address_id,
 			client.id,
-			ClientAddressTypeEnum.BILLING,
 		);
 
 		const deliveryAddressId =
@@ -1068,19 +1132,13 @@ export class CartService {
 			throw new BadRequestError(lang('cart.error.empty'));
 		}
 
-		/*
-		 * The buyer's country, for a campaign that names one. Read separately from the ownership
-		 * check above because that returns a snapshot, whose `address_country` is a display name
-		 * frozen for the document ("Romania") rather than the code a condition matches ("ROU").
-		 */
-		const countryCode = await this.clientAddressService.getCountryCodeById(
-			data.billing_address_id,
-		);
+		// The buyer's country, for a campaign that names one - the code, not the display name
+		const countryCode = billingAddress.country_code;
 
 		/*
-		 * Priced against the client being billed and their country, neither of which the basket
-		 * could name: a discount targeting that buyer, or their market, applies here and nowhere
-		 * earlier - so the figures the order is written at can sit below the ones last quoted.
+		 * Priced against the client being billed and their country, as the checkout screen quotes
+		 * them once both are chosen (`withPricing`). A basket priced without them - browsed, or
+		 * quoted before a billing address was picked - can sit above the figures written here.
 		 */
 		const pricing = await this.pricing.price(cart, items, language, {
 			clientId: client.id,
@@ -1132,18 +1190,25 @@ export class CartService {
 					)
 				: null;
 
-		return dataSource.transaction(async (manager) => {
+		// What the buyer is asked for: the basket gross plus the delivery gross, the two figures
+		// the checkout screen last showed. Both are already VAT-inclusive
+		const payableTotal = roundMoney(
+			pricing.total + (deliveryPricing?.total ?? 0),
+		);
+
+		const placed = await dataSource.transaction(async (manager) => {
 			/*
 			 * The manager is handed over so the whole thing is one transaction: the series
 			 * number `OrderService` allocates rolls back with the cart delete below, and a cart
-			 * can never disappear beside an order that failed to write.
+			 * can never disappear beside an order that failed to write, nor an order beside the
+			 * payment request that was never raised for it.
 			 */
 			const order = await this.orderService.create(manager, {
 				client_id: client.id,
 				currency: pricing.currency,
 				exchange_rate: exchangeRate,
 				payment_method: data.payment_method,
-				billing_address_id: data.billing_address_id,
+				billing_address: billingAddress,
 				notes: data.notes ?? null,
 				lines: toOrderLines(pricing.lines),
 			});
@@ -1177,12 +1242,52 @@ export class CartService {
 				});
 			}
 
+			/*
+			 * The money is asked for before the business commits to anything: the order is left
+			 * `pending` and unbilled, still the operator's to edit, and is confirmed - and billed -
+			 * once this request is captured and covers it, or by the operator before that. See
+			 * `invoice.hooks.ts` for the chain that runs from there, and `cart.bootstrap.ts` for how
+			 * the request follows an edit. A cash-on-delivery checkout raises the same request; it
+			 * simply stays `pending` until the courier settles, and the operator confirms the order
+			 * in the meantime.
+			 */
+			await this.cashFlowService.createWithin(manager, {
+				direction: CashFlowDirectionEnum.IN,
+				category_type: CashFlowCategoryTypeEnum.REVENUE,
+				category: CashFlowCategoryEnum.SALE,
+				method: CASH_FLOW_METHOD_BY_PAYMENT_METHOD[data.payment_method],
+				amount: payableTotal,
+				/*
+				 * Zero, and `amount` is what the buyer owes gross. A movement carries a single
+				 * rate while an order mixes them across its lines and its delivery, so there is no
+				 * honest figure to put here - the VAT breakdown is the invoice's to state, and
+				 * this row records money moving, not what the tax authority is owed.
+				 */
+				vat_rate: 0,
+				currency: pricing.currency,
+				external_reference: undefined,
+				parent_id: undefined,
+				notes: undefined,
+				operational_records: {
+					[OperationalRecordTypeEnum.CLIENT]: client.id,
+					[OperationalRecordTypeEnum.ORDER]: order.id,
+					[OperationalRecordTypeEnum.VENDOR]: undefined,
+				},
+			});
+
 			// By id rather than by entity: `remove` would strip the id off the object the caller
 			// still holds, and the lines go through the `cart_item.cart_id` cascade either way.
 			await manager.delete(CartEntity, cart.id);
 
 			return order;
 		});
+
+		// After the commit, like every settlement step: billing allocates series numbers in
+		// transactions of its own, and a document refused over the buyer's details must not undo
+		// a checkout that has already succeeded
+		await notifyOrderPlaced({ order_id: placed.id });
+
+		return placed;
 	}
 
 	/**
@@ -1238,14 +1343,24 @@ export class CartService {
 		return this.repository.createQuery().filterById(id).firstOrFail();
 	}
 
-	/** @description Used in `read` method from controller; this will return a custom shape */
+	/**
+	 * @description Used in `read` method from controller; this will return a custom shape
+	 *
+	 * The timestamps are added here rather than in `withPricing`, which also builds the
+	 * storefront's payload: the back office reads `updated_at` as the cart's last activity, the
+	 * shopper has no use for either.
+	 */
 	public async getEntryData(data: { id: number }) {
 		const cart = await this.repository
 			.createQuery()
 			.filterById(data.id)
 			.firstOrFail();
 
-		return this.withPricing(cart as CartEntity);
+		return {
+			...(await this.withPricing(cart as CartEntity)),
+			created_at: cart.created_at,
+			updated_at: cart.updated_at,
+		};
 	}
 
 	public findByFilter(data: ValidatorOutput<CartValidator, 'find'>) {
@@ -1281,4 +1396,5 @@ export const cartService = new CartService(
 	clientAddressService,
 	shippingService,
 	shippingRateService,
+	cashFlowService,
 );

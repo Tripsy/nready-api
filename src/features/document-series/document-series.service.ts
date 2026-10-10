@@ -38,6 +38,10 @@ export class DocumentSeriesService {
 	 * whole reason this is not a Postgres sequence. A concurrent allocation blocks on the row
 	 * lock the UPDATE takes until that transaction ends.
 	 *
+	 * A committed number is never released. A canceled document keeps its number, and an issued
+	 * invoice is taken back by a reversal that spends the next number of the same series - the
+	 * tax authority expects one continuous numbering, so a number given back would be a gap in it.
+	 *
 	 * ```ts
 	 * await dataSource.transaction(async (manager) => {
 	 *   const ref = await documentSeriesService.allocate(

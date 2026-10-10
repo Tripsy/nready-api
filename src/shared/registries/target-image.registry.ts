@@ -1,3 +1,5 @@
+import { createQuery } from '@/helpers/hook.helper';
+
 /**
  * The image a feature shows for one of its own rows, looked up without importing the feature that
  * stores images.
@@ -8,20 +10,9 @@
  * dependency. A project should be able to take `article`, `brand` or `category` and leave the
  * image library behind.
  *
- * **The direction is the opposite of `target-participation.config.ts`.** There the *target*
- * registers an answer about its own rows and the writing feature asks. Here the *provider*
- * registers: which image comes first, and what one looks like, is the storing feature's own rule.
- * The features rendering a page ask by their own table name.
- *
  * **One provider, not one per section.** Participation keys its map by target because each target
  * owns its own switch. Every section's images live in one table owned by one feature, so a second
  * slot would invent a plurality that does not exist.
- *
- * **With nothing registered, nothing has an image.** That is what an uninstalled `image` looks
- * like, and it is the state of every request under `test`, where `bootstrap.setup.ts` skips the
- * registration pass. A consumer renders that as an explicit `null` and never as a missing field: a
- * client must not have to tell "this row has no image" apart from "this deployment has no image
- * feature".
  *
  * The vocabulary here is deliberately the *storing* feature's - an image and its type - not the
  * role a page casts it in. What an article calls its `cover_image` is article's word for the first
@@ -110,37 +101,36 @@ export type TargetImageListProvider = (
 	entityIds: number[],
 ) => Promise<Map<number, TargetImage[]>>;
 
-let targetImageProvider: TargetImageProvider | null = null;
-let targetImageListProvider: TargetImageListProvider | null = null;
+const targetImageProvider = createQuery<
+	Parameters<TargetImageProvider>,
+	Map<number, TargetImage>
+>(() => new Map());
+
+const targetImageListProvider = createQuery<
+	Parameters<TargetImageListProvider>,
+	Map<number, TargetImage[]>
+>(() => new Map());
 
 /**
  * Called from the providing feature's `*.bootstrap.ts`. Registering twice replaces the previous
  * provider rather than adding a second opinion - a reload, not a second source of images.
  */
-export const registerTargetImageProvider = (
-	provider: TargetImageProvider,
-): void => {
-	targetImageProvider = provider;
-};
+export const registerTargetImageProvider = targetImageProvider.register;
 
 export const resolveTargetImages = async (
 	section: string,
 	imageType: TargetImageType,
 	entityIds: number[],
 ): Promise<Map<number, TargetImage>> => {
-	if (!targetImageProvider || entityIds.length === 0) {
+	if (entityIds.length === 0) {
 		return new Map();
 	}
 
-	return targetImageProvider(section, imageType, entityIds);
+	return targetImageProvider.ask(section, imageType, entityIds);
 };
 
 /** Called from the providing feature's `*.bootstrap.ts`, like the primary one above. */
-export const registerTargetImageListProvider = (
-	provider: TargetImageListProvider,
-): void => {
-	targetImageListProvider = provider;
-};
+export const registerTargetImageListProvider = targetImageListProvider.register;
 
 /**
  * Every image each named target carries, keyed by entity id; a target with none is absent from
@@ -154,9 +144,9 @@ export const resolveTargetImageLists = async (
 	imageType: TargetImageType,
 	entityIds: number[],
 ): Promise<Map<number, TargetImage[]>> => {
-	if (!targetImageListProvider || entityIds.length === 0) {
+	if (entityIds.length === 0) {
 		return new Map();
 	}
 
-	return targetImageListProvider(section, imageType, entityIds);
+	return targetImageListProvider.ask(section, imageType, entityIds);
 };

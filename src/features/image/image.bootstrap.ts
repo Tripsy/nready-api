@@ -1,10 +1,10 @@
+import { isImageSection } from '@/features/image/image.entity';
+import { imageService } from '@/features/image/image.service';
 import {
 	registerTargetImageListProvider,
 	registerTargetImageProvider,
 	type TargetImageType,
-} from '@/config/target-image.config';
-import { isImageSection } from '@/features/image/image.entity';
-import { imageService } from '@/features/image/image.service';
+} from '@/shared/registries/target-image.registry';
 
 /**
  * Registers where the image standing for a row comes from, so a feature rendering a page can show

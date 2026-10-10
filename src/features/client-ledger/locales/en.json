@@ -1,0 +1,8 @@
+{
+	"validation": {
+		"invalid_client_id": "Client ID is invalid",
+		"invalid_entry_type": "Ledger entry type is invalid",
+		"invalid_currency": "Currency is invalid",
+		"invalid_cash_flow_id": "Cash flow ID is invalid"
+	}
+}

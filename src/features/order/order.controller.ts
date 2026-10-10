@@ -4,6 +4,7 @@ import OrderEntity from '@/features/order/order.entity';
 import { type OrderPolicy, orderPolicy } from '@/features/order/order.policy';
 import {
 	type OrderService,
+	type OrderWithLines,
 	orderService,
 } from '@/features/order/order.service';
 import { OrderValidator } from '@/features/order/order.validator';
@@ -34,7 +35,10 @@ class OrderController extends BaseController {
 
 		const data = this.validate(this.validator.create, req.body, res);
 
-		const entry = await this.orderService.createEntry(data);
+		const entry = await this.orderService.createEntry(
+			data,
+			this.policy.mayDiscount(res.locals.auth),
+		);
 
 		res.locals.output.data(entry);
 		res.locals.output.message(lang('order.success.create'));
@@ -64,7 +68,12 @@ class OrderController extends BaseController {
 		);
 
 		res.locals.output.meta(cacheGetResults.isCached, 'isCached');
-		res.locals.output.data(cacheGetResults.data);
+		res.locals.output.data({
+			...(cacheGetResults.data as OrderWithLines),
+			// Read past the cache - see `OrderService.isInvoiced`
+			is_invoiced: await this.orderService.isInvoiced(data.id),
+			is_client_locked: await this.orderService.isClientLocked(data.id),
+		});
 
 		res.json(res.locals.output);
 	});
@@ -83,7 +92,11 @@ class OrderController extends BaseController {
 
 		const existingEntry = await this.orderService.findById(data.id, false);
 
-		const entry = await this.orderService.updateData(existingEntry, data);
+		const entry = await this.orderService.updateData(
+			existingEntry,
+			data,
+			this.policy.mayDiscount(res.locals.auth),
+		);
 
 		res.locals.output.message(lang('order.success.update'));
 		res.locals.output.data(entry);
@@ -149,6 +162,10 @@ class OrderController extends BaseController {
 
 		const existingEntry = await this.orderService.findById(data.id, false);
 
+		// Confirming also raises the charge, through the handler `invoice.bootstrap.ts` registers
+		// with `order.hooks.ts` - the same chain a captured payment goes through. Nothing is
+		// reported about it here: the document is raised after this write commits and may be
+		// refused over the buyer's own details, and neither outcome changes the status update
 		await this.orderService.updateStatus(existingEntry, data.status);
 
 		res.locals.output.message(lang('order.success.status_update'));

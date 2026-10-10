@@ -10,11 +10,13 @@ import { cashFlowSeed } from '@/features/cash-flow/database/cash-flow.seed';
 import { categorySeed } from '@/features/category/database/category.seed';
 import { clientSeed } from '@/features/client/database/client.seed';
 import { clientAddressSeed } from '@/features/client-address/database/client-address.seed';
+import { clientLedgerSeed } from '@/features/client-ledger/database/client-ledger.seed';
 import { commentSeed } from '@/features/comment/database/comment.seed';
 import { complaintSeed } from '@/features/complaint/database/complaint.seed';
 import { discountSeed } from '@/features/discount/database/discount.seed';
 import { documentSeriesSeed } from '@/features/document-series/database/document-series.seed';
 import { imageSeed } from '@/features/image/database/image.seed';
+import { invoiceSeed } from '@/features/invoice/database/invoice.seed';
 import { orderSeed } from '@/features/order/database/order.seed';
 import { placeSeed } from '@/features/place/database/place.seed';
 import { productSeed } from '@/features/product/database/product.seed';
@@ -51,7 +53,6 @@ const seeds: readonly SeedDefinition[] = [
 	clientSeed,
 	// Reads client and address ids - a client address points at an existing address
 	clientAddressSeed,
-	cashFlowSeed,
 	termSeed,
 	// Reads category, term, brand ids; seeds the category attribute definitions
 	// its products answer to before the products themselves
@@ -78,6 +79,17 @@ const seeds: readonly SeedDefinition[] = [
 	// Reads orders with their lines, plus warehouse, carrier and client address ids - so it has to
 	// follow `orderSeed`, `warehouseSeed` and `clientAddressSeed`
 	shippingSeed,
+	// Its general movements have no parents, but the payment request it raises per pending order
+	// is priced off that order's lines *and* its delivery - so it follows `orderSeed` and
+	// `shippingSeed`, and still precedes the `invoiceSeed` that settles against its movements
+	cashFlowSeed,
+	// Reads the confirmed and completed orders with their lines, plus the client behind each and
+	// the completed incoming movements its allocations settle against - so it follows `orderSeed`
+	// and `cashFlowSeed`; allocates its numbers from the `INV` series
+	invoiceSeed,
+	// Writes the ledger entries the issued documents and the completed client movements imply -
+	// so it follows `invoiceSeed` and `cashFlowSeed`
+	clientLedgerSeed,
 	// Reads product, product variant and user ids, and the completed orders a verified review
 	// names - so it has to follow `orderSeed`
 	reviewSeed,

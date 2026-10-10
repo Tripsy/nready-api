@@ -43,7 +43,7 @@ function shippingStatusFor(orderStatus: OrderStatus): ShippingStatus {
 			return ShippingStatusEnum.DELIVERED;
 		case OrderStatusEnum.CONFIRMED:
 			return ShippingStatusEnum.PREPARING;
-		case OrderStatusEnum.CANCELLED:
+		case OrderStatusEnum.CANCELED:
 			return ShippingStatusEnum.FAILED;
 		default:
 			return ShippingStatusEnum.PENDING;

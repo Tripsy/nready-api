@@ -27,12 +27,14 @@ context yet. Read the relevant one *before* proposing an approach in that area, 
 | File | Covers | Loads for |
 |---|---|---|
 | `api.md` | Express app setup, route registration, controller structure, response envelope | `*.routes.ts`, `*.controller.ts`, `app.ts`, output/param middleware |
-| `auth.md` | Token model, `res.locals.auth`, policy layer, passwords, rate limiting, social login | `account`/`user-permission` features, `*.policy.ts`, auth middleware |
-| `comment.md` | Comment status model, guest vs member writes, automatic flagging at 3 distinct reporters, thread cache, the target-participation registry a target closes itself with | `src/features/comment/**`, `src/features/complaint/**`, `event.config.ts`, `target-participation.config.ts` |
+| `auth.md` | Token model, session/user cache and what must drop it, `res.locals.auth`, policy layer, passwords, Redis-backed rate limiting, social login | `account`/`user-permission` features, `*.policy.ts`, auth middleware, `rate-limit.*` |
+| `comment.md` | Comment status model, guest vs member writes, automatic flagging at 3 distinct reporters, thread cache, the target-participation registry a target closes itself with | `src/features/comment/**`, `src/features/complaint/**`, `event.config.ts`, `target-participation.registry.ts` |
 | `database.md` | Entities, repository/query layer, transactions, migrations, seeds | `*.entity.ts`, `*.repository.ts`, `*.service.ts`, `*.subscriber.ts`, migrations |
 | `discount.md` | Discount scopes and targets, the two resolution passes and how they stack, the gross `min_order_value` base, order-wide apportionment, where the money sits on a line | `src/features/discount/**`, `cart-pricing.service.ts`, `order-discount.service.ts` |
 | `error-handling.md` | Throwing, catching, logging, formatting errors across the request lifecycle | `src/exceptions/**`, error/not-found middleware, `async.handler.ts` |
 | `feature-installer.md` | Feature packaging, the `manifest.json` contract, `depends_on`/`required_by` version ranges, install/remove/upgrade checks | `cli/feature.ts`, `cli/helpers/version.ts`, `**/manifest.json` |
+| `settlement.md` | Typed invoices, the invoice-first order → invoice → payment chain, FIFO allocation by client, the client ledger | `order`/`invoice`/`order-settlement`/`cash-flow`/`shipping` features, `cart.service.ts`, the `*.hooks.ts` chain |
+| `ui-contract.md` | Keeping `../nready-ui` services and mirrored enums in step with the API | `*.controller.ts`, `*.routes.ts`, `*.entity.ts`, `*.enum.ts` |
 | `product.md` | The product / variant / option / bundle split, availability windows, order-line arithmetic | `src/features/product/**`, `order-line.entity.ts`, `order-shipping/**` |
 | `validation.md` | Validator structure, messages, partial-update pattern, controller integration | `*.validator.ts`, feature/shared `locales/*.json` |
 | `testing.md` | Test layout, reusable builders, mocking conventions | `src/tests/**`, `features/**/tests/*.test.ts`, `*.mock.ts` |
@@ -86,6 +88,12 @@ the containers up, launches `pnpm run dev` detached in each, waits on the health
 writes `<project>/logs/dev.log` (gitignored, readable from the host). Use it instead of
 `docker exec -it … pnpm run dev`, which blocks the session and leaves no log to diagnose from.
 
+**UI serving Next's own 404 for dynamic routes while static pages load** (`/account/orders/:id`,
+`/status/:type`) is a corrupted Turbopack cache, usually after the container ran out of memory
+(`dev-stack.sh doctor ui` shows `oom=true`). A restart - even a container `down`/`start` - does not
+clear it: `dev-stack.sh stop ui`, `docker exec nready-ui.test rm -rf /var/www/html/.next`, then
+`dev-stack.sh start ui`.
+
 ## Commands
 
 Run inside the container (`docker exec $DOCKER_CONTAINER ...`):
@@ -132,47 +140,11 @@ trustworthy-run command are in `.claude/rules/testing.md` §2.1.
 
 ## Architecture
 
-### Startup flow
-
-`server.ts` → `bootstrap()` → `createApp()` → `listen` → WebSockets → signal handlers.
-
-- **`src/bootstrap.ts`** initializes infrastructure in order: messages, database, event listeners,
-  queues, email worker, cron jobs. In the `test` environment, database/listeners/queues/cron are
-  skipped.
-- **`src/app.ts`** builds the Express app: Helmet (locked-down API CSP), CORS, the client-key
-  gate (`clientKeyMiddleware` - behind CORS and ahead of the body parsers, so an unkeyed caller
-  is refused before a 10mb body is read; `/health` and `/ready` are exempt), compression,
-  cookie/JSON parsing, request-ID, timeout, then the middleware chain, dynamically-loaded
-  routes, `/health` + `/ready`, and finally `notFoundHandler` + `errorHandler` (must remain
-  last).
-- **`server.ts`** owns graceful shutdown - `closeHandler()` closes Redis, queues, DB, log streams
-  and WebSockets.
-
-### Middleware chain (order matters, see `app.ts`)
-
-`outputHandler` (sets `res.locals.output`) → `languageMiddleware` (`res.locals.language`) →
-`authMiddleware` (`res.locals.auth`) → `requestContextMiddleware`. `authMiddleware` is skipped in
-the `test` environment. `res.locals.language` selects *content* language (brand/address/place/
-template entries, email rendering) - response messages are English-only. Route-level param
-validators live in `src/middleware/validate-params.middleware.ts` (`validateParamsWhenId`,
-`validateParamsWhenEnum`).
+`authMiddleware` is skipped in the `test` environment. `res.locals.language` selects *content*
+language (brand/address/place/template entries, email rendering) - response messages are
+English-only.
 
 ### Feature-based modules (`src/features/<name>/`)
-
-Each feature is a self-contained vertical slice exporting a **singleton instance** of each layer,
-wired via constructor injection at the bottom of the file:
-
-- `*.entity.ts` - TypeORM entity; often exports a `NAME` const, a status enum, `STATUS_TRANSITIONS`.
-- `*.repository.ts` - a `<Feature>Query` class extending `RepositoryAbstract`, plus a
-  `get<Feature>Repository()` factory exposing `createQuery()`.
-- `*.service.ts` - business logic; depends on the repository (and other services).
-- `*.validator.ts` - Zod schemas (`create`, `read`, `update`, `find`, …).
-- `*.policy.ts` - extends `PolicyAbstract`; role/permission authorization.
-- `*.controller.ts` - extends `BaseController`; each action wrapped in `asyncHandler`.
-- `*.routes.ts` - default-exports a `FeatureRoutesModule` (`basePath`, `controller`, `routes` map).
-
-Optional per-feature `locales/`, `cron-jobs/`, `database/`, `*.subscriber.ts`, `*.listener.ts`,
-`*.bootstrap.ts`, `*.mock.ts`, `tests/`, `manifest.json`.
 
 **A new feature owning a table gets a demo seed** - `database/<feature>.seed.ts`, registered in
 `src/database/seed/index.ts` after its parents. Treat it as part of the feature, not a follow-up:
@@ -181,16 +153,18 @@ feature nobody can evaluate. Conventions (top-up, seeded PRNG, natural keys) are
 `.claude/rules/database.md` §5.4. Features that hold no table of their own - or reference data with
 a fixed canonical list, like `permission` and `template` - are the exception.
 
+**A new or completed feature gets its `README.md` entry** - the Features checklist (unchecked
+while it holds entities only), and the commerce chain or Setup notes when it changes either. Part
+of the feature, like the seed: the README is what someone starting a project from this boilerplate
+reads first.
+
 **`image` is genuinely optional.** Nothing imports it: a feature wanting the picture that stands
-for one of its rows asks `target-image.config.ts` for an image of a given type (`logo` /
+for one of its rows asks `target-image.registry.ts` for an image of a given type (`logo` /
 `gallery`), and with the feature absent the registry answers empty. Keep it that way - a direct
 `getImageRepository()` from another feature puts the hard dependency back. Note the split of
 vocabulary: the registry and the image feature deal in image *types*, while "cover" is `article`'s
 own word for the role it casts the first gallery image in - `cover_image` is an article payload
 field, not a kind of image.
-
-Features are categorized as core and additional; further projects are started from this one and more
-additional features are expected over time.
 
 ### Convention-based auto-discovery
 
@@ -207,19 +181,27 @@ suffix and a file is picked up automatically:
   default export to register handlers on the shared emitter (`src/config/event.config.ts`).
 - **Feature bootstrap** - `src/config/bootstrap.setup.ts` finds `*.bootstrap.{ts|js}` (features
   only) and calls each default export before the server listens. This is where a feature
-  *registers itself* with a shared registry so another feature can reach it by name without
-  importing it - `article.bootstrap.ts` registers what an article accepts from its readers with
-  `target-participation.config.ts`, and `image.bootstrap.ts` registers where the image standing
-  for a row comes from with `target-image.config.ts`. **The two run in opposite directions**: the
-  first is a target answering about its own rows for other features to read, the second a provider
-  others consume.
-  Not for event handlers, and not for work: it is startup latency on every deployment.
+  *plugs into another* without being imported by it: it registers a handler or provider into a
+  slot the other declares. Not for fire-and-forget event handlers - those go in `*.listener.ts`
+  on the shared emitter. A handler the caller awaits, with one owner per step, is registered from
+  bootstrap. And not for work: it is startup latency on every deployment.
 
-Both of the last two run through `runFeatureModules()` (`src/config/feature-modules.setup.ts`),
-which owns the scan, the import, the "no default export" error and the one-line-per-pass logging.
+**Where a slot lives decides the dependency direction.** Slots are built with the domain-free
+factories in `helpers/hook.helper.ts` - `createNotification` (after commit, logs and swallows),
+`createQuery` (propagates, fallback when empty; also the in-transaction shape),
+`createKeyedProvider` (one per key).
 
-The dev/prod file extension is resolved by `Configuration.resolveExtension()` (`ts` in dev, `js` in
-production), so discovery works against built output too.
+- **`<feature>.hooks.ts` - the default.** A slot lives in the feature that *raises* it, and the
+  answering feature - which already depends on it - registers from its bootstrap. The coupling
+  then runs along a manifest edge and vanishes with the answering feature. The current slots and
+  who answers each are in `rules/settlement.md`; the chain's design notes are in `invoice.hooks.ts`.
+- **A provider the raiser itself depends on cannot register** (it would import back): the raiser
+  registers it from its own subfolder - `invoice/sources/shipping.source.ts`.
+- **`src/shared/registries/` - polymorphic slots only**, asked by several features of one optional
+  answerer (or the reverse), so no feature can own them: `target-participation.registry.ts`
+  (`comment` / `rating` / `complaint` ask, `article` answers about its own rows) and
+  `target-image.registry.ts` (`article` / `product` ask, `image` provides). Don't add a registry
+  here when one feature raises the hook - give it a `.hooks.ts`.
 
 ### Configuration
 
@@ -227,8 +209,7 @@ production), so discovery works against built output too.
 sourced from env vars with defaults, built once and cached. The key is **type-checked** against the
 shape of `loadSettings()` and the return type is inferred - don't add `as string` / `as number` at
 call sites and don't pass an explicit generic; a cast re-hides the errors the typing exists to catch.
-Helpers: `Configuration.isEnvironment(env)`, `.environment()`, `.language()`, `.currency()`,
-`.resolveExtension()`. Prefer this over reading `process.env` directly.
+Prefer this over reading `process.env` directly.
 
 ### Response envelope, errors, and messages
 
@@ -238,27 +219,6 @@ normalized by `error-handler.middleware.ts`. User-facing strings come from `lang
 `lang()` reads `en.json` and nothing else. `errorHandler` masks every `>= 500` message unless
 `app.debug` is on - model actionable failures as 4xx. Full detail in `rules/api.md`,
 `rules/error-handling.md` and `rules/validation.md`.
-
-The envelope shape is `OutputWrapperInterface` in `src/middleware/output-handler.middleware.ts`;
-`request` and `meta` are omitted unless debugging. Dates are ISO 8601 strings (not timestamps).
-Protected routes require `Authorization: Bearer {accessToken}`.
-
-### Cross-cutting infrastructure
-
-- **`src/providers/`** - `database` (TypeORM data source), `cache` (Redis-backed;
-  `cacheProvider.buildKey(...)` + `get(key, loader)`; invalidation belongs to the service layer and
-  the repository terminals, never to a subscriber - see `rules/database.md` §6), `logger` (Pino; `providers/logger/` holds one
-  `LogDestination` per sink - console, file, database, email, CloudWatch - selected per level by
-  `log-destinations.factory.ts`, with dedicated system/cron loggers), `email` (SMTP or SES, chosen by
-  `mail.provider`), `cron`.
-- **`src/queues/` + `src/workers/`** - BullMQ; email is enqueued (`email.queue.ts`) and processed by
-  `src/workers/email.worker.ts`.
-- **`src/config/request.context.ts`** - AsyncLocalStorage request context (`auth_id`,
-  `performed_by`, `source`, `request_id`, `language`), also populated for cron runs and used by
-  subscribers/logging.
-- **`src/shared/`** - `abstracts/` (base controller, repository, entity, service helpers, policy,
-  subscriber, validator), shared `cron-jobs/`, `listeners/`, `decorators/`, `locales/`, `types/`
-  (including `express.d.ts` augmenting `res.locals`).
 
 ## Notes
 
@@ -303,23 +263,9 @@ stack.
 kept in sync**: do not flag changes as "needs porting" or offer to port anything to or from it
 unless explicitly asked.
 
-`../nready-ui` (available via `permissions.additionalDirectories`) is this project's frontend - a
-Next.js 16 app.
-
-The two connect purely over HTTP, so the API contract is the whole coupling:
-
-- When `src/features/**/*.controller.ts` or `src/features/**/*.routes.ts` changes, state which
-  `nready-ui` service (`src/services/*.service.ts`) needs the matching update, and make the change
-  there too.
-- Enums are mirrored by hand on both sides. `nready-ui`'s `src/models/permission.model.ts`
-  (`PermissionEntityType`), `log-history.model.ts` (`LogHistoryEntities`, backend *table* names) and
-  the per-entity model enums track this project's entities - when an entity, status, role or
-  category enum changes here, say so and update the matching model there.
-- Response shape is the envelope above; dates are ISO 8601 strings; protected routes need
-  `Authorization: Bearer {accessToken}`.
-- Frontend conventions live in that repo's own `.claude/rules/` (`forms.md`, `data-fetching.md`,
-  `state.md`, `typescript.md`) - consult those rather than inferring frontend rules from this
-  project.
+`../nready-ui` is this project's frontend (Next.js 16), coupled purely over HTTP - an API contract
+change (controller, routes, entity/enum) needs the matching change there; see
+`rules/ui-contract.md`.
 
 ## Restrictions
 

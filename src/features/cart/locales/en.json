@@ -20,7 +20,7 @@
 		"empty": "The cart is empty",
 		"has_issues": "Some lines can no longer be bought; review the cart before checking out",
 		"invalid_option": "A chosen option does not belong to this product",
-		"option_selection": "One of this product's questions needs between {{min}} and {{max}} answers",
+		"option_selection": "One of this product's questions needs a different number of answers: {{bounds}}",
 		"not_a_bundle": "This product is not a bundle, so it takes no components",
 		"bundle_component_invalid": "A chosen component does not belong to this bundle",
 		"bundle_component_included": "That component already comes with the bundle and cannot be chosen separately",

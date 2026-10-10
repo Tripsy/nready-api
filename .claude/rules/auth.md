@@ -9,6 +9,7 @@ paths:
   - "src/shared/types/user-role.type.ts"
   - "src/helpers/security.helper.ts"
   - "src/config/rate-limit.config.ts"
+  - "src/config/rate-limit.store.ts"
 ---
 
 # Authentication & Authorization Protocol
@@ -28,7 +29,22 @@ Auth tokens are a **hybrid**: a signed JWT carries the identity, but a DB row is
 - `AccountTokenService.generateAuthToken()` creates a random `ident` (uuid) and signs `{ user_id, ident }` with `jwt.sign(..., Configuration.get('user.authSecret'))`. The DB (`account_token` table, `AccountTokenEntity`) stores `ident`, `user_id`, `expire_at`, `used_at`, and a `metadata` fingerprint (user-agent, via `tokenMetaData(req)`).
 - Verifying a request: extract the bearer token (`accountTokenService.getAuthTokenFromHeaders(req)` - `Authorization: Bearer <token>`), `jwt.verify` it, then look up the `ident` row in `account_token` - a syntactically valid JWT whose `ident` row is missing/expired is **not** a valid session. This is what makes token revocation possible (`removeAccountTokenByIdent`, `removeAccountTokenForUser`) even though JWTs themselves can't be revoked.
 - Token metadata is checked against the current request's user-agent (`compareMetaDataValue`) in production only - a mismatch fails auth silently (falls back to visitor), it does not throw.
-- Near-expiry tokens are **silently refreshed** in `authMiddleware` (extends `expire_at` when remaining time drops below `user.authRefreshExpiresIn`) - don't reimplement token refresh elsewhere.
+- Near-expiry tokens are **silently refreshed** by `accountTokenService.touchSession()`, called from `authMiddleware` (extends `expire_at` when remaining time drops below `user.authRefreshExpiresIn`) - don't reimplement token refresh elsewhere. `used_at` is written at most once per `user.authTouchInterval` (60s), so a busy session does not write its row on every request; the extension is never deferred.
+
+### 2.1. Auth lookups are cached
+
+`authMiddleware` does no database work on a warm signed-in request. Both lookups go through `cacheProvider` with the default `cache.ttl` (`CACHE_TTL=0` turns them off):
+
+| Key | Holds | Dropped by |
+|---|---|---|
+| `account_token:<ident>` | the session row (`AuthSession`), read by `findSessionByToken` | `removeAccountTokenByIdent`, `removeAccountTokenForUser`, the middleware's `discardSession` - all through `forgetSessions(idents)` |
+| `user:<id>:auth` | the user context, password reduced to `has_password` | `cleanEntityCache(UserEntity, id)` - every `userService` write, the repository's delete/restore, permission changes |
+| `user:<id>:permissions` | `{ entity: [operations] }` | same as above |
+
+- **Any new code that deletes `account_token` rows must call `accountTokenService.forgetSessions(idents)`**, or a revoked token keeps working until the TTL runs out. Select the idents before the delete - the repository's `delete()` returns ids only. `AccountTokenEntity.HAS_CACHE` stays `false`: the repository's id-keyed `cleanCache` cannot reach ident-keyed entries.
+- **Any new write to the `user` table must end in `cleanEntityCache(UserEntity, id)`** (`userService.update()` already does), or role/status/name changes lag the TTL - a deactivated user keeps signing in.
+- The cache returns dates as ISO strings. `findSessionByToken` revives `used_at`/`expire_at`; the user context's dates stay strings, which is what `meDetails` serializes anyway.
+- Never put the password hash into the cached user context - `meDetails` sends `res.locals.auth` verbatim, and Redis is not where hashes belong.
 - `jsonwebtoken` is used in exactly two places: `account-token.service.ts` (session tokens) and `account.service.ts` (email confirmation tokens, a separate short-lived JWT unrelated to sessions). Don't introduce a third JWT flow without a reason - prefer the existing `account-token` mechanism for anything session-like.
 
 ## 3. `res.locals.auth`
@@ -58,9 +74,17 @@ Only add methods to a feature's own `<feature>.policy.ts` for checks that don't 
 - Never return or log a raw password. The response envelope already redacts `password`/`password_confirm`/`password_new`/`password_current` from the echoed request body (`api.md` §2) - don't add a second redaction layer, but also don't bypass it by putting password data somewhere else in the response (e.g. `meta`).
 - `accountService.updatePassword(...)` is expected to also invalidate existing sessions where relevant (see `passwordRecoverChange`/`passwordUpdate` in `account.controller.ts`, which issue a fresh token after a password change) - a new password-changing flow should follow the same pattern rather than leaving old tokens valid.
 
-## 6. Rate Limiting Auth Routes
+## 6. Rate Limiting
 
-`src/config/rate-limit.config.ts` defines three limiter types: `api` (the default) plus the stricter `authLogin` and `authDefault` - read the current numbers there. Auth-sensitive routes attach the stricter limiter explicitly in their `*.routes.ts` `handlers` array - see `account.routes.ts` (`authLoginRateLimiter` on `/login`, `authDefaultRateLimiter` on `/register`, `/password-recover`, `/email-confirm-send`). Any new credential-guessing-prone endpoint (login, recovery, token issuance) should do the same rather than relying on the default `apiRateLimiter`.
+`src/config/rate-limit.config.ts` defines three limiter types: `api` (the default) plus the stricter `authLogin` and `authDefault` - read the current numbers there.
+
+- **Counters live in Redis** (`RedisRateLimitStore`, `src/config/rate-limit.store.ts`, keys `rate_limit:<type>:<key>`), so every API replica shares one budget. One store instance per limiter - `express-rate-limit` refuses a shared one. The script is sent with plain `EVAL` per hit on purpose: a startup `SCRIPT LOAD` (as `rate-limit-redis` does) stays rejected if Redis is down at boot and switches limiting off until a restart.
+- **`passOnStoreError: true`** - a Redis outage lets requests through instead of answering 500.
+- **Each limiter has a `scope`.** `api` is `user`: a signed-in caller is counted by account, a visitor by IP (`ipKeyGenerator`, required by `express-rate-limit` v8 for IPv6). The credential limiters are `ip`. `authMiddleware` runs before every route, so `res.locals.auth` is settled when the key is built.
+- `describeRateLimit()` derives the docs text from `configs` - change a limit there, not in the docs.
+
+### 6.1. Auth routes
+ Auth-sensitive routes attach the stricter limiter explicitly in their `*.routes.ts` `handlers` array - see `account.routes.ts` (`authLoginRateLimiter` on `/login`, `authDefaultRateLimiter` on `/register`, `/password-recover`, `/email-confirm-send`). Any new credential-guessing-prone endpoint (login, recovery, token issuance) should do the same rather than relying on the default `apiRateLimiter`.
 
 ## 7. Social Login (OAuth)
 

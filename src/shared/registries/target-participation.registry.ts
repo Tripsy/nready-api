@@ -1,3 +1,5 @@
+import { createKeyedProvider } from '@/helpers/hook.helper';
+
 /**
  * Whether a polymorphic target still accepts what a reader is about to add to it.
  *
@@ -40,19 +42,14 @@ export type ParticipationResolver = (
 	participation: Participation,
 ) => Promise<boolean>;
 
-const resolvers = new Map<string, ParticipationResolver>();
+const resolvers = createKeyedProvider<ParticipationResolver>();
 
 /**
- * Called by the owning feature's listener at bootstrap. Registering twice for the same entity
- * type replaces the previous resolver rather than adding a second opinion - there is one owner
- * per table, and a duplicate registration is a reload, not a second rule.
+ * Called by the owning feature's bootstrap. Registering twice for the same entity type replaces
+ * the previous resolver rather than adding a second opinion - there is one owner per table, and a
+ * duplicate registration is a reload, not a second rule.
  */
-export const registerParticipationResolver = (
-	entityType: string,
-	resolver: ParticipationResolver,
-): void => {
-	resolvers.set(entityType, resolver);
-};
+export const registerParticipationResolver = resolvers.register;
 
 export const isParticipationAllowed = async (
 	entityType: string,

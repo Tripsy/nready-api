@@ -1,0 +1,52 @@
+# Production image. One image serves every role - API, scheduler, migrations - and the role is
+# chosen at run time by CRON_ENABLED / WORKER_ENABLED and the command (docker-compose.prod.yml).
+#
+# Three stages so the runtime carries neither the dev dependencies nor the TypeScript sources:
+# `build` compiles with the full dependency set, `deps` installs production dependencies only, and
+# the runtime copies the output of both.
+
+ARG NODE_VERSION=24
+# Matches CI and the dev container: pnpm-workspace.yaml uses `allowBuilds`, which pnpm 9 does not
+# understand, so an older pnpm would skip building bcrypt
+ARG PNPM_VERSION=11.17.0
+
+FROM node:${NODE_VERSION} AS base
+ARG PNPM_VERSION
+RUN npm install --global pnpm@${PNPM_VERSION}
+WORKDIR /app
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+
+FROM base AS build
+RUN pnpm install --frozen-lockfile
+COPY tsconfig.json tsconfig.build.json ./
+COPY src ./src
+COPY cli ./cli
+RUN pnpm run build
+
+FROM base AS deps
+RUN pnpm install --frozen-lockfile --prod
+
+# Same Debian release as `node:<version>`, so the native modules built above (bcrypt) load here
+FROM node:${NODE_VERSION}-slim AS runtime
+ENV NODE_ENV=production \
+    APP_ENV=production \
+    APP_PORT=3000
+WORKDIR /app
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+COPY package.json ./
+
+# The process runs from `dist/` (see the `start` script and SRC_PATH in system.helper.ts), so the
+# daily log files land in dist/logs - created up front because the app runs unprivileged
+RUN mkdir -p /app/dist/logs && chown -R node:node /app/dist/logs
+
+USER node
+WORKDIR /app/dist
+EXPOSE 3000
+
+# `/health` is exempt from the x-api-key gate. Node's own fetch, since the slim image has no curl
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD node -e "fetch('http://127.0.0.1:' + (process.env.APP_PORT || 3000) + '/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+
+CMD ["node", "src/server.js"]

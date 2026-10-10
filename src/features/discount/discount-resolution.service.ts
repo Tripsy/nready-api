@@ -310,13 +310,19 @@ function resolveFloor(context: DiscountLineContext): number | null {
 }
 
 /**
+ * What a reduction is costed from - a catalog rule, or the figure an operator typed on a
+ * back-office document, which carries nothing else.
+ */
+export type DiscountTerms = Pick<DiscountEntity, 'type' | 'value'>;
+
+/**
  * Money off the whole line, after clamping.
  *
  * An `amount` discount is per unit, matching `percent`, which is inherently per unit - a line
  * of three gets the discount three times either way.
  */
 export function computeReduction(
-	discount: DiscountEntity,
+	discount: DiscountTerms,
 	context: DiscountLineContext,
 ): number {
 	const rawPerUnit =
@@ -428,7 +434,7 @@ async function findOrderCandidates(
  * it can explain.
  */
 export function computeOrderReductions(
-	discount: DiscountEntity,
+	discount: DiscountTerms,
 	basis: readonly OrderDiscountBasis[],
 	exchangeRate?: number,
 ): number[] {

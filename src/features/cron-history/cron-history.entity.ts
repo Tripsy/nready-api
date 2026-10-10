@@ -4,6 +4,9 @@ export const CronHistoryStatusEnum = {
 	ERROR: 'error',
 	OK: 'ok',
 	WARNING: 'warning', // Set when cron job is not running in expected time
+	// Written when the job starts; a row left in it past its lease means the job hung or its
+	// process died mid-run - `cron-stuck-check` reports those
+	RUNNING: 'running',
 } as const;
 
 export type CronHistoryStatus =
@@ -30,8 +33,9 @@ export default class CronHistoryEntity {
 	@Index('IDX_cron_history_start_at', { unique: false })
 	start_at!: Date;
 
-	@Column({ type: 'timestamp', nullable: false })
-	end_at!: Date;
+	// NULL while the run is in progress
+	@Column({ type: 'timestamp', nullable: true })
+	end_at!: Date | null;
 
 	@Column({
 		type: 'enum',

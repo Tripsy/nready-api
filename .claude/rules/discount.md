@@ -94,12 +94,18 @@ own `reduction`**, and `discount_reduction` is their sum.
   `label` or `reference`, either of which an operator may edit afterwards.
 - **`OrderTotals.order_discount_reduction` is derived**, by summing the snapshots whose scope is
   `order`. It is a breakdown of `discount_reduction`, never a further subtraction.
+- **`manual: true`** marks a discount an operator typed (§8): no `discount_id`, `type`/`value` as
+  typed in the document's currency, scope `variant` (a line's own) or `order` (a share of the
+  order-wide one). A line's own is written even at a zero `reduction` - the snapshot is the only
+  place it lives; an order-wide share only where it took something off, like a campaign's.
 
 ## 6. Deliberately absent
 
-- **No discount columns on `order`.** They would duplicate money that already lives in the lines and
-  could drift from it. `invoice.discount` is a header-level jsonb because an invoice has no line
-  table at all; an order does.
+- **The lines carry the money; `order` does not total it.** VAT and `OrderTotals` read the lines
+  only. `order.discount` is the record of an operator's order-wide discount (§8) - a
+  `DiscountSnapshot` whose `reduction` is the sum of the shares, written in the same transaction -
+  never a figure anything computes from. `invoice.discount` is a header-level jsonb because an
+  invoice has no line table at all; an order does.
 - **No synthetic discount lines.** `order_line.variant_id` and `product_id` are `NOT NULL` under a
   composite foreign key to `product_variant (id, product_id)`, every downstream consumer assumes a
   line is a sellable thing (shipment allocation, revenue by product, stock), and one negative line
@@ -118,5 +124,29 @@ own `reduction`**, and `discount_reduction` is their sum.
   and `toOrder`. A back-office shipment resolves no shipping discount - the operator states the price,
   and a price left out is quoted from the rate table only.
 - **Back office** - `OrderDiscountService.resolveForLines`, one call returning both passes, used by
-  `createEntry` and `buildLines`. The operator states the price; what comes off it is the catalog's
-  decision.
+  `createEntry` and `buildLines` through `OrderService.composeLines`. The operator states the price;
+  what comes off it is the catalog's decision unless the operator types one (§8). A bundle line is
+  exploded first (`rules/product.md` §8.5) and its components are what get resolved - never the
+  header - with a typed line discount refused on it (422 `bundle_discount`).
+
+## 8. Manual discounts (back office only)
+
+An operator may type a discount on a back-office order: per line (`lines[].discount`) and
+order-wide (top-level `discount`), each `{ type: percent|amount, value }` in the document's
+currency.
+
+- **It replaces the catalog pass it stands in for.** A line's typed discount takes the place of
+  that line's best rule (pass 1); a typed order-wide one takes the place of the campaign (pass 2)
+  and still stacks on the lines, apportioned the same way. Never both on the same pass.
+- **Same arithmetic, same floor.** Costed through `computeReduction` / `computeOrderReductions`
+  (they take `DiscountTerms`, not an entity) with no exchange rate, and clamped to `min_price`.
+  A line `amount` is per unit, like a catalog rule's.
+- **Permission `order.discount`** (`OrderPolicy.mayDiscount`; admins implicitly). Refused with a
+  403 only when the payload *changes* the typed discounts the document already carries -
+  `OrderService.assertMayDiscount` compares them, lines matched by variant - so an operator without
+  it can still edit a discounted order the dashboard sends back intact.
+- **The order-wide one is stored on `order.discount`** as the same `DiscountSnapshot` the lines
+  carry shares of (`manual: true`, scope `order`, `reduction` = their sum; kept at 0 where floors
+  absorb it). The payload states `{ type, value }` only. It changes only together with `lines`
+  (refused without them); a line set sent without it carries the stored terms over and
+  re-apportions them; `null` clears it. A catalog campaign is never written there.

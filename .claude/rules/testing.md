@@ -60,7 +60,7 @@ There are no helper-level unit tests: `src/tests/helpers/*.unit.ts` was deleted 
 
 ### 2.3. Rate limiting is off under `test`
 
-`rate-limit.config.ts` skips limiting when `Configuration.isEnvironment('test')`. One limiter instance is cached per type, so `register`, `passwordRecover` and `emailConfirmSend` share a single 10-per-15-minute budget that would otherwise accumulate across an entire file - adding a case anywhere could push an unrelated one into a 429.
+`rate-limit.config.ts` skips limiting when `Configuration.isEnvironment('test')`. The Redis store's `init` opens no connection, so building the limiters under `test` never reaches for Redis. One limiter instance is cached per type, so `register`, `passwordRecover` and `emailConfirmSend` share a single 10-per-15-minute budget that would otherwise accumulate across an entire file - adding a case anywhere could push an unrelated one into a 429.
 
 ## 3. Mock Data (`<feature>.mock.ts`)
 

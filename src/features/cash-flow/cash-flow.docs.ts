@@ -6,7 +6,6 @@ import {
 	CashFlowDirectionEnum,
 	CashFlowMethodEnum,
 	CashFlowStatusEnum,
-	CurrencyEnum,
 	STATUS_TRANSITIONS,
 } from '@/features/cash-flow/cash-flow.entity';
 import {
@@ -39,14 +38,14 @@ const statusTransitionNote = Object.entries(STATUS_TRANSITIONS)
  * otherwise reach the database and fail there.
  */
 const consistencyNote =
-	'category decides the pair: customer -> revenue/in; vendor, insurance and taxes -> expense/out; refund -> correction, either direction';
+	'category decides the pair: sale -> revenue/in; vendor, insurance and taxes -> expense/out; refund -> correction, either direction';
 
 const amountNote = `amount is stored as a positive integer scaled by 10^${AMOUNT_DECIMALS}, so the sign is dropped and anything past the ${AMOUNT_DECIMALS}th decimal with it; gross and net are derived from it and vat_rate on read`;
 
 const operationalRecordsFormat = `{ ${Object.values(OperationalRecordTypeEnum).join('?: number; ')}?: number }`;
 
 const operationalRecordsCondition =
-	'customer requires client; vendor, insurance and taxes require vendor. A type the category does not allow is dropped silently rather than refused';
+	'sale requires client and optionally takes order - the document the payment was raised for, which confirms itself once the movement is captured; vendor, insurance and taxes require vendor. A type the category does not allow is dropped silently rather than refused. Records may be rewritten in any status, so an operator can attach the order to a movement already captured; a required type may not be unlinked';
 
 const amountParam = {
 	type: 'number' as const,
@@ -59,10 +58,9 @@ const vatRateParam = {
 };
 
 const currencyParam = {
-	type: 'enum' as const,
+	type: 'string' as const,
 	required: false,
-	values: Object.values(CurrencyEnum),
-	condition: `defaults to the deployment currency (${Configuration.currency()}); the exchange rate to it is captured on the row`,
+	condition: `3-letter ISO 4217 code; defaults to the deployment currency (${Configuration.currency()}); the exchange rate to it is captured on the row`,
 };
 
 export const docs: Record<
@@ -250,7 +248,7 @@ export const docs: Record<
 		},
 		withAuthErrors: true,
 		request: {
-			notes: 'client_id and vendor_id filter through the operational records, so an entry with no record of that type is not returned',
+			notes: 'client_id, vendor_id and order_id filter through the operational records, so an entry with no record of that type is not returned',
 			query: {
 				page: {
 					type: 'number',
@@ -315,6 +313,7 @@ export const docs: Record<
 					},
 					client_id: { type: 'number', required: false },
 					vendor_id: { type: 'number', required: false },
+					order_id: { type: 'number', required: false },
 					is_deleted: {
 						type: 'boolean',
 						required: false,

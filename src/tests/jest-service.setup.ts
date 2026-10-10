@@ -21,6 +21,7 @@ export function createMockQuery() {
 		filterByEmail: jest.fn().mockReturnThis(),
 		filterByIdent: jest.fn().mockReturnThis(),
 		filterByBoolean: jest.fn().mockReturnThis(),
+		filterByOverdue: jest.fn().mockReturnThis(),
 		orderBy: jest.fn().mockReturnThis(),
 		pagination: jest.fn().mockReturnThis(),
 		withDeleted: jest.fn().mockReturnThis(),
@@ -61,7 +62,7 @@ export function createMockRepository<
 
 	// Chainable TypeORM query-builder stub. Every filter method returns the builder, so a
 	// service can chain freely; a test only has to configure the terminal call it needs
-	// (`getMany`/`getOne`), which default to empty results.
+	// (`getMany`/`getOne`/`getRawMany`), which default to empty results.
 	const queryBuilder = {
 		// Typed with their real arguments, so a test can assert on the condition that was
 		// built rather than only on the call happening.
@@ -74,8 +75,11 @@ export function createMockRepository<
 		orderBy: jest.fn(() => queryBuilder),
 		addOrderBy: jest.fn(() => queryBuilder),
 		select: jest.fn(() => queryBuilder),
+		addSelect: jest.fn(() => queryBuilder),
+		groupBy: jest.fn(() => queryBuilder),
 		leftJoinAndSelect: jest.fn(() => queryBuilder),
 		getMany: jest.fn(async () => [] as E[]),
+		getRawMany: jest.fn(async () => [] as object[]),
 		getOne: jest.fn(async () => null as E | null),
 	};
 

@@ -219,6 +219,10 @@ export class CartValidator extends BaseValidator<typeof validatorMessages> {
 	/**
 	 * `delivery_method` and `delivery_address_id` ask for the delivery to be quoted as well, and are
 	 * only read together with `client_id` - see `CartService.previewDelivery`.
+	 *
+	 * `billing_address_id` names the buyer's country, so a discount limited by
+	 * `applicable_countries` is quoted as checkout will apply it. Also read only with `client_id`,
+	 * whose billing address it has to be.
 	 */
 	readonly publicRead = z.object({
 		client_id: this.validateId(this.getMessage('invalid_client_id'), {
@@ -231,6 +235,10 @@ export class CartValidator extends BaseValidator<typeof validatorMessages> {
 		),
 		delivery_address_id: this.validateId(
 			this.getMessage('invalid_delivery_address_id'),
+			{ required: false },
+		),
+		billing_address_id: this.validateId(
+			this.getMessage('invalid_billing_address_id'),
 			{ required: false },
 		),
 	});

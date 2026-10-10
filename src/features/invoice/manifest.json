@@ -1,14 +1,23 @@
 {
 	"name": "invoice",
-	"version": "1.1.0",
+	"version": "6.0.0",
 	"relativePath": "/invoice",
-	"entities": ["invoice"],
+	"entities": [
+		"invoice",
+		"invoice-line",
+		"invoice-payment",
+		"invoice-source"
+	],
 	"depends_on": [
+		"address",
 		"client",
+		"client-address",
 		"order",
+		"product",
+		"shipping",
 		"discount",
 		"cash-flow",
 		"document-series"
 	],
-	"required_by": ["subscription"]
+	"required_by": ["subscription", "order-settlement"]
 }

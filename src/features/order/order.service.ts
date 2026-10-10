@@ -19,13 +19,26 @@ import { DocumentTypeEnum } from '@/features/document-series/document-series.ent
 import { documentSeriesService } from '@/features/document-series/document-series.service';
 import { exchangeRateService } from '@/features/exchange-rate/exchange-rate.service';
 import OrderEntity, {
+	type ManualDiscount,
+	type OrderBillingAddress,
 	type OrderPaymentMethod,
+	OrderPaymentMethodEnum,
 	type OrderStatus,
 	OrderStatusEnum,
-	type OrderType,
-	OrderTypeEnum,
 	STATUS_TRANSITIONS,
 } from '@/features/order/order.entity';
+import {
+	type AfterCommit,
+	cancelOrderPayment,
+	findOrdersAwaitingPayment,
+	isOrderClientLocked,
+	isOrderInvoiced,
+	notifyOrderCanceled,
+	notifyOrderConfirmed,
+	notifyOrderFulfillmentReleased,
+	syncOrderDelivery,
+	syncOrderPayment,
+} from '@/features/order/order.hooks';
 import {
 	getOrderLineRepository,
 	getOrderRepository,
@@ -35,6 +48,12 @@ import {
 	paramsUpdateList,
 } from '@/features/order/order.validator';
 import {
+	type OrderBundleService,
+	orderBundleService,
+} from '@/features/order/order-bundle.service';
+import {
+	type OrderDiscountContext,
+	type OrderDiscountLine,
 	type OrderDiscountService,
 	orderDiscountService,
 } from '@/features/order/order-discount.service';
@@ -89,6 +108,8 @@ export type OrderLineInput = {
 	discount_reduction?: number;
 	options?: ProductOptionSnapshot[] | null;
 	notes?: string | null;
+	/** On a bundle component, the `product_bundle_item` it was taken from. */
+	bundle_item_id?: number | null;
 	/**
 	 * The components a bundle explodes into, per `product.md` §8.3.
 	 *
@@ -112,12 +133,11 @@ export type OrderCreateInput = {
 	 * Rate to the base currency, following `order_line.exchange_rate`.
 	 *
 	 * Optional: a caller holding no rate - a checkout, which quotes a basket in the shopper's own
-	 * currency and resolves none - leaves it out, and the document resolves its own as of the
-	 * issue date. Stated only by a caller that already froze the money at a known rate.
+	 * currency and resolves none - leaves it out, and the document resolves the current one.
+	 * Stated only by a caller that already froze the money at a known rate.
 	 */
 	exchange_rate?: number;
 	lines: readonly OrderLineInput[];
-	type?: OrderType;
 	/** How the client pays. Absent on a back-office document that has not agreed it yet. */
 	payment_method?: OrderPaymentMethod | null;
 	/**
@@ -127,10 +147,13 @@ export type OrderCreateInput = {
 	 * The caller is what proves the address belongs to the billed client - a checkout resolves it
 	 * through `ClientAddressService.getOrderSnapshot`, which answers a 404 for anybody else's.
 	 */
-	billing_address_id?: number | null;
+	billing_address?: OrderBillingAddress | null;
 	notes?: string | null;
-	/** Defaults to now. Injectable so a backdated import states its own date. */
-	issued_at?: Date;
+	/**
+	 * The snapshot of an order-wide discount an operator typed, as `OrderDiscountService` costed
+	 * it. The lines arrive with their shares of it already apportioned.
+	 */
+	discount?: DiscountSnapshot | null;
 };
 
 /**
@@ -167,6 +190,11 @@ export type OrderTotals = {
 	has_discount: boolean;
 };
 
+/** The billing address as the back-office payload states it - without the country's name. */
+type BillingAddressPayload = NonNullable<
+	ValidatorOutput<OrderValidator, 'create'>['billing_address']
+>;
+
 /** One line as the back-office payload states it, after validation. */
 type OrderLinePayload = ValidatorOutput<
 	OrderValidator,
@@ -196,17 +224,83 @@ export type OrderLineWithLabel = OrderLineEntity & {
 	label: string | null;
 };
 
+/**
+ * A line set's typed discounts as one comparable string: the order-wide one, then each line's by
+ * variant, sorted so the order the lines arrive in does not count as a change.
+ */
+function describeManualDiscounts(set: {
+	discount?: ManualDiscount | null;
+	lines: readonly { variant_id: number; discount?: ManualDiscount | null }[];
+}): string {
+	const describe = (discount: ManualDiscount | null | undefined) =>
+		discount ? `${discount.type}:${Number(discount.value)}` : '-';
+
+	return JSON.stringify({
+		order: describe(set.discount),
+		lines: set.lines
+			.filter((line) => line.discount)
+			.map((line) => `${line.variant_id}=${describe(line.discount)}`)
+			.sort(),
+	});
+}
+
+/**
+ * Every field of a stored billing address - typed as a full record so a field added to
+ * `OrderBillingAddress` fails to compile here until it is compared too.
+ */
+const BILLING_ADDRESS_FIELDS = Object.keys({
+	details: true,
+	postal_code: true,
+	address_city: true,
+	address_region: true,
+	address_country: true,
+	country_code: true,
+	notes: true,
+} satisfies Record<
+	keyof OrderBillingAddress,
+	true
+>) as (keyof OrderBillingAddress)[];
+
+/**
+ * Whether two billing addresses state the same thing, field by field. Not by serializing them:
+ * `jsonb` gives the stored one back with its keys in its own order (shortest first), so a payload
+ * restating it unchanged would never compare equal. An absent field reads as `null`.
+ */
+function isSameBillingAddress(
+	a: OrderBillingAddress | null,
+	b: OrderBillingAddress | null,
+): boolean {
+	if (!a || !b) {
+		return a === b;
+	}
+
+	return BILLING_ADDRESS_FIELDS.every(
+		(field) => (a[field] ?? null) === (b[field] ?? null),
+	);
+}
+
+/**
+ * The terms a stored order-wide snapshot was costed from - to re-apportion it over a new line set,
+ * or to tell whether a payload changes it. Null for anything an operator did not type.
+ */
+function toManualTerms(
+	snapshot: DiscountSnapshot | null | undefined,
+): ManualDiscount | null {
+	return snapshot?.manual
+		? { type: snapshot.type, value: Number(snapshot.value) }
+		: null;
+}
+
 const ENTRY_COLUMNS = [
 	'order.id',
 	'order.client_id',
 	'order.ref_code',
 	'order.ref_number',
 	'order.status',
-	'order.type',
 	'order.payment_method',
-	'order.billing_address_id',
-	'order.issued_at',
+	'order.billing_address',
 	'order.notes',
+	'order.discount',
 	'order.created_at',
 	'order.updated_at',
 	'order.deleted_at',
@@ -226,6 +320,19 @@ const CLIENT_COLUMNS = [
 ];
 
 /**
+ * What the buyer's own order page states about who it was billed to, beyond the listing's name:
+ * the company's registration and the contact phone. The personal identification number stays
+ * off - a buyer has no need to be shown it back, and it is the one column here worth not
+ * repeating on a page.
+ */
+const PUBLIC_DETAIL_CLIENT_COLUMNS = [
+	...CLIENT_COLUMNS,
+	'client.company_cui',
+	'client.company_reg_com',
+	'client.contact_phone',
+];
+
+/**
  * The document as its buyer sees it. `deleted_at` is dropped because a soft-deleted order is never
  * served to them; `client_id` stays so a buyer holding several clients can tell which one was billed.
  */
@@ -237,6 +344,7 @@ const LINE_COLUMNS = [
 	'order_line.id',
 	'order_line.order_id',
 	'order_line.parent_id',
+	'order_line.bundle_item_id',
 	'order_line.variant_id',
 	'order_line.product_id',
 	'order_line.quantity',
@@ -260,6 +368,7 @@ export class OrderService {
 		private clientAddressService: ClientAddressService,
 		private discountService: OrderDiscountService,
 		private optionService: OrderOptionService,
+		private bundleService: OrderBundleService,
 	) {}
 
 	/**
@@ -274,14 +383,121 @@ export class OrderService {
 	}
 
 	/**
+	 * The billing address as the order stores it, from what an operator typed. The country's name
+	 * is looked up from its code rather than accepted, so the name an invoice prints and the code a
+	 * discount condition matches can never disagree; a code no country carries answers 400.
+	 */
+	private async toBillingAddress(
+		input: BillingAddressPayload | null | undefined,
+	): Promise<OrderBillingAddress | null> {
+		if (!input) {
+			return null;
+		}
+
+		const country = input.country_code
+			? await this.clientAddressService.resolveCountry(input.country_code)
+			: null;
+
+		if (input.country_code && !country) {
+			throw new BadRequestError(
+				lang('order.error.billing_country_unknown', {
+					code: input.country_code,
+				}),
+			);
+		}
+
+		return {
+			details: input.details,
+			postal_code: input.postal_code,
+			address_city: input.address_city,
+			address_region: input.address_region,
+			address_country: country?.name ?? null,
+			country_code: country?.code ?? null,
+			notes: input.notes,
+		};
+	}
+
+	/**
+	 * Refuses a caller without the `discount` permission who sets, changes or clears a typed
+	 * discount. Compared against what the document already carries rather than refused on sight:
+	 * the dashboard sends every line back on an edit, its typed discounts included, and an operator
+	 * correcting a quantity on a discounted order has not handed out a discount by doing so.
+	 *
+	 * Lines are matched by variant rather than position - a line set is replaced wholesale, so
+	 * position is not an identity, and reordering it changes nothing anybody agreed. The order-wide
+	 * one is compared against `order.discount`; `entry` is absent on a create, which carries none.
+	 */
+	private async assertMayDiscount(
+		canDiscount: boolean,
+		incoming: {
+			discount?: ManualDiscount | null;
+			lines: readonly {
+				variant_id: number;
+				discount?: ManualDiscount | null;
+			}[];
+		},
+		entry?: OrderEntity,
+	): Promise<void> {
+		if (canDiscount) {
+			return;
+		}
+
+		const stored = entry
+			? {
+					discount: toManualTerms(entry.discount),
+					lines: await this.readManualLineDiscounts(entry.id),
+				}
+			: { discount: null, lines: [] };
+
+		if (
+			describeManualDiscounts(incoming) !==
+			describeManualDiscounts(stored)
+		) {
+			throw new CustomError(
+				403,
+				lang('order.error.discount_not_allowed'),
+			);
+		}
+	}
+
+	/**
+	 * The discount typed on each stored line, read back off its snapshots - the only place a
+	 * line's own lives (see `DiscountSnapshot.manual`).
+	 */
+	private async readManualLineDiscounts(
+		orderId: number,
+	): Promise<{ variant_id: number; discount: ManualDiscount | null }[]> {
+		const rows = await dataSource.getRepository(OrderLineEntity).find({
+			select: { id: true, variant_id: true, discount: true },
+			where: { order_id: orderId },
+		});
+
+		return rows.map((row) => {
+			const found = row.discount?.find(
+				(snapshot) =>
+					snapshot.manual &&
+					snapshot.scope === DiscountScopeEnum.VARIANT,
+			);
+
+			return {
+				variant_id: row.variant_id,
+				discount: found
+					? { type: found.type, value: Number(found.value) }
+					: null,
+			};
+		});
+	}
+
+	/**
 	 * The rate the document's money is frozen at, read from `exchange_rate` rather than accepted
 	 * from the caller. A back-office operator agrees prices, not the rate the accounts convert
 	 * them at, and a figure typed into the payload is one nobody can reconcile against the
 	 * published series later.
 	 *
-	 * Taken **as of the issue date**, not today: a backdated order is converted at what the day
-	 * it was issued was worth, and `getRateAsOf` carries the previous publication forward across
-	 * a weekend or a holiday.
+	 * `asOf` defaults to now, which is the creation date for a new order. A line edit passes the
+	 * order's `created_at`, so a document amended days later still converts at what the day it
+	 * was raised was worth. `getRateAsOf` carries the previous publication forward across a
+	 * weekend or a holiday.
 	 *
 	 * An unpublished currency is refused rather than defaulted to 1, following `cash-flow`: this
 	 * is a financial document, and converting at a made-up rate is worse than declining to write
@@ -292,9 +508,9 @@ export class OrderService {
 	 */
 	public async resolveExchangeRate(
 		currency: string,
-		issuedAt?: Date,
+		asOf?: Date,
 	): Promise<number> {
-		const rate = await exchangeRateService.getRateAsOf(currency, issuedAt);
+		const rate = await exchangeRateService.getRateAsOf(currency, asOf);
 
 		if (rate === null) {
 			throw new BadRequestError(
@@ -367,8 +583,6 @@ export class OrderService {
 			throw new BadRequestError(lang('order.error.no_lines'));
 		}
 
-		const issuedAt = data.issued_at ?? new Date();
-
 		/*
 		 * The rate belongs to the document rather than to whoever raised it. A checkout hands over
 		 * figures in the shopper's currency and no rate at all, so this is the moment the money is
@@ -377,7 +591,7 @@ export class OrderService {
 		 */
 		const exchangeRate =
 			data.exchange_rate ??
-			(await this.resolveExchangeRate(data.currency, issuedAt));
+			(await this.resolveExchangeRate(data.currency));
 
 		const reference = await documentSeriesService.allocate(
 			manager,
@@ -390,11 +604,10 @@ export class OrderService {
 				ref_code: reference.code,
 				ref_number: reference.number,
 				status: OrderStatusEnum.PENDING,
-				type: data.type ?? OrderTypeEnum.STANDARD,
 				payment_method: data.payment_method ?? null,
-				billing_address_id: data.billing_address_id ?? null,
-				issued_at: issuedAt,
+				billing_address: data.billing_address ?? null,
 				notes: data.notes ?? null,
+				discount: data.discount ?? null,
 			}),
 		);
 
@@ -457,6 +670,7 @@ export class OrderService {
 						? line.options
 						: null,
 				notes: line.notes ?? null,
+				bundle_item_id: line.bundle_item_id ?? null,
 			});
 
 		const headers = await manager.save(
@@ -493,42 +707,34 @@ export class OrderService {
 	 */
 	public async createEntry(
 		data: ValidatorOutput<OrderValidator, 'create'>,
+		canDiscount: boolean,
 	): Promise<OrderEntity> {
 		await this.checkClientId(data.client_id);
 		await this.checkLines(data.lines);
+		await this.assertMayDiscount(canDiscount, data);
 
-		const exchangeRate = await this.resolveExchangeRate(
-			data.currency,
-			data.issued_at ?? undefined,
+		const billingAddress = await this.toBillingAddress(
+			data.billing_address,
 		);
-
-		const issuedAt = data.issued_at ?? new Date();
-
-		const options = await this.optionService.resolveForLines(
-			data.lines,
-			data.currency,
-		);
+		const exchangeRate = await this.resolveExchangeRate(data.currency);
 
 		/*
 		 * The buyer's country, for a campaign that names one. A back-office document may not have
 		 * agreed a billing address yet, and every country condition then fails closed - which is
 		 * the same answer the storefront gives a basket that has chosen none.
 		 */
-		const countryCode = data.billing_address_id
-			? await this.clientAddressService.getCountryCodeById(
-					data.billing_address_id,
-				)
-			: null;
+		const countryCode = billingAddress?.country_code ?? null;
 
-		const discounts = await this.discountService.resolveForLines(
+		const composed = await this.composeLines(
 			data.lines,
 			{
 				clientId: data.client_id,
 				countryCode: countryCode,
 				currency: data.currency,
 				exchangeRate: exchangeRate,
-				now: issuedAt,
+				now: new Date(),
 			},
+			data.discount,
 		);
 
 		return dataSource.transaction((manager) =>
@@ -536,23 +742,105 @@ export class OrderService {
 				client_id: data.client_id,
 				currency: data.currency,
 				exchange_rate: exchangeRate,
-				type: data.type,
-				billing_address_id: data.billing_address_id ?? null,
-				issued_at: issuedAt,
+				billing_address: billingAddress,
 				notes: data.notes ?? null,
-				lines: data.lines.map((line, index) => ({
+				discount: composed.discount,
+				lines: composed.rows,
+			}),
+		);
+	}
+
+	/**
+	 * Turns a back-office line set into rows ready to write - the one place both `createEntry` and
+	 * `buildLines` go through, so a created and an edited document cannot be composed differently.
+	 *
+	 * - **Options** are resolved into snapshots against the catalog (`OrderOptionService`).
+	 * - **A bundle line becomes a header and its components** (`OrderBundleService`): the header
+	 *   at `price` and `vat_rate` 0, the operator's bundle price divided over the components at
+	 *   their own rates (`rules/product.md` §8.3). The header keeps the line's options and note.
+	 * - **Discounts are resolved over what carries money** - ordinary lines and bundle components,
+	 *   never a header, which is what the cart does too (`rules/discount.md` §4). A typed discount
+	 *   on a bundle line is refused: it would have to be divided over components priced at
+	 *   different rates, and the order-wide discount already does exactly that.
+	 */
+	private async composeLines(
+		lines: readonly OrderLinePayload[],
+		context: OrderDiscountContext,
+		orderDiscount?: ManualDiscount | null,
+	): Promise<{ rows: OrderLineInput[]; discount: DiscountSnapshot | null }> {
+		const [options, bundles] = await Promise.all([
+			this.optionService.resolveForLines(lines, context.currency),
+			this.bundleService.explodeForLines(lines, context.currency),
+		]);
+
+		lines.forEach((line, index) => {
+			if (bundles[index] && line.discount) {
+				throw new BadRequestError(
+					lang('order.error.bundle_discount', {
+						variant_id: String(line.variant_id),
+					}),
+				);
+			}
+		});
+
+		// Flattened in line order, a bundle contributing its components in its own place
+		const priced = lines.flatMap(
+			(line, index): OrderDiscountLine[] => bundles[index] ?? [line],
+		);
+
+		const discounts = await this.discountService.resolveForLines(
+			priced,
+			context,
+			orderDiscount,
+		);
+
+		let cursor = 0;
+
+		const rows = lines.map((line, index): OrderLineInput => {
+			const components = bundles[index];
+
+			if (!components) {
+				const resolved = discounts.lines[cursor++];
+
+				return {
 					variant_id: line.variant_id,
 					product_id: line.product_id,
 					quantity: line.quantity,
 					price: line.price,
 					vat_rate: line.vat_rate,
-					discount: discounts.lines[index]?.snapshots ?? null,
-					discount_reduction: discounts.lines[index]?.reduction ?? 0,
+					discount: resolved?.snapshots ?? null,
+					discount_reduction: resolved?.reduction ?? 0,
 					options: options[index],
 					notes: line.notes ?? null,
-				})),
-			}),
-		);
+				};
+			}
+
+			return {
+				variant_id: line.variant_id,
+				product_id: line.product_id,
+				quantity: line.quantity,
+				price: 0,
+				vat_rate: 0,
+				discount: null,
+				discount_reduction: 0,
+				options: options[index],
+				notes: line.notes ?? null,
+				children: components.map((component) => {
+					const resolved = discounts.lines[cursor++];
+
+					return {
+						...component,
+						discount: resolved?.snapshots ?? null,
+						discount_reduction: resolved?.reduction ?? 0,
+					};
+				}),
+			};
+		});
+
+		return {
+			rows: rows,
+			discount: discounts.campaign?.manual ? discounts.campaign : null,
+		};
 	}
 
 	/**
@@ -570,16 +858,38 @@ export class OrderService {
 	 *
 	 * `currency` rides along with that set - the validator refuses it without one - so it is gated
 	 * by the same 409 and never reaches `pickValuesFromObject`: it is not a column on `order`, it
-	 * belongs to the lines being written. Its rate is looked up rather than accepted, against the
-	 * issue date the document ends the call with, so re-denominating a pending order and
-	 * backdating it in one request converts at the date that was actually saved.
+	 * belongs to the lines being written. Its rate is looked up rather than accepted, as of the
+	 * order's creation.
 	 */
 	public async updateData(
 		entry: OrderEntity,
 		data: ValidatorOutput<OrderValidator, 'update'>,
+		canDiscount: boolean,
 	): Promise<OrderEntity> {
 		if (data.client_id) {
 			await this.checkClientId(data.client_id);
+
+			// Documents are raised for one client and payments filed under one; neither follows a move
+			if (
+				data.client_id !== entry.client_id &&
+				(await isOrderClientLocked(entry.id))
+			) {
+				throw new CustomError(409, lang('order.error.client_locked'));
+			}
+		}
+
+		const clientChanged =
+			data.client_id !== undefined && data.client_id !== entry.client_id;
+		const billingAddress =
+			data.billing_address === undefined
+				? entry.billing_address
+				: await this.toBillingAddress(data.billing_address);
+
+		if (!isSameBillingAddress(billingAddress, entry.billing_address)) {
+			// The issued document froze the billing details; the order would stop agreeing with it
+			if (await isOrderInvoiced(entry.id)) {
+				throw new CustomError(409, lang('order.error.billing_locked'));
+			}
 		}
 
 		if (data.lines) {
@@ -587,10 +897,45 @@ export class OrderService {
 				throw new CustomError(409, lang('order.error.lines_locked'));
 			}
 
+			// Billed up front: a live document froze these lines, and rewriting them under it
+			// would leave it billing goods the order no longer lists
+			if (await isOrderInvoiced(entry.id)) {
+				throw new CustomError(409, lang('order.error.lines_invoiced'));
+			}
+
 			await this.checkLines(data.lines);
 		}
 
+		/*
+		 * Left out alongside a line set, the stored order-wide terms carry over and are
+		 * re-apportioned onto the new lines; `null` clears them. The validator refuses them without
+		 * a line set, so they never change without the lines they live in being rewritten.
+		 */
+		const orderDiscount =
+			data.discount === undefined
+				? toManualTerms(entry.discount)
+				: data.discount;
+
+		if (data.lines) {
+			await this.assertMayDiscount(
+				canDiscount,
+				{ discount: orderDiscount, lines: data.lines },
+				entry,
+			);
+		}
+
 		Object.assign(entry, pickValuesFromObject(data, paramsUpdateList));
+
+		/*
+		 * Set after the generic pass, which would copy the payload as typed - without the country
+		 * name `toBillingAddress` fills in. Moved to another client without naming an address, the
+		 * one on file was the previous client's, so it is dropped rather than kept billing somebody
+		 * else.
+		 */
+		entry.billing_address =
+			data.billing_address === undefined && clientChanged
+				? null
+				: billingAddress;
 
 		/*
 		 * The incoming set is costed before the transaction opens, not inside it: resolving the
@@ -598,8 +943,20 @@ export class OrderService {
 		 * those queries buys nothing. What it reads is committed data either way.
 		 */
 		const lines = data.lines
-			? await this.buildLines(entry, data.lines, data.currency)
+			? await this.buildLines(
+					entry,
+					data.lines,
+					data.currency,
+					orderDiscount,
+				)
 			: undefined;
+
+		if (lines) {
+			entry.discount = lines.discount;
+		}
+
+		// Filled inside the callback, run once it has committed
+		const after: AfterCommit[] = [];
 
 		const saved = await dataSource.transaction(async (manager) => {
 			const order = await manager.save(entry);
@@ -612,6 +969,19 @@ export class OrderService {
 					lines.currency,
 					lines.exchange_rate,
 				);
+
+				/*
+				 * In this transaction, the payment request still pending follows the new total, and
+				 * the delivery not yet shipped the new goods.
+				 */
+				for (const run of [
+					await syncOrderPayment(manager, order.id),
+					await syncOrderDelivery(manager, order.id),
+				]) {
+					if (run) {
+						after.push(run);
+					}
+				}
 			}
 
 			return order;
@@ -619,7 +989,29 @@ export class OrderService {
 
 		await cleanEntityCache(OrderEntity, saved.id);
 
+		for (const run of after) {
+			await run();
+		}
+
 		return saved;
+	}
+
+	/**
+	 * Whether a live goods document bills the order, which locks its lines (`updateData`).
+	 *
+	 * Asked fresh on every read rather than cached with it: the document is raised by `invoice`,
+	 * which does not drop this feature's cache, so a cached answer would outlive the change.
+	 */
+	public isInvoiced(orderId: number): Promise<boolean> {
+		return isOrderInvoiced(orderId);
+	}
+
+	/**
+	 * Whether the order may no longer move to another client (`updateData`) - billed, or paid for,
+	 * under the one it names. Asked fresh for the reason `isInvoiced` is.
+	 */
+	public isClientLocked(orderId: number): Promise<boolean> {
+		return isOrderClientLocked(orderId);
 	}
 
 	/**
@@ -631,9 +1023,8 @@ export class OrderService {
 	 * incoming prices are taken as quoted in it and written as they are: the validator only accepts
 	 * a currency alongside a full line set, so the operator has just re-stated every price. Nothing
 	 * is converted here - the rate rides along for the accounts to reach base currency with, and
-	 * applying it to prices somebody typed would move figures they agreed. It is looked up against
-	 * the issue date the document ends the call with, so re-denominating a pending order and
-	 * backdating it in one request converts at the date that was actually saved.
+	 * applying it to prices somebody typed would move figures they agreed. It is looked up as of the
+	 * order's creation, the same date the discounts below are resolved against.
 	 *
 	 * The discounts are resolved fresh over the whole set rather than carried across from the rows
 	 * being replaced: a changed quantity, price or currency changes which rule wins and what it is
@@ -643,51 +1034,40 @@ export class OrderService {
 		entry: OrderEntity,
 		lines: readonly OrderLinePayload[],
 		currency?: string,
+		orderDiscount?: ManualDiscount | null,
 	): Promise<{
 		rows: OrderLineInput[];
 		currency: string;
 		exchange_rate: number;
+		/** The typed order-wide discount as costed over these lines, for `order.discount`. */
+		discount: DiscountSnapshot | null;
 	}> {
 		const denomination = await this.readLineDenomination(entry.id);
 
 		const lineCurrency = currency ?? denomination.currency;
 		const exchangeRate = currency
-			? await this.resolveExchangeRate(currency, entry.issued_at)
+			? await this.resolveExchangeRate(currency, entry.created_at)
 			: denomination.exchange_rate;
 
-		const options = await this.optionService.resolveForLines(
+		const countryCode = entry.billing_address?.country_code ?? null;
+
+		const composed = await this.composeLines(
 			lines,
-			lineCurrency,
+			{
+				clientId: entry.client_id,
+				countryCode: countryCode,
+				currency: lineCurrency,
+				exchangeRate: exchangeRate,
+				now: entry.created_at,
+			},
+			orderDiscount,
 		);
 
-		const countryCode = entry.billing_address_id
-			? await this.clientAddressService.getCountryCodeById(
-					entry.billing_address_id,
-				)
-			: null;
-
-		const discounts = await this.discountService.resolveForLines(lines, {
-			clientId: entry.client_id,
-			countryCode: countryCode,
-			currency: lineCurrency,
-			exchangeRate: exchangeRate,
-			now: entry.issued_at,
-		});
-
 		return {
-			rows: lines.map((line, index) => ({
-				variant_id: line.variant_id,
-				product_id: line.product_id,
-				quantity: line.quantity,
-				price: line.price,
-				vat_rate: line.vat_rate,
-				discount: discounts.lines[index]?.snapshots ?? null,
-				discount_reduction: discounts.lines[index]?.reduction ?? 0,
-				options: options[index],
-				notes: line.notes ?? null,
-			})),
+			rows: composed.rows,
 			currency: lineCurrency,
 			exchange_rate: exchangeRate,
+			discount: composed.discount,
 		};
 	}
 
@@ -746,22 +1126,145 @@ export class OrderService {
 	 * The cache is dropped after the write rather than by a subscriber: `OrderEntity.HAS_CACHE` is
 	 * true, and a subscriber would fire inside the transaction, where a concurrent reader can
 	 * refill the cache from a snapshot about to be superseded.
+	 *
+	 * When the move is the one that accepts the order, it is announced so whatever is still
+	 * unbilled is billed - the whole order on the back-office path, nothing on the checkout path,
+	 * which billed it when it was placed. Settled documents confirm an order through here too.
+	 * It is then announced a second time, for its deliveries still `pending` to be prepared.
+	 *
+	 * The announcement runs **after the write has committed** and is not part of any transaction
+	 * the caller holds - see `invoice.hooks.ts` for why, and for what a failure to raise
+	 * the document leaves behind. Confirming the order is the part that must not fail: billing details
+	 * an invoice refuses on are the client's to fix, and none of that is a reason to refuse an
+	 * operator the status change.
+	 *
+	 * The order row is locked and its status read again under the lock, the same as `cancel()`
+	 * does - checked against `entry` alone, a confirm racing a cancel would write over it and bill
+	 * an order whose payment requests were just withdrawn. `entry.status` is brought up to date, so
+	 * a caller moving the same entity on twice checks the second move from where the first left it.
 	 */
 	public async updateStatus(
 		entry: OrderEntity,
 		newStatus: OrderStatus,
 	): Promise<OrderEntity> {
-		assertValidStatusTransition(
-			STATUS_TRANSITIONS,
-			entry.status,
-			newStatus,
-		);
+		if (newStatus === OrderStatusEnum.CANCELED) {
+			return this.cancel(entry, { byBuyer: false });
+		}
 
-		entry.status = newStatus;
+		const saved = await dataSource.transaction(async (manager) => {
+			const locked = await manager
+				.getRepository(OrderEntity)
+				.findOneOrFail({
+					where: { id: entry.id },
+					lock: { mode: 'pessimistic_write' },
+				});
 
-		const saved = await this.repository.save(entry);
+			assertValidStatusTransition(
+				STATUS_TRANSITIONS,
+				locked.status,
+				newStatus,
+			);
+
+			locked.status = newStatus;
+
+			return manager.save(locked);
+		});
+
+		entry.status = saved.status;
 
 		await cleanEntityCache(OrderEntity, saved.id);
+
+		if (newStatus === OrderStatusEnum.CONFIRMED) {
+			await notifyOrderConfirmed({
+				order_id: saved.id,
+			});
+
+			await notifyOrderFulfillmentReleased({
+				order_id: saved.id,
+			});
+		}
+
+		return saved;
+	}
+
+	/**
+	 * Cancels an order and withdraws what still waits on it: the payment requests not yet acted on
+	 * (`cancelOrderPayment`, answered by `cart`, in this transaction) and, after the commit, the
+	 * deliveries that have not left (`notifyOrderCanceled`, answered by `shipping`).
+	 *
+	 * **A buyer cancels only what nothing has acted on yet**: a pending order with no invoice and
+	 * no money past a request - each of those has to be reversed or refunded, which is the
+	 * business's call. An operator cancels past both; the documents and money stay as they are,
+	 * for the operator to reverse or refund.
+	 *
+	 * The order row is locked for the transaction and its status read again under the lock, so a
+	 * capture that confirms the order concurrently either lands first - and the cancel is refused -
+	 * or finds its request already canceled.
+	 */
+	public async cancel(
+		entry: OrderEntity,
+		options: { byBuyer: boolean },
+	): Promise<OrderEntity> {
+		if (options.byBuyer && (await isOrderInvoiced(entry.id))) {
+			throw new CustomError(
+				409,
+				lang('order.error.not_cancelable_invoiced'),
+			);
+		}
+
+		const { saved, after } = await dataSource.transaction(
+			async (manager) => {
+				const locked = await manager
+					.getRepository(OrderEntity)
+					.findOneOrFail({
+						where: { id: entry.id },
+						lock: { mode: 'pessimistic_write' },
+					});
+
+				if (
+					options.byBuyer &&
+					locked.status !== OrderStatusEnum.PENDING
+				) {
+					throw new CustomError(
+						409,
+						lang('order.error.not_cancelable'),
+					);
+				}
+
+				assertValidStatusTransition(
+					STATUS_TRANSITIONS,
+					locked.status,
+					OrderStatusEnum.CANCELED,
+				);
+
+				const payment = await cancelOrderPayment(manager, locked.id);
+
+				// Thrown inside the transaction, so the requests withdrawn above roll back with it
+				if (options.byBuyer && payment.hasProcessed) {
+					throw new CustomError(
+						409,
+						lang('order.error.not_cancelable_paid'),
+					);
+				}
+
+				locked.status = OrderStatusEnum.CANCELED;
+
+				return {
+					saved: await manager.save(locked),
+					after: payment.after,
+				};
+			},
+		);
+
+		await cleanEntityCache(OrderEntity, saved.id);
+
+		if (after) {
+			await after();
+		}
+
+		await notifyOrderCanceled({
+			order_id: saved.id,
+		});
 
 		return saved;
 	}
@@ -783,6 +1286,34 @@ export class OrderService {
 			.withDeleted(withDeleted)
 			.filterById(id)
 			.firstOrFail();
+	}
+
+	/**
+	 * @description Used by `invoice` to name the order a cash flow movement is filed under, and the
+	 * order a printed document bills
+	 *
+	 * The reference and the date it was placed, soft-deleted orders included - the movement was
+	 * raised for the document whatever became of it since. Also what a printed invoice names its
+	 * order by. Null when the id points at nothing: the link is a plain id, with no foreign key to
+	 * keep it honest.
+	 */
+	public findReferenceById(
+		id: number,
+	): Promise<Pick<
+		OrderEntity,
+		'id' | 'ref_code' | 'ref_number' | 'created_at'
+	> | null> {
+		return this.repository
+			.createQuery()
+			.select([
+				'order.id',
+				'order.ref_code',
+				'order.ref_number',
+				'order.created_at',
+			])
+			.withDeleted(true)
+			.filterById(id)
+			.first();
 	}
 
 	/** The document's lines, in the order they were written - which is the order they read in. */
@@ -815,7 +1346,7 @@ export class OrderService {
 			.filterBy('variant_id', variantId)
 			.filterBy('order.status', OrderStatusEnum.COMPLETED)
 			.filterBy('client.user_id', userId)
-			.orderBy('order.issued_at', OrderDirectionEnum.DESC)
+			.orderBy('order.created_at', OrderDirectionEnum.DESC)
 			.orderBy('order.id', OrderDirectionEnum.DESC)
 			.getQuery()
 			.limit(1)
@@ -976,18 +1507,56 @@ export class OrderService {
 	): Promise<OrderWithLines> {
 		const order = await this.repository
 			.createQuery()
-			.select([...PUBLIC_ENTRY_COLUMNS, ...CLIENT_COLUMNS])
+			.select([...PUBLIC_ENTRY_COLUMNS, ...PUBLIC_DETAIL_CLIENT_COLUMNS])
 			.joinAndSelect('order.client', 'client', 'INNER')
 			.filterById(id)
 			.filterBy('client.user_id', userId)
 			.firstOrFail();
 
 		const lines = await this.getLines(order.id);
+		const [withPayment] = await this.attachAwaitingPayment([order]);
 
-		return Object.assign(order, {
+		return Object.assign(withPayment, {
 			lines: lines,
 			totals: this.computeTotals(lines),
 		});
+	}
+
+	/**
+	 * Marks the orders whose buyer still owes the payment they started - `awaiting_payment`, which
+	 * the storefront shows in place of `pending`. Not a status: the order is pending either way, and
+	 * what moves it on is the capture, through `order-settlement`.
+	 *
+	 * Only a pending order paid by card or transfer can be waiting. Cash on delivery is collected
+	 * with the parcel, so its open request says nothing about the buyer, and an order with no
+	 * method - one raised in the back office - was never asked to pay through one. One question
+	 * for the whole page, and none at all when no order on it qualifies.
+	 */
+	private async attachAwaitingPayment<
+		T extends {
+			id: number;
+			status: OrderStatus;
+			payment_method: OrderPaymentMethod | null;
+		},
+	>(orders: T[]): Promise<(T & { awaiting_payment: boolean })[]> {
+		const candidates = orders
+			.filter(
+				(order) =>
+					order.status === OrderStatusEnum.PENDING &&
+					order.payment_method !== null &&
+					order.payment_method !==
+						OrderPaymentMethodEnum.CASH_ON_DELIVERY,
+			)
+			.map((order) => order.id);
+
+		const awaiting =
+			candidates.length === 0
+				? new Set<number>()
+				: await findOrdersAwaitingPayment(candidates);
+
+		return orders.map((order) =>
+			Object.assign(order, { awaiting_payment: awaiting.has(order.id) }),
+		);
 	}
 
 	/**
@@ -995,23 +1564,41 @@ export class OrderService {
 	 *
 	 * Every order billed to any of the account's clients. The listing carries no lines or totals,
 	 * for the reason `findByFilter` gives - the detail read attaches them.
+	 *
+	 * Without a status filter a canceled order is left out: a buyer's history is what is still
+	 * coming or already came, and an order withdrawn is reached by asking for `canceled` itself.
 	 */
 	public async findOwnByFilter(
 		data: ValidatorOutput<OrderValidator, 'publicFind'>,
 		userId: number,
-	): Promise<[(OrderEntity & { totals: OrderTotals })[], number]> {
+	): Promise<
+		[
+			(OrderEntity & {
+				totals: OrderTotals;
+				awaiting_payment: boolean;
+			})[],
+			number,
+		]
+	> {
 		const [entries, total] = await this.repository
 			.createQuery()
 			.select([...PUBLIC_ENTRY_COLUMNS, ...CLIENT_COLUMNS])
 			.joinAndSelect('order.client', 'client', 'INNER')
 			.filterBy('client.user_id', userId)
-			.filterBy('status', data.filter.status)
+			.filterBy(
+				'status',
+				data.filter.status ?? OrderStatusEnum.CANCELED,
+				data.filter.status ? '=' : '!=',
+			)
 			.orderBy(data.order_by, data.direction)
 			.orderBy('id', data.direction)
 			.pagination(data.page, data.limit)
 			.all(true);
 
-		return [await this.attachTotals(entries), total];
+		return [
+			await this.attachAwaitingPayment(await this.attachTotals(entries)),
+			total,
+		];
 	}
 
 	/**
@@ -1069,14 +1656,19 @@ export class OrderService {
 			.joinAndSelect('order.client', 'client', 'LEFT')
 			.filterById(data.filter.id)
 			.filterByClient(data.filter.client_id)
-			.filterBy('status', data.filter.status)
-			.filterBy('type', data.filter.type)
 			.filterByReference(data.filter.ref_code, data.filter.ref_number)
 			.filterByRange(
-				'issued_at',
-				data.filter.issued_at_start,
-				data.filter.issued_at_end,
+				'created_at',
+				data.filter.create_at_start,
+				data.filter.create_at_end,
 			);
+
+		// One status narrows with `=`, several with `IN` - the filter accepts both
+		if (Array.isArray(data.filter.status)) {
+			query.filterBy('status', data.filter.status, 'IN');
+		} else {
+			query.filterBy('status', data.filter.status);
+		}
 
 		/*
 		 * The term is applied only when neither reference filter is: both reach for `ref_code` and
@@ -1103,4 +1695,5 @@ export const orderService = new OrderService(
 	clientAddressService,
 	orderDiscountService,
 	orderOptionService,
+	orderBundleService,
 );

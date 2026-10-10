@@ -7,7 +7,11 @@ import {
 	OneToMany,
 } from 'typeorm';
 import type ClientEntity from '@/features/client/client.entity';
-import type ClientAddressEntity from '@/features/client-address/client-address.entity';
+import type { ClientAddressSnapshot } from '@/features/client-address/client-address.entity';
+import type {
+	DiscountSnapshot,
+	DiscountType,
+} from '@/features/discount/discount.entity';
 import type OrderLineEntity from '@/features/order/order-line.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import type { StatusTransitions } from '@/shared/types/common.type';
@@ -16,7 +20,7 @@ export const OrderStatusEnum = {
 	PENDING: 'pending', // Placed - by a checkout or from the back office - and awaiting acceptance; lines may still be adjusted
 	CONFIRMED: 'confirmed', // Accepted by the business; shipping may begin
 	COMPLETED: 'completed', // Fulfilled and settled
-	CANCELLED: 'canceled', // Withdrawn before fulfilment
+	CANCELED: 'canceled', // Withdrawn before fulfillment
 } as const;
 
 export type OrderStatus =
@@ -38,38 +42,51 @@ export type OrderStatus =
  * own status machine to resolve.
  *
  * **`completed` is terminal.** An order that goes wrong afterwards is corrected on the money, not
- * on the document - a credit note or a refund against the invoice, which `invoice` carries its own
- * statuses for. Cancelling a fulfilled order would leave goods delivered against a document
- * claiming they never were.
+ * on the document - a reversal of the invoice, which refunds what was paid on it. Cancelling a
+ * fulfilled order would leave goods delivered against a document claiming they never were.
  */
 export const STATUS_TRANSITIONS: StatusTransitions<OrderStatus> = {
 	[OrderStatusEnum.PENDING]: [
 		OrderStatusEnum.CONFIRMED,
-		OrderStatusEnum.CANCELLED,
+		OrderStatusEnum.CANCELED,
 	],
 	[OrderStatusEnum.CONFIRMED]: [
 		OrderStatusEnum.COMPLETED,
-		OrderStatusEnum.CANCELLED,
+		OrderStatusEnum.CANCELED,
 	],
 	[OrderStatusEnum.COMPLETED]: [
 		// Allow nothing
 	],
-	[OrderStatusEnum.CANCELLED]: [
+	[OrderStatusEnum.CANCELED]: [
 		// Allow nothing
 	],
 };
-
-export const OrderTypeEnum = {
-	STANDARD: 'standard',
-	SUBSCRIPTION: 'subscription',
-} as const;
-
-export type OrderType = (typeof OrderTypeEnum)[keyof typeof OrderTypeEnum];
 
 /**
  * How the client said they will pay. Recorded as a choice only - nothing here charges, captures or
  * reconciles a payment; `cash_flow` and `invoice` carry the money once it moves.
  */
+/**
+ * A discount an operator typed on a back-office document, in the document's currency.
+ *
+ * On a line an `amount` is per unit, as a catalog rule's is; order-wide it is taken off the basket
+ * once and apportioned like a campaign.
+ */
+export type ManualDiscount = {
+	type: DiscountType;
+	value: number;
+};
+
+/**
+ * The billing address as the order keeps it: a client-address snapshot plus the country's ISO
+ * 3166-1 alpha-2 code. The code is what discount country conditions match against
+ * (`rules/discount.md` §1); `address_country` is the country's name for the printed page, and the
+ * order service derives it from the code so the two cannot disagree.
+ */
+export type OrderBillingAddress = ClientAddressSnapshot & {
+	country_code: string | null;
+};
+
 export const OrderPaymentMethodEnum = {
 	CASH_ON_DELIVERY: 'cash_on_delivery',
 	CARD: 'card',
@@ -122,14 +139,6 @@ export default class OrderEntity extends EntityAbstract {
 	@Index('IDX_order_status')
 	status!: OrderStatus;
 
-	@Column({
-		type: 'enum',
-		enum: OrderTypeEnum,
-		default: OrderTypeEnum.STANDARD,
-		nullable: false,
-	})
-	type!: OrderType;
-
 	/**
 	 * Null on a back-office document: an operator composing an order by phone agrees goods and
 	 * prices, and how it is settled is not always known at that point. A checkout always states one.
@@ -142,30 +151,42 @@ export default class OrderEntity extends EntityAbstract {
 	payment_method!: OrderPaymentMethod | null;
 
 	/**
-	 * Where the order is billed, named by reference rather than copied.
+	 * Where the order is billed - the order's own copy, not a reference to the client's address
+	 * book. A checkout copies the address the buyer picked; an operator may then correct it field
+	 * by field while the order is pending and unbilled, without touching what the client keeps on
+	 * file, and removing an address from the book never reaches an order.
 	 *
-	 * Null on a back-office document raised before a billing address is agreed, and null again once
-	 * that address is removed - the key is `SET NULL`, so deleting a client address stays possible
-	 * and cannot take the order with it.
-	 *
-	 * The counterparty's own details are not duplicated here either; they are read through
-	 * `client_id`. An invoice raised from the order is where they get frozen, into
-	 * `invoice.billing_details` - the invoice is the document that has to keep saying who was
-	 * billed whatever the client edits afterwards, and an order is still amendable.
+	 * Null on a back-office document raised before a billing address is agreed. The counterparty's
+	 * own details are not copied here; they are read through `client_id`. An invoice raised from the
+	 * order freezes both into `invoice.billing_details`, after which this stops changing (the update
+	 * answers 409).
 	 */
-	@Column('int', {
+	@Column('jsonb', {
 		nullable: true,
-		comment: 'The client address the order is billed to',
+		comment:
+			'Billing address snapshot, editable while the order is unbilled',
 	})
-	@Index('IDX_order_billing_address_id')
-	billing_address_id!: number | null;
-
-	@Column({ type: 'timestamp', nullable: false })
-	@Index('IDX_order_issued_at')
-	issued_at!: Date;
+	billing_address!: OrderBillingAddress | null;
 
 	@Column('text', { nullable: true })
 	notes!: string | null;
+
+	/**
+	 * The order-wide discount an operator typed, in place of the catalog's campaign - the same
+	 * `DiscountSnapshot` each line carries a share of (`manual: true`, scope `order`), with
+	 * `reduction` stating what it took off the whole document. Written in the transaction that
+	 * writes those shares, so the two agree; the lines stay the figure VAT and totals are read
+	 * from, and this is the record of what was granted.
+	 *
+	 * Kept even at a zero `reduction` - where the floors absorbed it - because it is also the
+	 * operator's terms, carried over when the lines are next rewritten. Null on every checkout
+	 * order and on a back-office one left to the catalog, whose campaign lives on the lines alone.
+	 */
+	@Column('jsonb', {
+		nullable: true,
+		comment: 'Order-wide manual discount snapshot',
+	})
+	discount!: DiscountSnapshot | null;
 
 	// RELATIONS
 	@ManyToOne('ClientEntity', {
@@ -173,14 +194,6 @@ export default class OrderEntity extends EntityAbstract {
 	})
 	@JoinColumn({ name: 'client_id' })
 	client!: ClientEntity;
-
-	// SET NULL rather than RESTRICT: a client address is deleted outright, and an order placed
-	// against it must not be what blocks the client from tidying their address book
-	@ManyToOne('ClientAddressEntity', {
-		onDelete: 'SET NULL',
-	})
-	@JoinColumn({ name: 'billing_address_id' })
-	billing_address?: ClientAddressEntity | null;
 
 	@OneToMany(
 		'OrderLineEntity',

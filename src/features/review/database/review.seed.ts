@@ -107,7 +107,7 @@ async function loadPurchases(
 			'client.user_id AS user_id',
 			'purchase_order.id AS order_id',
 		])
-		.orderBy('purchase_order.issued_at', 'DESC')
+		.orderBy('purchase_order.created_at', 'DESC')
 		.addOrderBy('purchase_order.id', 'DESC')
 		.getRawMany<Record<keyof Purchase, string | number>>();
 

@@ -3,7 +3,7 @@ paths:
   - "src/features/comment/**"
   - "src/features/complaint/**"
   - "src/config/event.config.ts"
-  - "src/config/target-participation.config.ts"
+  - "src/shared/registries/target-participation.registry.ts"
 ---
 
 # Comment & Complaint Protocol
@@ -245,8 +245,8 @@ afterwards.
 ## 6. A Target May Close
 
 Writing against `(entity_type, entity_id)` is asked for first, through the registry in
-`src/config/target-participation.config.ts`: `CommentService.create`, `RatingService.create` and
-`ComplaintService.create` each call `isParticipationAllowed(entity_type, entity_id, <kind>)` before
+`src/shared/registries/target-participation.registry.ts`: `CommentService.create`,
+`RatingService.create` and `ComplaintService.create` each call `isParticipationAllowed(entity_type, entity_id, <kind>)` before
 anything is stored, and answer **403** with their own `error.not_accepted` message when it is no.
 
 **A target with no resolver registered is open**, which is every one of them but `article` - so

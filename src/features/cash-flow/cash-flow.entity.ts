@@ -8,41 +8,16 @@ import {
 	OneToMany,
 	VirtualColumn,
 } from 'typeorm';
-import { Configuration } from '@/config/settings.config';
 import {
 	type CashFlowCategory,
 	CashFlowCategoryEnum,
 } from '@/features/cash-flow/cash-flow-category.enum';
 import OperationalRecordEntity from '@/features/cash-flow/operational-record.entity';
 import { arrayHasValue } from '@/helpers/objects.helper';
+import { CURRENCY_CODE_CHARS, roundMoney } from '@/helpers/shop.helper';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import { numericTransformer } from '@/shared/transformers/numeric.transformer';
 import type { StatusTransitions } from '@/shared/types/common.type';
-
-export const CurrencyEnum = {
-	RON: 'RON',
-	EUR: 'EUR',
-	USD: 'USD',
-} as const;
-
-export type Currency = (typeof CurrencyEnum)[keyof typeof CurrencyEnum];
-
-/**
- * Falls back to the deployment's configured currency when the request omits one.
- * `app.currency` is a free-form env string, so it is checked against the enum rather than
- * trusted - a typo in `APP_CURRENCY` must not reach a column the database constrains.
- */
-export const resolveCurrency = (currency?: Currency): Currency => {
-	if (currency) {
-		return currency;
-	}
-
-	const configured: string = Configuration.currency();
-
-	return arrayHasValue(configured, Object.values(CurrencyEnum))
-		? configured
-		: CurrencyEnum.EUR;
-};
 
 export const CashFlowDirectionEnum = {
 	IN: 'in', // money received relative to company
@@ -64,7 +39,7 @@ export type CashFlowCategoryType =
 export const getExpectedCategoryType = (
 	category: CashFlowCategory,
 ): CashFlowCategoryType => {
-	const revenueCategories = [CashFlowCategoryEnum.CUSTOMER];
+	const revenueCategories = [CashFlowCategoryEnum.SALE];
 	const expenseCategories = [
 		CashFlowCategoryEnum.VENDOR,
 		CashFlowCategoryEnum.INSURANCE,
@@ -218,6 +193,24 @@ export const GROSS_AMOUNT_BASE_CURRENCY_EXPRESSION = (alias: string) => `
 	(${GROSS_AMOUNT_EXPRESSION(alias)}) * CAST(${alias}.exchange_rate AS FLOAT)
 `;
 
+/**
+ * What a movement is worth gross, in its own currency, as a money figure - the TypeScript twin of
+ * `GROSS_AMOUNT_EXPRESSION`, rounded to the two decimals every document column stores.
+ *
+ * Needed beside the SQL because the `gross_amount` virtual column is only populated when the query
+ * asks for it, and `RepositoryAbstract.select([...])` routinely does not. Reading
+ * `entry.gross_amount` off an entity loaded with an explicit column list yields `undefined`, which
+ * silently compares as `NaN` rather than failing - so any guard that has an entity in hand computes
+ * from `amount` and `vat_rate` through here instead.
+ *
+ * Unsigned on purpose: `direction` decides which way the money went and is the caller's business.
+ * The SQL twin applies that sign because it feeds SUMs over mixed directions; a guard comparing one
+ * movement against one document wants the magnitude.
+ */
+export const toGrossAmount = (amount: number, vatRate: number): number => {
+	return roundMoney((amount / 10 ** AMOUNT_DECIMALS) * (1 + vatRate / 100));
+};
+
 @Entity({
 	name: ENTITY_TABLE_NAME,
 	schema: 'public',
@@ -266,7 +259,7 @@ export default class CashFlowEntity extends EntityAbstract {
 	@Column({
 		type: 'enum',
 		enum: CashFlowCategoryEnum,
-		default: CashFlowCategoryEnum.CUSTOMER,
+		default: CashFlowCategoryEnum.SALE,
 		nullable: false,
 	})
 	category!: CashFlowCategory;
@@ -303,17 +296,22 @@ export default class CashFlowEntity extends EntityAbstract {
 	vat_rate!: number;
 
 	/*
+	 * A validated `char(3)` rather than an enum, matching every other currency column in the
+	 * codebase (`invoice`, `order_line`, `shipping`, `product_price`, `exchange_rate`). A ledger
+	 * that could only name three codes cannot record the movement settling an invoice issued in a
+	 * fourth - see `resolveBaseCurrency` in `exchange-rate.entity.ts` for the same reasoning about
+	 * why the code is checked on the way in instead of constrained by the schema.
+	 *
 	 * The column default is a literal, not `Configuration.currency()`: a runtime env value baked
 	 * into the schema would freeze whatever the machine that generated the migration happened to
 	 * be configured with. The deployment's own currency is applied by the service on create.
 	 */
-	@Column({
-		type: 'enum',
-		enum: CurrencyEnum,
-		default: CurrencyEnum.EUR,
+	@Column('char', {
+		length: CURRENCY_CODE_CHARS,
+		default: 'RON',
 		nullable: false,
 	})
-	currency!: Currency;
+	currency!: string;
 
 	@Column('decimal', {
 		precision: 10,

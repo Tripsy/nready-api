@@ -1,13 +1,13 @@
-import {
-	type Participation,
-	ParticipationEnum,
-	registerParticipationResolver,
-} from '@/config/target-participation.config';
 import type { ArticleSetting } from '@/features/article/article.entity';
 import ArticleEntity, {
 	ArticleSettingEnum,
 } from '@/features/article/article.entity';
 import { articleService } from '@/features/article/article.service';
+import {
+	type Participation,
+	ParticipationEnum,
+	registerParticipationResolver,
+} from '@/shared/registries/target-participation.registry';
 
 const SETTING_BY_PARTICIPATION: Record<Participation, ArticleSetting> = {
 	[ParticipationEnum.RATING]: ArticleSettingEnum.ALLOW_RATING,

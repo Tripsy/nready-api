@@ -6,7 +6,7 @@ import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 export const SubscriptionStatusEnum = {
 	ACTIVE: 'active',
 	PAUSED: 'paused',
-	CANCELLED: 'canceled',
+	CANCELED: 'canceled',
 	EXPIRED: 'expired',
 } as const;
 

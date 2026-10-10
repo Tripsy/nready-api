@@ -125,7 +125,12 @@ describe('AccountTokenService', () => {
 	});
 
 	it('removeAccountTokenForUser should call query delete', async () => {
+		mockAccountToken.query.all.mockResolvedValue([
+			{ id: 1, ident: 'ident-1' },
+			{ id: 2, ident: 'ident-2' },
+		] as never);
 		mockAccountToken.query.delete.mockResolvedValue(1);
+		const forgetSpy = jest.spyOn(serviceAccountToken, 'forgetSessions');
 
 		await serviceAccountToken.removeAccountTokenForUser(1);
 
@@ -134,6 +139,8 @@ describe('AccountTokenService', () => {
 			1,
 		);
 		expect(mockAccountToken.query.delete).toHaveBeenCalledWith(false, true);
+		// A cached session must not outlive its row
+		expect(forgetSpy).toHaveBeenCalledWith(['ident-1', 'ident-2']);
 	});
 
 	it('removeAccountTokenByIdent should call query filterByIdent and delete', async () => {
@@ -145,5 +152,39 @@ describe('AccountTokenService', () => {
 			'ident-123',
 		);
 		expect(mockAccountToken.query.delete).toHaveBeenCalledWith(false);
+	});
+
+	it('removeAccountTokenByIdent drops the cached session', async () => {
+		mockAccountToken.query.delete.mockResolvedValue(1);
+		const forgetSpy = jest.spyOn(serviceAccountToken, 'forgetSessions');
+
+		await serviceAccountToken.removeAccountTokenByIdent('ident-123');
+
+		expect(forgetSpy).toHaveBeenCalledWith(['ident-123']);
+	});
+
+	// The cache hands dates back as strings
+	it('findSessionByToken returns real dates', async () => {
+		jest.spyOn(
+			serviceAccountToken,
+			'determineAuthTokenPayload',
+		).mockReturnValue({ user_id: 7, ident: 'ident-123' });
+		mockAccountToken.query.firstOrFail.mockResolvedValue({
+			id: 1,
+			user_id: 7,
+			ident: 'ident-123',
+			metadata: null,
+			used_at: '2026-01-01T10:00:00.000Z',
+			expire_at: '2026-01-02T10:00:00.000Z',
+		} as never);
+
+		const session = await serviceAccountToken.findSessionByToken('jwt');
+
+		expect(session.used_at).toBeInstanceOf(Date);
+		expect(session.expire_at).toBeInstanceOf(Date);
+		expect(mockAccountToken.query.filterBy).toHaveBeenCalledWith(
+			'user_id',
+			7,
+		);
 	});
 });

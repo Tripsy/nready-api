@@ -6,11 +6,11 @@ import {
 	CashFlowDirectionEnum,
 	CashFlowMethodEnum,
 	CashFlowStatusEnum,
-	CurrencyEnum,
 } from '@/features/cash-flow/cash-flow.entity';
 import { CashFlowCategoryEnum } from '@/features/cash-flow/cash-flow-category.enum';
 import { OperationalRecordTypeEnum } from '@/features/cash-flow/operational-record.entity';
 import { hasAtLeastOneValue } from '@/helpers/objects.helper';
+import { CURRENCY_CODE_CHARS, normalizeCurrency } from '@/helpers/shop.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
 import {
 	BaseValidator,
@@ -30,6 +30,18 @@ export const paramsUpdateList: string[] = [
 	// The individual records are nested under this one key in the update schema
 	'operational_records',
 ];
+
+/**
+ * The subset of `paramsUpdateList` that restates the movement itself, and so is refused once the
+ * entry has left `MUTABLE_STATUSES`.
+ *
+ * `operational_records` is deliberately absent: what a movement is filed under is bookkeeping
+ * rather than money, and an operator matching a captured payment to the order it turns out to
+ * belong to must not be blocked by the status that capture put it in. See `updateData`.
+ */
+export const paramsRestatingEntry: string[] = paramsUpdateList.filter(
+	(param) => param !== 'operational_records',
+);
 
 export const OrderByEnum = {
 	ID: 'id',
@@ -55,6 +67,18 @@ const validatorMessages = [
 ] as const;
 
 export class CashFlowValidator extends BaseValidator<typeof validatorMessages> {
+	/**
+	 * A three-letter ISO code, normalized here so the movement is written the one way a later
+	 * comparison against the document it settles matches.
+	 */
+	private currencySchema(): z.ZodType<string> {
+		return this.validateString(this.getMessage('invalid_currency'), {
+			required: true,
+			minChars: CURRENCY_CODE_CHARS,
+			maxChars: CURRENCY_CODE_CHARS,
+		}).transform(normalizeCurrency);
+	}
+
 	readonly operationalRecordsSchema = z
 		.object({
 			[OperationalRecordTypeEnum.CLIENT]: this.validateId(
@@ -62,6 +86,10 @@ export class CashFlowValidator extends BaseValidator<typeof validatorMessages> {
 				{ required: false },
 			),
 			[OperationalRecordTypeEnum.VENDOR]: this.validateId(
+				this.getMessage('invalid_number'),
+				{ required: false },
+			),
+			[OperationalRecordTypeEnum.ORDER]: this.validateId(
 				this.getMessage('invalid_number'),
 				{ required: false },
 			),
@@ -96,11 +124,7 @@ export class CashFlowValidator extends BaseValidator<typeof validatorMessages> {
 			allowDecimals: 2,
 		}),
 		// Optional: the service applies the deployment's configured currency when omitted
-		currency: this.validateEnum(
-			CurrencyEnum,
-			this.getMessage('invalid_currency'),
-			{ required: false },
-		),
+		currency: this.currencySchema().optional(),
 		external_reference: this.validateString(
 			this.getMessage('invalid_external_reference'),
 			{ required: false },
@@ -151,11 +175,7 @@ export class CashFlowValidator extends BaseValidator<typeof validatorMessages> {
 				onlyPositive: true,
 				allowDecimals: 2,
 			}),
-			currency: this.validateEnum(
-				CurrencyEnum,
-				this.getMessage('invalid_currency'),
-				{ required: false },
-			),
+			currency: this.currencySchema().optional(),
 			external_reference: this.validateString(
 				this.getMessage('invalid_external_reference'),
 				{ required: false },
@@ -222,6 +242,7 @@ export class CashFlowValidator extends BaseValidator<typeof validatorMessages> {
 				this.getMessage('invalid_status'),
 				{ required: false },
 			),
+			currency: this.currencySchema().optional(),
 			create_at_start: this.validateDate(
 				{
 					invalid_date: this.getMessage('invalid_date'),
@@ -248,6 +269,9 @@ export class CashFlowValidator extends BaseValidator<typeof validatorMessages> {
 				required: false,
 			}),
 			vendor_id: this.validateId(this.getMessage('invalid_number'), {
+				required: false,
+			}),
+			order_id: this.validateId(this.getMessage('invalid_number'), {
 				required: false,
 			}),
 			is_deleted: this.validateBoolean(

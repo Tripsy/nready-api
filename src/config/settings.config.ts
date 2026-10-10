@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { hostname } from 'node:os';
 import { getObjectValue, type ObjectValue } from '@/helpers/objects.helper';
+import { SOURCE_EXTENSION } from '@/helpers/system.helper';
 import type { LogDataLevel } from '@/shared/types/log-data.type';
 import type { LogHistoryDestination } from '@/shared/types/log-history.type';
 
@@ -96,6 +97,29 @@ function loadSettings() {
 			 * to solve it.
 			 */
 			keyPrefix: process.env.REDIS_KEY_PREFIX || 'nready-api',
+		},
+		/*
+		 * Which background roles this process takes on. Both default to on - unlike the opt-in
+		 * booleans elsewhere here - because a single process doing everything is the setup a
+		 * fresh checkout runs, and turning either off by default would silently stop the jobs.
+		 *
+		 * With several API replicas, run them with both `false` and give the roles to one
+		 * dedicated process. Each cron job also takes a Redis lock per run, so a replica left
+		 * with crons on does not double a run - it only competes for it.
+		 */
+		cron: {
+			enabled: process.env.CRON_ENABLED !== 'false',
+		},
+		worker: {
+			enabled: process.env.WORKER_ENABLED !== 'false',
+		},
+		/*
+		 * Off only by an explicit `false`, for a load test that has to measure the API rather
+		 * than the limiter. An operator setting, never a request-side one - see the allowlist
+		 * note in `rate-limit.config.ts`.
+		 */
+		rateLimit: {
+			enabled: process.env.RATE_LIMIT_ENABLED !== 'false',
 		},
 		cache: {
 			ttl:
@@ -214,6 +238,49 @@ function loadSettings() {
 		 * `operationalCost` is the business's own estimate of carrying one out, written onto the
 		 * shipment as its starting `operational_cost` and replaced once the carrier invoices.
 		 */
+		/*
+		 * Who the business is, as it appears on a document it issues. Frozen onto
+		 * `invoice.seller_details` when an invoice is issued, so a later move of office or change
+		 * of bank does not rewrite a document already handed to a buyer.
+		 *
+		 * `country` is the one field an invoice cannot go out without - it drives VAT treatment
+		 * and has to be on the printed page - so it carries the same alpha-2 vocabulary
+		 * `place.alpha2_code` and `shipping.domesticCountry` hold. Everything else is nullable:
+		 * a sole trader has no `regCom`, a business that never takes a transfer has no `iban`.
+		 */
+		company: {
+			name: process.env.COMPANY_NAME || 'Example SRL',
+			cui: process.env.COMPANY_CUI || null,
+			regCom: process.env.COMPANY_REG_COM || null,
+			/*
+			 * The VAT registration code (`RO` + CUI for a Romanian VAT payer). Empty means the
+			 * business is not registered for VAT, and the invoice says so.
+			 */
+			vatNumber: process.env.COMPANY_VAT_NUMBER || null,
+			iban: process.env.COMPANY_IBAN || null,
+			bankName: process.env.COMPANY_BANK_NAME || null,
+			addressCountry: (
+				process.env.COMPANY_ADDRESS_COUNTRY || 'RO'
+			).toUpperCase(),
+			addressRegion: process.env.COMPANY_ADDRESS_REGION || null,
+			addressCity: process.env.COMPANY_ADDRESS_CITY || null,
+			addressDetails: process.env.COMPANY_ADDRESS_DETAILS || null,
+			postalCode: process.env.COMPANY_POSTAL_CODE || null,
+			contactName: process.env.COMPANY_CONTACT_NAME || null,
+			contactEmail:
+				process.env.COMPANY_CONTACT_EMAIL ||
+				process.env.APP_EMAIL ||
+				null,
+			contactPhone: process.env.COMPANY_CONTACT_PHONE || null,
+		},
+		invoice: {
+			/*
+			 * How long a buyer has to settle, counted from the moment the invoice is issued.
+			 * `due_at` is stamped from it once, so changing this never moves a document already
+			 * out - which is the point: payment terms are part of what was agreed on the day.
+			 */
+			dueDays: Number(process.env.INVOICE_DUE_DAYS ?? 14),
+		},
 		shipping: {
 			domesticCountry: (
 				process.env.SHIPPING_DOMESTIC_COUNTRY || 'RO'
@@ -241,6 +308,8 @@ function loadSettings() {
 			authExpiresIn: Number(process.env.AUTH_JWT_EXPIRES_IN) || 86400,
 			authRefreshExpiresIn:
 				Number(process.env.AUTH_JWT_REFRESH_EXPIRES_IN) || 28800,
+			// Seconds between two `used_at` writes for one session - see `touchSession`
+			authTouchInterval: 60,
 			emailConfirmationSecret:
 				(process.env.EMAIL_JWT_SECRET as string) || 'secret',
 			emailConfirmationExpiresIn:
@@ -399,7 +468,7 @@ export const Configuration = {
 	},
 
 	resolveExtension: () => {
-		return Configuration.environment() === 'production' ? 'js' : 'ts';
+		return SOURCE_EXTENSION;
 	},
 
 	/**

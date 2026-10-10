@@ -226,11 +226,27 @@ abstract class RepositoryAbstract<TEntity extends ObjectLiteral> {
 	}
 
 	/**
+	 * The read terminals load entities without TypeORM's load listeners. No entity or subscriber
+	 * implements `afterLoad`, yet with listeners on, every hydrated row - joined ones included - is
+	 * offered to each of the ~30 registered subscribers to ask whether it listens; under load that
+	 * was ~9% of request CPU.
+	 *
+	 * Set at the terminal rather than on the builder from the constructor: `getQuery()` hands the
+	 * same builder out, and a caller turning it into `.update()` / `.delete()` would inherit the flag
+	 * and silently skip the `before*` / `after*` subscribers its write relies on.
+	 *
+	 * An `afterLoad` added later has to come with this removed, or it never fires on these paths.
+	 */
+	private withoutLoadListeners(): SelectQueryBuilder<TEntity> {
+		return this.query.callListeners(false);
+	}
+
+	/**
 	 * Note: When using getOne(), TypeORM expects only entity fields to be selected.
 	 *       If you manually select raw SQL fields (e.g., COUNT(user.id) as count), getOne() will return null.
 	 */
 	first() {
-		return this.query.getOne();
+		return this.withoutLoadListeners().getOne();
 	}
 
 	firstRaw() {
@@ -294,10 +310,10 @@ abstract class RepositoryAbstract<TEntity extends ObjectLiteral> {
 				);
 			}
 
-			return this.query.getManyAndCount();
+			return this.withoutLoadListeners().getManyAndCount();
 		}
 
-		return this.query.getMany();
+		return this.withoutLoadListeners().getMany();
 	}
 
 	count() {

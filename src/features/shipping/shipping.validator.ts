@@ -61,6 +61,12 @@ export const SHIPPING_LINES_MAX = 200;
 
 export const SHIPPING_NOTES_MAX = 2000;
 
+/**
+ * How many orders one storefront read may ask about - a page of the buyer's order history, with
+ * room to spare. Bounds the `IN` list a caller can make the query carry.
+ */
+const PUBLIC_ORDER_IDS_MAX = 50;
+
 const validatorMessages = [
 	...sharedValidatorMessages,
 	'invalid_scope',
@@ -382,6 +388,18 @@ export class ShippingValidator extends BaseValidator<typeof validatorMessages> {
 		order_id: this.validateId(this.getMessage('invalid_order_id')),
 	});
 
+	/**
+	 * The orders on one page of the buyer's history. An id the caller does not own is not an error
+	 * here - the service filters it out, so it simply has no movements.
+	 */
+	readonly publicFindByOrders = z.object({
+		order_id: this.validateIdFilter(
+			this.getMessage('invalid_order_id'),
+		).refine((ids) => ids.length <= PUBLIC_ORDER_IDS_MAX, {
+			message: this.getMessage('invalid_order_id'),
+		}),
+	});
+
 	readonly find = this.validateFind({
 		orderByEnum: OrderByEnum,
 		defaultOrderBy: OrderByEnum.ID,
@@ -401,9 +419,14 @@ export class ShippingValidator extends BaseValidator<typeof validatorMessages> {
 				this.getMessage('invalid_scope'),
 				{ required: false },
 			),
-			order_id: this.validateId(this.getMessage('invalid_order_id'), {
-				required: false,
-			}),
+			/*
+			 * One order or several: the dashboard's order list resolves the shipments of every row
+			 * on its page in one request.
+			 */
+			order_id: this.validateIdFilter(
+				this.getMessage('invalid_order_id'),
+				{ required: false },
+			),
 			document_ref: this.validateId(
 				this.getMessage('invalid_document_ref'),
 				{ required: false },

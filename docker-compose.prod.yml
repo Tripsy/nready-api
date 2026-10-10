@@ -1,0 +1,66 @@
+# Production stack: one image, three roles.
+#
+#   migrate    one-shot; applies pending migrations, and the other two start only once it exits 0
+#   api        serves HTTP; runs no crons and no queue worker, so it can be scaled freely
+#   scheduler  runs every cron and the email queue worker; exactly one
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Postgres and Redis are not part of this file - point DB_* / REDIS_* in .env.production at them.
+# See "Deployment" in README.md.
+
+# Pinned here rather than left to .env.production - `environment` wins over `env_file` - so a file
+# copied from .env.example, which says `development`, cannot switch off what production turns on:
+# `trust proxy`, the session user-agent check, the warning for an empty CLIENT_API_KEYS
+x-env: &env
+  APP_ENV: production
+  NODE_ENV: production
+  APP_PORT: "3000"
+
+x-app: &app
+  image: ${NREADY_API_IMAGE:-nready-api:latest}
+  build:
+    context: .
+    dockerfile: docker/dockerfile.prod
+  env_file: .env.production
+  restart: unless-stopped
+  # Above FORCE_SHUTDOWN_TIMEOUT (10s by default), so the app's own graceful shutdown - which
+  # lets a cron run in progress finish - completes before Docker sends SIGKILL
+  stop_grace_period: 15s
+
+services:
+  migrate:
+    <<: *app
+    environment: *env
+    command: ["node", "src/database/migrate.js"]
+    restart: "no"
+
+  api:
+    <<: *app
+    environment:
+      <<: *env
+      CRON_ENABLED: "false"
+      WORKER_ENABLED: "false"
+    ports:
+      # A single host port binds one replica only. To run several, put a reverse proxy in front
+      # and drop this mapping, or publish a range ("3000-3003:3000") sized to API_REPLICAS
+      - "${API_PUBLISH_PORT:-3000}:3000"
+    deploy:
+      replicas: ${API_REPLICAS:-1}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  scheduler:
+    <<: *app
+    environment:
+      <<: *env
+      CRON_ENABLED: "true"
+      WORKER_ENABLED: "true"
+    # No published port: it still answers /health for the healthcheck, but serves no traffic.
+    # One replica - a second would only compete for the cron locks and add another worker
+    deploy:
+      replicas: 1
+    depends_on:
+      migrate:
+        condition: service_completed_successfully

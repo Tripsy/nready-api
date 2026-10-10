@@ -1,9 +1,5 @@
 import { QueryFailedError } from 'typeorm';
 import { lang } from '@/config/message.setup';
-import {
-	isParticipationAllowed,
-	ParticipationEnum,
-} from '@/config/target-participation.config';
 import { CustomError, NotFoundError } from '@/exceptions';
 import type RatingEntity from '@/features/rating/rating.entity';
 import type {
@@ -14,6 +10,10 @@ import { RatingTypeEnum } from '@/features/rating/rating.entity';
 import { getRatingRepository } from '@/features/rating/rating.repository';
 import type { RatingValidator } from '@/features/rating/rating.validator';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
+import {
+	isParticipationAllowed,
+	ParticipationEnum,
+} from '@/shared/registries/target-participation.registry';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 /**

@@ -10,6 +10,7 @@
 		"cash-flow",
 		"stats",
 		"cart",
-		"client-address"
+		"client-address",
+		"client-ledger"
 	]
 }

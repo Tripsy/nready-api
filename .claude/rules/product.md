@@ -403,41 +403,34 @@ largest share so the parts sum to the charged total exactly.
   variant, so there are no lots to pick from.
 - **`vat_category` on a bundle product** is unused - the components carry their own.
 
-### 8.5. Not implemented: the purchase path
+### 8.5. The two paths that produce it
 
-§8.3 describes the shape an order takes. **Nothing produces it.** The catalog half is built - the
-tables, the entities, the dashboard form, `assertBundleIsComposed`, `assertBundleGroupsAreUsable` -
-and so is the room an order leaves for the result: `order_line.parent_id`, its self-referencing
-foreign key, its partial index, and the `price >= 0` check that lets a header carry no money.
-Between the two there is nothing.
+Both write the §8.3 shape - a header at `price = 0`, `vat_rate = 0`, plus one child per component
+at its own rate - and both divide the money with the same pure functions in
+`product/product-bundle-pricing.ts`: `quoteBundleUnit` (headline price plus each taken component's
+`standalone + delta` per unit) and `splitBundleUnit` (pro-rata by standalone value through
+`apportion()`, stated per unit of the component).
 
-- **The cart holds no composition.** `cart_item` carries `variant_id` and `product_id` and no
-  bundle column, so a bundle is one flat line naming its header variant. Cases 2 and 3 of §8.1 are
-  shopper decisions with nowhere to be recorded.
-- **Nothing checks a shopper's picks.** `CartService.addItem` validates product options through
-  `ProductOptionSelectionService`; there is no bundle analogue of that service. A group's "exactly
-  one candidate" goes unenforced at purchase time, which is what §10.3 means when it says the order
-  flow enforces it "by shape" - that shape does not exist.
-- **`UQ_cart_item_line` cannot separate two configurations.** Its key is
-  `(cart_id, variant_id, options_hash)`, so two differently-composed bundles of the same variant
-  are one row whose quantities sum.
-- **Pricing reads a bundle as a simple product.** `cart-pricing.service.ts` never looks at
-  `composition` or any `product_bundle_*` table, so the line is charged at the headline
-  `product_price` and taxed with the bundle's own `vat_category` - the column §8.4 lists as unused,
-  at the single rate §8.3 exists to avoid. No `CartLineIssueEnum` member reports a bundle whose
-  composition no longer resolves.
-- **Checkout writes one order line per cart line.** `OrderLineInput` is a flat array with no
-  parent, and `OrderService.writeLines` hardcodes `parent_id: null` in a single `save` pass, which
-  could not assign a generated header id even if the input carried the tree.
+- **Checkout.** The cart holds the header and one child `cart_item` per component with its
+  `bundle_item_id`, checked on add by `ProductBundleSelectionService` (`findProblem` / `resolve`).
+  `CartPricingService.buildBundle` prices it and reports a composition that no longer resolves as
+  `BUNDLE_CHANGED`; `CartService.toOrderLines` copies the split onto the order as
+  `OrderLineInput.children`.
+- **Back office.** A bundle is **one line** in the order payload: `price` is what one bundle costs
+  as composed, `components` its choices (`[{ item_id, units? }]`, the cart's shape - never a kit
+  component). `OrderBundleService.explodeForLines` checks and resolves them the same way and
+  divides the operator's price using the components' standalone `product_price.sale_price` in the
+  order's currency as weights; `OrderService.composeLines` writes the header and its children. A
+  line edit replaces the whole set, so an edited bundle's old header and components go with it.
 
-So which components a customer took is recorded nowhere. The intended record is structural rather
-than a snapshot - the child rows themselves, each naming a real variant at its own rate - which is
-why `order_line` carries no bundle jsonb beside `options` and `discount`.
+`order_line.bundle_item_id` records which component a child line was taken from (`SET NULL` when
+the catalog row goes), so an editor can read a stored bundle back as the choices that produced it -
+the dashboard's order form does, showing a bundle as one row with a picker
+(`order-line-bundle.component.tsx`) that shares its logic with the storefront builder through
+`nready-ui/src/models/product-bundle.model.ts`.
 
-A bundle can still be sold today: its variant is sellable, priced, in the catalog, and refused at
-no step. Seeds reach it the same way - `order.seed.ts` picks variants without filtering on
-`composition`. That is the shape §8.3 calls a tax error, so treat a bundle reaching a cart line or
-an order line as a bug to design away, not as data to build on.
+Discounts apply to the components, never the header (`rules/discount.md` §4, §7). A typed
+line discount is refused on a bundle line; the order-wide one reaches its components.
 
 ## 9. Availability - two different questions
 

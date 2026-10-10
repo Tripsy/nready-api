@@ -1,4 +1,10 @@
-import { type DeepPartial, type EntityManager, In } from 'typeorm';
+import {
+	type DeepPartial,
+	type EntityManager,
+	In,
+	MoreThan,
+	Not,
+} from 'typeorm';
 import dataSource from '@/config/data-source.config';
 import { lang } from '@/config/message.setup';
 import { Configuration } from '@/config/settings.config';
@@ -16,11 +22,15 @@ import {
 	clientAddressService,
 } from '@/features/client-address/client-address.service';
 import type { DiscountSnapshot } from '@/features/discount/discount.entity';
+import { OrderStatusEnum } from '@/features/order/order.entity';
 import {
 	type OrderService,
 	orderService,
 } from '@/features/order/order.service';
 import OrderLineEntity from '@/features/order/order-line.entity';
+import ProductEntity, {
+	ProductTypeEnum,
+} from '@/features/product/product.entity';
 import ProductContentEntity from '@/features/product/product-content.entity';
 import ProductVariantEntity from '@/features/product/product-variant.entity';
 import ShippingEntity, {
@@ -32,6 +42,7 @@ import ShippingEntity, {
 	ShippingStatusEnum,
 	STATUS_TRANSITIONS,
 } from '@/features/shipping/shipping.entity';
+import { notifyShippingChanged } from '@/features/shipping/shipping.hooks';
 import { getShippingRepository } from '@/features/shipping/shipping.repository';
 import {
 	paramsUpdateList,
@@ -48,6 +59,7 @@ import {
 	warehouseService,
 } from '@/features/warehouse/warehouse.service';
 import { pickValuesFromObject } from '@/helpers/objects.helper';
+import { roundMoney } from '@/helpers/shop.helper';
 import {
 	assertValidStatusTransition,
 	cleanEntityCache,
@@ -111,6 +123,19 @@ const DESTINATION_WAREHOUSE_COLUMNS = [
 
 const CARRIER_COLUMNS = ['carrier.id', 'carrier.name'];
 
+/** The moves that take goods forward - out of the warehouse's hands, towards the buyer. */
+const ADVANCING_STATUSES = [
+	ShippingStatusEnum.PREPARING,
+	ShippingStatusEnum.SHIPPED,
+	ShippingStatusEnum.DELIVERED,
+] as const;
+
+/** Movements that never carried anything, so nothing is billed or asked for them. */
+const UNBILLED_STATUSES = [
+	ShippingStatusEnum.FAILED,
+	ShippingStatusEnum.CANCELED,
+] as const;
+
 /**
  * A movement as the buyer it is delivered to sees it: where it stands, how it travels, what it was
  * charged and how to follow it. Everything the business reads about its own side stays off - the
@@ -135,6 +160,7 @@ const PUBLIC_ENTRY_COLUMNS = [
 	'shipping.delivered_at',
 	'shipping.estimated_delivery_at',
 	'shipping.created_at',
+	'shipping.updated_at',
 ];
 
 /** Only the name: a self-pickup buyer needs to know where to collect, not the warehouse code. */
@@ -174,6 +200,9 @@ export type ShippingCreateInput = Required<
 /** The movement as `read` hands it over, with what travels in it attached. */
 export type ShippingWithLines = ShippingEntity & {
 	lines: ShippingLineWithLabel[];
+	/** The client-address ends named in one line each - null when unset. The list carries them too. */
+	pickup_client_address_label: string | null;
+	destination_client_address_label: string | null;
 };
 
 /** A line with the variant's SKU and the product's name attached; either is null when unresolved. */
@@ -440,8 +469,10 @@ export class ShippingService {
 		for (const line of lines) {
 			const ordered = orderedByVariant.get(line.variant_id);
 
+			// 422: a rule the editor acts on by dropping the line, and the dashboard shows it as is
 			if (ordered === undefined) {
-				throw new BadRequestError(
+				throw new CustomError(
+					422,
 					lang('shipping.error.invalid_line', {
 						variant_id: String(line.variant_id),
 					}),
@@ -501,6 +532,11 @@ export class ShippingService {
 	 *
 	 * The movement and its lines are written in one transaction: a consignment that failed to record
 	 * what is in it is not one anybody can pick.
+	 *
+	 * Announced once committed, so a priced movement added to an order that is already billed gets
+	 * a document of its own - see `invoice.hooks.ts`. A checkout's first delivery goes
+	 * through `createWithin` and is not announced: the order it belongs to is billed whole once
+	 * the checkout commits.
 	 */
 	public async create(
 		data: ValidatorOutput<ShippingValidator, 'create'>,
@@ -509,9 +545,16 @@ export class ShippingService {
 
 		const input = await this.withRateDefaults(data);
 
-		return dataSource.transaction((manager) =>
+		const entry = await dataSource.transaction((manager) =>
 			this.createWithin(manager, input),
 		);
+
+		await notifyShippingChanged({
+			shipping_id: entry.id,
+			order_id: entry.order_id,
+		});
+
+		return entry;
 	}
 
 	/**
@@ -646,6 +689,11 @@ export class ShippingService {
 		entry: ShippingEntity,
 		data: ValidatorOutput<ShippingValidator, 'update'>,
 	): Promise<ShippingEntity> {
+		// Withdrawn with its order: nothing about it will happen, so nothing about it is restated
+		if (entry.status === ShippingStatusEnum.CANCELED) {
+			throw new CustomError(409, lang('shipping.error.canceled_locked'));
+		}
+
 		await this.checkReferences(data);
 
 		const hasLeft =
@@ -747,6 +795,14 @@ export class ShippingService {
 	 *
 	 * `shipped_at` and `delivered_at` are stamped by the same moves and never re-stamped: they
 	 * record when something happened, so a correction that revisits a state must not move them.
+	 *
+	 * **A delivery leaves `pending` only once its order is accepted.** A pending order is still
+	 * editable - its lines, and with them what the delivery carries (`syncLinesForOrder`) - so goods
+	 * prepared or handed over before then could disagree with what is finally billed. Withdrawing
+	 * it (`failed`, `canceled`) stays open whatever the order's status.
+	 *
+	 * Every move is announced once written: a delivery arriving can complete the order it
+	 * belongs to, and a failed one stops being billable.
 	 */
 	public async updateStatus(
 		entry: ShippingEntity,
@@ -757,6 +813,24 @@ export class ShippingService {
 			entry.status,
 			newStatus,
 		);
+
+		if (
+			entry.scope === ShippingScopeEnum.DELIVERY &&
+			entry.order_id &&
+			ADVANCING_STATUSES.some((status) => status === newStatus)
+		) {
+			const order = await this.orderService.findById(entry.order_id);
+
+			if (
+				order.status !== OrderStatusEnum.CONFIRMED &&
+				order.status !== OrderStatusEnum.COMPLETED
+			) {
+				throw new CustomError(
+					409,
+					lang('shipping.error.order_not_confirmed'),
+				);
+			}
+		}
 
 		if (newStatus === ShippingStatusEnum.SHIPPED) {
 			if (!entry.pickup_data) {
@@ -782,7 +856,187 @@ export class ShippingService {
 
 		entry.status = newStatus;
 
-		return this.update(entry);
+		const saved = await this.update(entry);
+
+		await notifyShippingChanged({
+			shipping_id: saved.id,
+			order_id: saved.order_id,
+		});
+
+		return saved;
+	}
+
+	/**
+	 * @description Used by `shipping.bootstrap.ts` once an order is confirmed
+	 *
+	 * Moves the order's deliveries still `pending` to `preparing`. Deliveries only - a `return`
+	 * names the order too, but goods coming back are not prepared because the order was accepted.
+	 * Each goes through `updateStatus`, so it is announced like an operator's move.
+	 */
+	public async prepareForOrder(orderId: number): Promise<void> {
+		const pending = await this.repository
+			.createQuery()
+			.filterBy('order_id', orderId)
+			.filterBy('scope', ShippingScopeEnum.DELIVERY)
+			.filterBy('status', ShippingStatusEnum.PENDING)
+			.all();
+
+		for (const entry of pending) {
+			await this.updateStatus(entry, ShippingStatusEnum.PREPARING);
+		}
+	}
+
+	/**
+	 * @description Used by `shipping.bootstrap.ts`, inside the transaction that rewrites a pending
+	 * order's lines
+	 *
+	 * Rewrites what the order's delivery carries from the order's lines as they now stand, on the
+	 * rules a checkout writes them by: a bundle header is left out and its components kept, only
+	 * physical products travel, one line per variant with the quantities summed. A note an
+	 * operator left on a variant still carried is kept.
+	 *
+	 * **Only when there is one delivery to follow.** Exactly one delivery that has not been
+	 * canceled or failed, and it has not shipped. Goods already with the carrier cannot be
+	 * re-listed, and with several deliveries how the goods split between them is the operator's
+	 * call - so in those cases nothing moves. Nor when the order has nothing physical left: an
+	 * empty parcel is not a delivery, and whether to cancel it is the operator's call too.
+	 *
+	 * Read and written through the caller's manager, so it sees the lines it was called for.
+	 * Returns the id it rewrote, for the caller to drop its cache once the transaction commits.
+	 */
+	public async syncLinesForOrder(
+		manager: EntityManager,
+		orderId: number,
+	): Promise<number | null> {
+		const live = (
+			await manager.getRepository(ShippingEntity).find({
+				select: { id: true, status: true },
+				where: {
+					order_id: orderId,
+					scope: ShippingScopeEnum.DELIVERY,
+				},
+			})
+		).filter(
+			(delivery) =>
+				!UNBILLED_STATUSES.some((status) => status === delivery.status),
+		);
+
+		const delivery = live.length === 1 ? live[0] : null;
+
+		if (
+			!delivery ||
+			(delivery.status !== ShippingStatusEnum.PENDING &&
+				delivery.status !== ShippingStatusEnum.PREPARING)
+		) {
+			return null;
+		}
+
+		const orderLines = await manager.getRepository(OrderLineEntity).find({
+			select: {
+				id: true,
+				parent_id: true,
+				variant_id: true,
+				product_id: true,
+				quantity: true,
+			},
+			where: { order_id: orderId },
+		});
+
+		// A header is the line its components point at; it names what was sold and holds no stock
+		const headerIds = new Set(
+			orderLines.flatMap((line) =>
+				line.parent_id === null ? [] : [line.parent_id],
+			),
+		);
+		const goods = orderLines.filter((line) => !headerIds.has(line.id));
+
+		const physical =
+			goods.length === 0
+				? []
+				: await manager.getRepository(ProductEntity).find({
+						select: { id: true },
+						where: {
+							id: In([
+								...new Set(
+									goods.map((line) => line.product_id),
+								),
+							]),
+							type: ProductTypeEnum.PHYSICAL,
+						},
+					});
+		const physicalIds = new Set(physical.map((product) => product.id));
+
+		const byVariant = new Map<
+			number,
+			{ variant_id: number; product_id: number; quantity: number }
+		>();
+
+		for (const line of goods) {
+			if (!physicalIds.has(line.product_id)) {
+				continue;
+			}
+
+			const existing = byVariant.get(line.variant_id);
+
+			if (existing) {
+				existing.quantity += Number(line.quantity);
+			} else {
+				byVariant.set(line.variant_id, {
+					variant_id: line.variant_id,
+					product_id: line.product_id,
+					quantity: Number(line.quantity),
+				});
+			}
+		}
+
+		if (byVariant.size === 0) {
+			return null;
+		}
+
+		const notes = new Map(
+			(
+				await manager.getRepository(ShippingLineEntity).find({
+					select: { variant_id: true, notes: true },
+					where: { shipping_id: delivery.id },
+				})
+			).map((line) => [line.variant_id, line.notes]),
+		);
+
+		await this.writeLines(
+			manager,
+			delivery.id,
+			[...byVariant.values()].map((line) => ({
+				...line,
+				notes: notes.get(line.variant_id) ?? undefined,
+			})),
+		);
+
+		return delivery.id;
+	}
+
+	/**
+	 * @description Used by `shipping.bootstrap.ts` once an order is canceled
+	 *
+	 * Withdraws the order's deliveries that have not left - `pending` or `preparing` - by moving
+	 * them to `canceled`. One already with the carrier is the operator's to bring back, and a
+	 * `return` is left alone for the reason `prepareForOrder` gives. Each goes through
+	 * `updateStatus`, so it is announced like an operator's move.
+	 */
+	public async cancelForOrder(orderId: number): Promise<void> {
+		const open = await this.repository
+			.createQuery()
+			.filterBy('order_id', orderId)
+			.filterBy('scope', ShippingScopeEnum.DELIVERY)
+			.filterBy(
+				'status',
+				[ShippingStatusEnum.PENDING, ShippingStatusEnum.PREPARING],
+				'IN',
+			)
+			.all();
+
+		for (const entry of open) {
+			await this.updateStatus(entry, ShippingStatusEnum.CANCELED);
+		}
 	}
 
 	public async delete(id: number) {
@@ -799,6 +1053,109 @@ export class ShippingService {
 			.filterById(id)
 			.withDeleted(withDeleted)
 			.firstOrFail();
+	}
+
+	/**
+	 * @description Used by the billable-source provider in `invoice/sources/shipping.source.ts`
+	 *
+	 * The movements billable at all, of one order or by id: every one except a failed or canceled
+	 * movement, and only one carrying a price - a free movement has nothing to bill.
+	 */
+	public findBillable(filter: {
+		order_id?: number;
+		id?: number;
+	}): Promise<ShippingEntity[]> {
+		return this.repository
+			.createQuery()
+			.select([
+				'shipping.id',
+				'shipping.order_id',
+				'shipping.scope',
+				'shipping.status',
+				'shipping.price',
+				'shipping.vat_rate',
+				'shipping.discount_reduction',
+			])
+			.filterBy('order_id', filter.order_id)
+			.filterBy('id', filter.id)
+			.filterBy('status', [...UNBILLED_STATUSES], 'NOT IN')
+			.filterBy('price', 0, '>')
+			.orderBy('id')
+			.all();
+	}
+
+	/**
+	 * @description Used to confirm a prepaid order (`order-settlement`) and to restate its pending
+	 * payment request after an edit (`cart`)
+	 *
+	 * What the buyer is asked to pay for an order, gross: its goods (`OrderService.computeTotals`)
+	 * plus every movement that charges for itself, the same two figures a checkout adds up into its
+	 * payment request. A movement counts on the terms `findBillable` bills it on - priced, and not
+	 * failed or canceled - at `(price - discount_reduction) x (1 + vat_rate)`.
+	 *
+	 * Read through the caller's manager, so a caller inside the transaction that rewrote the lines
+	 * sees the new ones.
+	 */
+	public async computeOrderPayable(
+		orderId: number,
+		manager: EntityManager = dataSource.manager,
+	): Promise<number> {
+		const [lines, movements] = await Promise.all([
+			manager
+				.getRepository(OrderLineEntity)
+				.find({ where: { order_id: orderId } }),
+			manager.getRepository(ShippingEntity).find({
+				select: {
+					id: true,
+					price: true,
+					vat_rate: true,
+					discount_reduction: true,
+				},
+				where: {
+					order_id: orderId,
+					status: Not(In([...UNBILLED_STATUSES])),
+					price: MoreThan(0),
+				},
+			}),
+		]);
+
+		const charges = movements.reduce(
+			(sum, movement) =>
+				sum +
+				roundMoney(
+					(Number(movement.price) -
+						Number(movement.discount_reduction)) *
+						(1 + Number(movement.vat_rate) / 100),
+				),
+			0,
+		);
+
+		return roundMoney(
+			this.orderService.computeTotals(lines).total + charges,
+		);
+	}
+
+	/**
+	 * @description Used by the billable-source provider in `invoice/sources/shipping.source.ts`
+	 *
+	 * The fee of each movement, deleted ones included: a document already billing a movement keeps
+	 * its ceiling after the row goes.
+	 */
+	public async getPrices(
+		ids: readonly number[],
+	): Promise<Map<number, number>> {
+		if (ids.length === 0) {
+			return new Map();
+		}
+
+		const rows = await this.repository
+			.createQuery()
+			.select(['shipping.id', 'shipping.price'])
+			.filterBy('id', [...ids], 'IN')
+			.withDeleted(true)
+			.all();
+
+		return new Map(rows.map((row) => [row.id, Number(row.price)]));
 	}
 
 	/**
@@ -888,9 +1245,51 @@ export class ShippingService {
 			.withDeleted(data.withDeleted)
 			.firstOrFail();
 
-		return Object.assign(entry, {
-			lines: await this.getLines(entry.id),
+		const [lines, [labeled]] = await Promise.all([
+			this.getLines(entry.id),
+			this.attachClientAddressLabels([entry]),
+		]);
+
+		return Object.assign(labeled, {
+			lines: lines,
 		});
+	}
+
+	/**
+	 * Names the client-address ends of a set of movements in one line each - see
+	 * `ClientAddressService.describeByIds` - one lookup for the whole set. An end frozen at dispatch
+	 * is named by its snapshot instead, but labeled all the same: deciding that is the reader's.
+	 */
+	private async attachClientAddressLabels<T extends ShippingEntity>(
+		entries: T[],
+	): Promise<
+		(T & {
+			pickup_client_address_label: string | null;
+			destination_client_address_label: string | null;
+		})[]
+	> {
+		const labels = await this.clientAddressService.describeByIds(
+			entries.flatMap((entry) =>
+				[
+					entry.pickup_client_address_id,
+					entry.destination_client_address_id,
+				].filter((id): id is number => id !== null),
+			),
+		);
+
+		const labelOf = (id: number | null) =>
+			id === null ? null : (labels.get(id) ?? null);
+
+		return entries.map((entry) =>
+			Object.assign(entry, {
+				pickup_client_address_label: labelOf(
+					entry.pickup_client_address_id,
+				),
+				destination_client_address_label: labelOf(
+					entry.destination_client_address_id,
+				),
+			}),
+		);
 	}
 
 	/**
@@ -928,11 +1327,103 @@ export class ShippingService {
 		);
 	}
 
-	public findByFilter(
+	/**
+	 * @description Used by `InvoiceService` to describe the movement a printed shipping document bills
+	 *
+	 * Who carries it, between which ends, and when it left and arrived. Read live, not frozen with
+	 * the document: the delivery date lands after the fee was invoiced, and the ends are frozen on
+	 * the movement itself once it ships (`pickup_data` / `destination_data`). Before that an end is
+	 * named by its warehouse or client address.
+	 *
+	 * Names only, never codes or notes - the buyer reads this. Soft-deleted movements included: the
+	 * document stays valid whatever became of the row. Null when the id points at nothing.
+	 */
+	public async findDocumentDetails(id: number): Promise<
+		| (ShippingEntity & {
+				pickup_client_address_label: string | null;
+				destination_client_address_label: string | null;
+		  })
+		| null
+	> {
+		const entry = await this.repository
+			.createQuery()
+			.select([
+				'shipping.id',
+				'shipping.scope',
+				'shipping.order_id',
+				'shipping.method',
+				'shipping.pickup_client_address_id',
+				'shipping.destination_client_address_id',
+				'shipping.pickup_data',
+				'shipping.destination_data',
+				'shipping.tracking_number',
+				'shipping.shipped_at',
+				'shipping.delivered_at',
+				'shipping.estimated_delivery_at',
+				'pickup_warehouse.id',
+				'pickup_warehouse.name',
+				'destination_warehouse.id',
+				'destination_warehouse.name',
+				...CARRIER_COLUMNS,
+			])
+			// `join` for the reason `findForOwnOrder` gives
+			.join('shipping.pickup_warehouse', 'pickup_warehouse', 'LEFT')
+			.join(
+				'shipping.destination_warehouse',
+				'destination_warehouse',
+				'LEFT',
+			)
+			.join('shipping.carrier', 'carrier', 'LEFT')
+			.withDeleted(true)
+			.filterById(id)
+			.first();
+
+		if (!entry) {
+			return null;
+		}
+
+		const [labeled] = await this.attachClientAddressLabels([entry]);
+
+		return labeled;
+	}
+
+	/**
+	 * The movements of several of the buyer's orders at once - a page of the order history, read in
+	 * one query rather than one per row.
+	 *
+	 * Ownership is part of the query, through the order's client, so an id the caller does not own
+	 * contributes no rows instead of failing the whole read: the page a buyer holds may have gone
+	 * stale, and one foreign or deleted id should not blank the rest.
+	 */
+	public findForOwnOrders(
+		orderIds: number[],
+		userId: number,
+	): Promise<ShippingEntity[]> {
+		return (
+			this.repository
+				.createQuery()
+				.select([
+					...PUBLIC_ENTRY_COLUMNS,
+					...PUBLIC_PICKUP_WAREHOUSE_COLUMNS,
+					...CARRIER_COLUMNS,
+				])
+				// `join` for the reason `findForOwnOrder` gives
+				.join('shipping.pickup_warehouse', 'pickup_warehouse', 'LEFT')
+				.join('shipping.carrier', 'carrier', 'LEFT')
+				.join('shipping.order', 'order', 'INNER')
+				.join('order.client', 'client', 'INNER')
+				.filterBy('order_id', orderIds, 'IN')
+				.filterBy('client.user_id', userId)
+				.orderBy('id')
+				.all()
+		);
+	}
+
+	public async findByFilter(
 		data: ValidatorOutput<ShippingValidator, 'find'>,
 		withDeleted: boolean,
 	) {
-		return this.repository
+		const query = this.repository
 			.createQuery()
 			.select([
 				...ENTRY_COLUMNS,
@@ -955,7 +1446,6 @@ export class ShippingService {
 			.joinAndSelect('shipping.carrier', 'carrier', 'LEFT')
 			.filterById(data.filter.id)
 			.filterBy('scope', data.filter.scope)
-			.filterBy('order_id', data.filter.order_id)
 			.filterBy('document_ref', data.filter.document_ref)
 			.filterBy('pickup_warehouse_id', data.filter.pickup_warehouse_id)
 			.filterBy(
@@ -970,11 +1460,20 @@ export class ShippingService {
 				data.filter.shipped_at_start,
 				data.filter.shipped_at_end,
 			)
-			.filterByTerm(data.filter.term)
+			.filterByTerm(data.filter.term);
+
+		// One order or several - `IN` either way, since the filter always arrives as a list
+		if (data.filter.order_id) {
+			query.filterBy('order_id', data.filter.order_id, 'IN');
+		}
+
+		const [entries, total] = await query
 			.withDeleted(withDeleted && data.filter.is_deleted)
 			.orderBy(data.order_by, data.direction)
 			.pagination(data.page, data.limit)
 			.all(true);
+
+		return [await this.attachClientAddressLabels(entries), total] as const;
 	}
 }
 

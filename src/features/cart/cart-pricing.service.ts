@@ -16,6 +16,11 @@ import {
 } from '@/features/product/product.entity';
 import ProductBundleItemPriceEntity from '@/features/product/product-bundle-item-price.entity';
 import {
+	type BundlePricingComponent,
+	quoteBundleUnit,
+	splitBundleUnit,
+} from '@/features/product/product-bundle-pricing';
+import {
 	type BundleChoice,
 	ProductBundleSelectionService,
 	productBundleSelectionService,
@@ -32,7 +37,7 @@ import {
 import ProductPriceEntity from '@/features/product/product-price.entity';
 import ProductVariantEntity from '@/features/product/product-variant.entity';
 import TermContentEntity from '@/features/term/term-content.entity';
-import { apportion, resolveVatRate, roundMoney } from '@/helpers/shop.helper';
+import { resolveVatRate, roundMoney } from '@/helpers/shop.helper';
 
 /**
  * Why a line cannot be bought as it stands. The line is still returned when one of these is set -
@@ -157,9 +162,9 @@ export type CartPricingContext = {
 	 * ISO 3166-1 alpha-2, from the country the billing address resolves to, for
 	 * `conditions.applicable_countries`.
 	 *
-	 * Stated only at checkout, for the same reason `clientId` is: a basket being browsed names no
-	 * address, so there is no buyer country to judge against and every country condition fails
-	 * closed until one is chosen.
+	 * Stated only on the checkout screen and at checkout, for the same reason `clientId` is: a
+	 * basket being browsed names no address, so there is no buyer country to judge against and
+	 * every country condition fails closed until a billing address is chosen.
 	 */
 	countryCode?: string | null;
 	/**
@@ -759,8 +764,7 @@ export class CartPricingService {
 		const parts: {
 			child: CartItemEntity;
 			line: CartLine;
-			standalone: number;
-			contribution: number;
+			pricing: BundlePricingComponent;
 		}[] = [];
 
 		for (const child of children) {
@@ -778,46 +782,39 @@ export class CartPricingService {
 				return broken(CartLineIssueEnum.BUNDLE_CHANGED);
 			}
 
-			const standalone = Number(
-				catalog.priceByVariant.get(child.variant_id) ?? 0,
-			);
-			const units = Number(child.quantity);
-
-			const included =
-				component.group_id === null && !component.is_optional;
-
-			const delta = included
-				? 0
-				: Number(catalog.bundleDeltaByItem.get(component.id) ?? 0);
-
 			parts.push({
 				child: child,
 				line: line,
-				standalone: standalone * units,
-				contribution: included
-					? 0
-					: roundMoney((standalone + delta) * units),
+				pricing: {
+					standalone: Number(
+						catalog.priceByVariant.get(child.variant_id) ?? 0,
+					),
+					units: Number(child.quantity),
+					included:
+						component.group_id === null && !component.is_optional,
+					delta: Number(
+						catalog.bundleDeltaByItem.get(component.id) ?? 0,
+					),
+				},
 			});
 		}
 
-		const bundleUnit = roundMoney(
-			parts.reduce(
-				(sum, part) => sum + part.contribution,
-				Number(basePrice),
-			),
+		const bundleUnit = quoteBundleUnit(
+			Number(basePrice),
+			parts.map((part) => part.pricing),
 		);
 
-		const shares = apportion(
+		const unitPrices = splitBundleUnit(
 			bundleUnit,
-			parts.map((part) => part.standalone),
+			parts.map((part) => part.pricing),
 		);
 
 		const componentLines = parts.map((part, index) => {
-			const units = Number(part.child.quantity);
+			const units = part.pricing.units;
 			// Absolute, unlike the stored figure: this is what leaves the shelf and what an order
 			// line has to state, so the header's own quantity is multiplied in here.
 			const quantity = roundMoney(units * Number(item.quantity));
-			const unitPrice = roundMoney(shares[index] / units);
+			const unitPrice = unitPrices[index];
 			const subtotal = roundMoney(unitPrice * quantity);
 
 			return {
@@ -827,7 +824,7 @@ export class CartPricingService {
 				is_bundle: false,
 				quantity: quantity,
 				unit_price: unitPrice,
-				base_price: roundMoney(part.standalone / units),
+				base_price: roundMoney(part.pricing.standalone),
 				subtotal: subtotal,
 				total: subtotal,
 				vat_amount: roundMoney((subtotal * part.line.vat_rate) / 100),

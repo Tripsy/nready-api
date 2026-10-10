@@ -4,10 +4,6 @@ import { eventEmitter } from '@/config/event.config';
 import { lang } from '@/config/message.setup';
 import { requestContext } from '@/config/request.context';
 import { Configuration } from '@/config/settings.config';
-import {
-	isParticipationAllowed,
-	ParticipationEnum,
-} from '@/config/target-participation.config';
 import { BadRequestError, CustomError } from '@/exceptions';
 import type {
 	CommentEntityType,
@@ -23,6 +19,10 @@ import type { CommentValidator } from '@/features/comment/comment.validator';
 import { createCurrentDate } from '@/helpers/date.helper';
 import { type CacheProvider, cacheProvider } from '@/providers/cache.provider';
 import { assertValidStatusTransition } from '@/shared/abstracts/service.abstract';
+import {
+	isParticipationAllowed,
+	ParticipationEnum,
+} from '@/shared/registries/target-participation.registry';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 /**

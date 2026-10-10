@@ -1,5 +1,6 @@
 import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import type CashFlowEntity from '@/features/cash-flow/cash-flow.entity';
+import type { OperationalRecordOrder } from '@/features/cash-flow/cash-flow.hooks';
 import {
 	type CashFlowCategory,
 	CashFlowCategoryEnum,
@@ -8,9 +9,24 @@ import type ClientEntity from '@/features/client/client.entity';
 import type VendorEntity from '@/features/vendor/vendor.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 
+/**
+ * What a movement is recorded against. The first two name a counterparty - who the money came
+ * from or went to - and `order` names the document it was raised for.
+ *
+ * `order` is what lets a payment exist before there is anything to allocate it to: an online
+ * checkout asks for the money up front, and the invoice is only raised once that money lands, so
+ * at request time `invoice_payment` has no row to point at. It carries no amount, unlike
+ * `invoice_payment` - the movement settles the one order in full or it settles nothing, and a
+ * payment split across several orders is recorded on the invoices instead.
+ *
+ * Nothing here imports `order`: the value is an id in a table this feature knows nothing about,
+ * and reaching for it would make the ledger depend on the shop. The row is hydrated through
+ * `resolveOperationalRecordOrder` instead, answered by `invoice`, which depends on both.
+ */
 export const OperationalRecordTypeEnum = {
 	CLIENT: 'client',
 	VENDOR: 'vendor',
+	ORDER: 'order',
 } as const;
 
 export type OperationalRecordType =
@@ -27,8 +43,13 @@ type CashFlowCategoryOperationalRecordType = Partial<
 
 const CashFlowCategoryOperationalRecord: CashFlowCategoryOperationalRecordType =
 	{
-		[CashFlowCategoryEnum.CUSTOMER]: {
+		// `order` is optional rather than required: a sale can stand on its own - a deposit, a
+		// correction typed up in the back office - and only a checkout has a document to name at
+		// the time the money is asked for. An operator may attach one later, which is what lets a
+		// movement banked before anybody matched it to an order be invoiced from that order
+		[CashFlowCategoryEnum.SALE]: {
 			required: [OperationalRecordTypeEnum.CLIENT],
+			optional: [OperationalRecordTypeEnum.ORDER],
 		},
 		[CashFlowCategoryEnum.VENDOR]: {
 			required: [OperationalRecordTypeEnum.VENDOR],
@@ -95,4 +116,5 @@ export default class OperationalRecordEntity extends EntityAbstract {
 export type OperationalRecordWithRelations = OperationalRecordEntity & {
 	[OperationalRecordTypeEnum.CLIENT]?: ClientEntity | null;
 	[OperationalRecordTypeEnum.VENDOR]?: VendorEntity | null;
+	[OperationalRecordTypeEnum.ORDER]?: OperationalRecordOrder | null;
 };

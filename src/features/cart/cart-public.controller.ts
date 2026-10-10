@@ -101,12 +101,14 @@ class CartPublicController extends BaseController {
 		message?: string,
 		clientId?: number | null,
 		delivery?: CartDeliveryChoice | null,
+		billingAddressId?: number | null,
 	): Promise<void> {
 		const data = await this.cartService.withPricing(
 			cart,
 			res.locals.language,
 			clientId,
 			delivery,
+			billingAddressId,
 		);
 
 		res.locals.output.data(data);
@@ -134,17 +136,21 @@ class CartPublicController extends BaseController {
 			this.getUserId(res),
 		);
 
+		const clientId = await this.previewClientId(data.client_id, res);
+
 		await this.respond(
 			cart,
 			res,
 			undefined,
-			await this.previewClientId(data.client_id, res),
+			clientId,
 			data.delivery_method
 				? {
 						method: data.delivery_method,
 						addressId: data.delivery_address_id ?? null,
 					}
 				: null,
+			// Without a client there is nobody whose billing address it could be
+			clientId ? (data.billing_address_id ?? null) : null,
 		);
 	});
 
@@ -237,7 +243,7 @@ class CartPublicController extends BaseController {
 			ref_code: order.ref_code,
 			ref_number: order.ref_number,
 			status: order.status,
-			issued_at: order.issued_at,
+			created_at: order.created_at,
 		});
 		res.locals.output.message(lang('cart.success.checkout'));
 

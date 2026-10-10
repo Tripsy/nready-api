@@ -30,6 +30,8 @@
 		"destination_required": "A {{scope}} movement must say where the goods are going",
 		"document_required": "A {{scope}} movement must name the document it belongs to",
 		"ends_locked": "The pickup and destination cannot be changed once the goods have left",
+		"canceled_locked": "A canceled movement can no longer be changed",
+		"order_not_confirmed": "A delivery moves past pending only once its order is confirmed",
 		"invalid_line": "Variant #{{variant_id}} is not on the order this movement serves",
 		"over_allocated": "Variant #{{variant_id}} has only {{remaining}} left to ship across the order's other movements"
 	},

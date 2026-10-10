@@ -10,7 +10,7 @@ export default async () => {
 		basePath: '/public/orders',
 		controller: orderPublicController,
 		/*
-		 * The one `/:id` route is resolved through `client.user_id` in the same query as the id -
+		 * The `/:id` routes are resolved through `client.user_id` in the same query as the id -
 		 * somebody else's order reads as missing, so there is no ownership check left to a later
 		 * step.
 		 */
@@ -22,6 +22,11 @@ export default async () => {
 			read: {
 				path: '/:id',
 				method: 'get',
+				handlers: [validateParamsWhenId('id')],
+			},
+			cancel: {
+				path: '/:id/cancel',
+				method: 'patch',
 				handlers: [validateParamsWhenId('id')],
 			},
 		},

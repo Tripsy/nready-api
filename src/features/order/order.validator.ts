@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { Configuration } from '@/config/settings.config';
-import { OrderStatusEnum, OrderTypeEnum } from '@/features/order/order.entity';
+import { DiscountTypeEnum } from '@/features/discount/discount.entity';
+import { OrderStatusEnum } from '@/features/order/order.entity';
 import { hasAtLeastOneValue } from '@/helpers/objects.helper';
 import { CURRENCY_CODE_CHARS, normalizeCurrency } from '@/helpers/shop.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
@@ -19,25 +20,22 @@ import {
  */
 export const paramsUpdateList: string[] = [
 	'client_id',
-	'billing_address_id',
-	'type',
-	'issued_at',
+	'billing_address',
 	'notes',
 ];
 
 /**
- * What a buyer may sort their own orders by. Narrower than the dashboard's: the row id and the
- * creation stamp say nothing the issue date does not.
+ * What a buyer may sort their own orders by. Narrower than the dashboard's: the row id says
+ * nothing the creation stamp does not.
  */
 export const PublicOrderByEnum = {
-	ISSUED_AT: 'issued_at',
+	CREATED_AT: 'created_at',
 	REF_NUMBER: 'ref_number',
 } as const;
 
 export const OrderByEnum = {
 	ID: 'id',
 	REF_NUMBER: 'ref_number',
-	ISSUED_AT: 'issued_at',
 	STATUS: 'status',
 	CREATED_AT: 'created_at',
 } as const;
@@ -59,7 +57,14 @@ export const ORDER_LINES_MAX = 200;
 /** The most answers one line may carry, a bound on the payload rather than a catalog rule. */
 export const ORDER_LINE_OPTIONS_MAX = 20;
 
+/** The most bundle choices one line may cite - the cart's own bound on the same payload. */
+export const ORDER_LINE_COMPONENTS_MAX = 50;
+
 export const ORDER_NOTES_MAX = 2000;
+
+/** Bounds on the billing address fields - free text, kept to what a printed address needs. */
+const BILLING_TEXT_MAX = 255;
+const BILLING_POSTAL_CODE_MAX = 20;
 
 /** Mirrors `varchar(10)` on `order.ref_code`. */
 const REF_CODE_MAX_CHARS = 10;
@@ -67,9 +72,8 @@ const REF_CODE_MAX_CHARS = 10;
 const validatorMessages = [
 	...sharedValidatorMessages,
 	'invalid_client_id',
-	'invalid_billing_address_id',
+	'invalid_billing_address',
 	'invalid_currency',
-	'invalid_type',
 	'invalid_lines',
 	'invalid_variant_id',
 	'invalid_product_id',
@@ -79,7 +83,11 @@ const validatorMessages = [
 	'invalid_options',
 	'invalid_ref_code',
 	'invalid_ref_number',
+	'invalid_discount',
+	'invalid_components',
+	'invalid_component_units',
 	'currency_needs_lines',
+	'discount_needs_lines',
 ] as const;
 
 export class OrderValidator extends BaseValidator<typeof validatorMessages> {
@@ -104,14 +112,15 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 	/**
 	 * Zero is legal, and not an oversight: a bundle header line carries no money of its own while
 	 * the component lines it explodes into carry all of it. `onlyPositive` would refuse the shape
-	 * the database's own `price >= 0` check allows.
+	 * the database's own `price >= 0` check allows. `validateNumber` defaults `onlyPositive` to
+	 * true, so it is switched off explicitly - here and on the VAT rate, which a header carries as 0.
 	 */
 	private priceSchema(): z.ZodType<number> {
 		const message = this.getMessage('invalid_price');
 
 		return this.validateNumber(
 			{ invalid: message, no_decimals: message },
-			{ required: true, allowDecimals: 2 },
+			{ required: true, onlyPositive: false, allowDecimals: 2 },
 		).refine((value) => value >= 0 && value <= PRICE_MAX, {
 			message: message,
 		});
@@ -122,7 +131,7 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 
 		return this.validateNumber(
 			{ invalid: message, no_decimals: message },
-			{ required: true, allowDecimals: 2 },
+			{ required: true, onlyPositive: false, allowDecimals: 2 },
 		).refine((value) => value >= 0 && value <= VAT_RATE_MAX, {
 			message: message,
 		});
@@ -133,6 +142,107 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 			required: false,
 			maxChars: ORDER_NOTES_MAX,
 		}).optional();
+	}
+
+	/**
+	 * A discount the operator types, in the document's currency - `percent` up to 100, `amount`
+	 * bounded like a price. Null clears it and the catalog's own pass applies again.
+	 *
+	 * Whether the caller may type one at all is not a shape question: it is the `discount`
+	 * permission, which `OrderService` checks against what the document already carries.
+	 */
+	private discountSchema() {
+		const message = this.getMessage('invalid_discount');
+
+		return z
+			.object({
+				type: this.validateEnum(DiscountTypeEnum, message),
+				value: this.validateNumber(
+					{
+						invalid: message,
+						only_positive: message,
+						no_decimals: message,
+					},
+					{ required: true, onlyPositive: true, allowDecimals: 2 },
+				),
+			})
+			.refine(
+				(data) =>
+					data.value <=
+					(data.type === DiscountTypeEnum.PERCENT ? 100 : PRICE_MAX),
+				{ message: message, path: ['value'] },
+			)
+			.nullable()
+			.optional();
+	}
+
+	/**
+	 * A bundle line's choices, in the cart's own shape (`CartValidator.componentsSchema`): which
+	 * candidate each group took and how many of each tick box, never a component that comes with
+	 * the kit. Whether they fit the bundle is `OrderBundleService`'s question - it reads the
+	 * catalog.
+	 */
+	private componentsSchema() {
+		const message = this.getMessage('invalid_components');
+		const unitsMessage = this.getMessage('invalid_component_units');
+
+		return z
+			.array(
+				z.object({
+					item_id: this.validateId(message),
+					units: this.validateNumber(
+						{
+							invalid: unitsMessage,
+							only_positive: unitsMessage,
+							no_decimals: unitsMessage,
+						},
+						{
+							required: false,
+							onlyPositive: true,
+							allowDecimals: 2,
+						},
+					).optional(),
+				}),
+			)
+			.max(ORDER_LINE_COMPONENTS_MAX, { message: message })
+			.optional();
+	}
+
+	/**
+	 * The order's own billing address, every field typed by the operator - a snapshot, not a
+	 * reference. `country_code` is the ISO 3166-1 alpha-2 code; the country's name is not accepted
+	 * but filled in by `OrderService` from the code, so the two cannot disagree. Null clears it.
+	 */
+	private billingAddressSchema() {
+		const message = this.getMessage('invalid_billing_address');
+		const text = (maxChars: number) =>
+			z
+				.string({ message: message })
+				.trim()
+				.max(maxChars, { message: message })
+				.transform((value) => (value === '' ? null : value))
+				.nullable()
+				.optional()
+				.transform((value) => value ?? null);
+
+		return z
+			.object({
+				details: text(BILLING_TEXT_MAX),
+				postal_code: text(BILLING_POSTAL_CODE_MAX),
+				address_city: text(BILLING_TEXT_MAX),
+				address_region: text(BILLING_TEXT_MAX),
+				country_code: z
+					.string({ message: message })
+					.trim()
+					.length(2, { message: message })
+					.transform((value) => value.toUpperCase())
+					.nullable()
+					.optional()
+					.transform((value) => value ?? null),
+				notes: text(ORDER_NOTES_MAX),
+			})
+			.nullable()
+			.optional();
 	}
 
 	/**
@@ -148,20 +258,6 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 	}
 
 	/**
-	 * The date the document is issued on. Backdating is allowed - a phone order typed up the next
-	 * morning is issued the day it was taken - and the default is now, applied by the service.
-	 */
-	private issuedAtSchema() {
-		return this.validateDate(
-			{
-				invalid_date: this.getMessage('invalid_date'),
-				invalid_date_format: this.getMessage('invalid_date_format'),
-			},
-			{ required: false, requireTime: false },
-		);
-	}
-
-	/**
 	 * One line of a back-office document.
 	 *
 	 * **The price is the caller's**, as it is for every other writer of an order: the operator
@@ -174,10 +270,15 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 	 * cannot record a label or a delta the catalog does not hold. Whether an id is one of the
 	 * product's is not a shape question and is answered there.
 	 *
-	 * **Discounts are absent because they are not the operator's to state.** `OrderService`
+	 * **`discount` is optional and replaces the catalog for this line only.** Left out, `OrderService`
 	 * resolves the catalog's own rules over the set as it is saved, the same ones the storefront
-	 * applies, and writes what they took off onto each line - so a campaign reaches a phone order
-	 * without anybody remembering it, and cannot be handed out by typing one into the payload.
+	 * applies - so a campaign reaches a phone order without anybody remembering it. Stated, it is
+	 * costed instead of the line's best rule, clamped to the same floor.
+	 *
+	 * **A bundle is one line here.** `price` is what one bundle costs as composed and `components`
+	 * names its choices; `OrderService` explodes it into a header and one line per component
+	 * (`rules/product.md` §8.3), each at its own VAT rate - so `vat_rate` on a bundle line is not
+	 * read.
 	 *
 	 * `product_id` travels with `variant_id` because the row holds both under a composite foreign
 	 * key. The pair is checked before the insert (`OrderService.checkLines`) rather than left to
@@ -200,6 +301,8 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 					message: this.getMessage('invalid_options'),
 				})
 				.optional(),
+			discount: this.discountSchema(),
+			components: this.componentsSchema(),
 			notes: this.notesSchema(),
 		});
 	}
@@ -220,26 +323,12 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 	 */
 	readonly create = z.object({
 		client_id: this.validateId(this.getMessage('invalid_client_id')),
-		/*
-		 * Optional, and not checked against the client here: whether the address is one the billed
-		 * client holds is a data question, answered by `OrderService` against `client_address`,
-		 * which owns the 404 either way.
-		 */
-		billing_address_id: this.validateId(
-			this.getMessage('invalid_billing_address_id'),
-			{ required: false },
-		),
+		billing_address: this.billingAddressSchema(),
 		currency: this.currencySchema(),
-		type: this.validateEnum(
-			OrderTypeEnum,
-			this.getMessage('invalid_type'),
-			{
-				required: false,
-			},
-		),
-		issued_at: this.issuedAtSchema(),
 		notes: this.notesSchema(),
 		lines: this.linesSchema(),
+		/** Order-wide, in place of the catalog's campaign - see `discountSchema`. */
+		discount: this.discountSchema(),
 	});
 
 	readonly read = z.object({
@@ -259,8 +348,13 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 	 * answers 409 for a line set on a confirmed order, so the currency cannot move past that point
 	 * either.
 	 *
+	 * **`discount` - the order-wide one - travels with `lines` too.** It is recorded on
+	 * `order.discount`, but the money it took off lives in the lines it was apportioned onto, so it
+	 * cannot change without them being rewritten. Left out alongside a line set it carries over and
+	 * is re-apportioned; `null` clears it.
+	 *
 	 * The rate is not a payload field on either action - `OrderService` reads it from
-	 * `exchange_rate` for the document's own issue date.
+	 * `exchange_rate` as of the document's creation.
 	 */
 	readonly update = z
 		.object({
@@ -268,19 +362,11 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 			client_id: this.validateId(this.getMessage('invalid_client_id'), {
 				required: false,
 			}),
-			billing_address_id: this.validateId(
-				this.getMessage('invalid_billing_address_id'),
-				{ required: false },
-			),
+			billing_address: this.billingAddressSchema(),
 			currency: this.currencySchema().optional(),
-			type: this.validateEnum(
-				OrderTypeEnum,
-				this.getMessage('invalid_type'),
-				{ required: false },
-			),
-			issued_at: this.issuedAtSchema(),
 			notes: this.notesSchema(),
 			lines: this.linesSchema().optional(),
+			discount: this.discountSchema(),
 		})
 		.refine(
 			(data) =>
@@ -304,6 +390,13 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 				message: this.getMessage('currency_needs_lines'),
 				path: ['currency'],
 			},
+		)
+		.refine(
+			(data) => data.lines !== undefined || data.discount === undefined,
+			{
+				message: this.getMessage('discount_needs_lines'),
+				path: ['discount'],
+			},
 		);
 
 	readonly delete = z.object({
@@ -316,7 +409,7 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 
 	readonly find = this.validateFind({
 		orderByEnum: OrderByEnum,
-		defaultOrderBy: OrderByEnum.ISSUED_AT,
+		defaultOrderBy: OrderByEnum.CREATED_AT,
 
 		directionEnum: OrderDirectionEnum,
 		defaultDirection: OrderDirectionEnum.DESC,
@@ -331,16 +424,24 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 			client_id: this.validateId(this.getMessage('invalid_client_id'), {
 				required: false,
 			}),
-			status: this.validateEnum(
-				OrderStatusEnum,
-				this.getMessage('invalid_status'),
-				{ required: false },
-			),
-			type: this.validateEnum(
-				OrderTypeEnum,
-				this.getMessage('invalid_type'),
-				{ required: false },
-			),
+			/*
+			 * One status or several: `qs` reads `filter[status][]=` back as an array, and a
+			 * caller narrowing to the states an order can be invoiced in needs two of them.
+			 */
+			status: z
+				.union([
+					this.validateEnum(
+						OrderStatusEnum,
+						this.getMessage('invalid_status'),
+					),
+					z.array(
+						this.validateEnum(
+							OrderStatusEnum,
+							this.getMessage('invalid_status'),
+						),
+					),
+				])
+				.optional(),
 			/*
 			 * The two halves of the reference, filterable on their own: a series code narrows the
 			 * list to one document type's numbering, and the number alone is what somebody reads
@@ -354,14 +455,14 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 				this.getMessage('invalid_ref_number'),
 				{ required: false, onlyPositive: true },
 			),
-			issued_at_start: this.validateDate(
+			create_at_start: this.validateDate(
 				{
 					invalid_date: this.getMessage('invalid_date'),
 					invalid_date_format: this.getMessage('invalid_date_format'),
 				},
 				{ required: false },
 			),
-			issued_at_end: this.validateDate(
+			create_at_end: this.validateDate(
 				{
 					invalid_date: this.getMessage('invalid_date'),
 					invalid_date_format: this.getMessage('invalid_date_format'),
@@ -386,7 +487,7 @@ export class OrderValidator extends BaseValidator<typeof validatorMessages> {
 	 */
 	readonly publicFind = this.validateFind({
 		orderByEnum: PublicOrderByEnum,
-		defaultOrderBy: PublicOrderByEnum.ISSUED_AT,
+		defaultOrderBy: PublicOrderByEnum.CREATED_AT,
 
 		directionEnum: OrderDirectionEnum,
 		defaultDirection: OrderDirectionEnum.DESC,
