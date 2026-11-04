@@ -5,6 +5,7 @@ import { initializeMessages } from '@/config/message.setup';
 import { Configuration } from '@/config/settings.config';
 import startCronJobs from '@/providers/cron.provider';
 import { initDatabase } from '@/providers/database.provider';
+import { startEmailWorker } from '@/workers/email.worker';
 
 // Validate critical configuration
 function validateConfig(): void {
@@ -37,7 +38,7 @@ export async function bootstrap(): Promise<void> {
 		await initQueues();
 
 		if (Configuration.get('worker.enabled')) {
-			import('@/workers/email.worker').catch(console.error);
+			startEmailWorker();
 		}
 
 		if (Configuration.get('cron.enabled')) {

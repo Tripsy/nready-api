@@ -1,4 +1,4 @@
-import { Worker } from 'bullmq';
+import { type Job, Worker } from 'bullmq';
 import { Configuration } from '@/config/settings.config';
 import { MailQueueStatusEnum } from '@/features/mail-queue/mail-queue.entity';
 import { getMailQueueRepository } from '@/features/mail-queue/mail-queue.repository';
@@ -6,48 +6,58 @@ import { createCurrentDate } from '@/helpers/date.helper';
 import { type EmailQueueData, sendEmail } from '@/providers/email.provider';
 import { getSystemLogger } from '@/providers/logger.provider';
 
-const emailWorker = new Worker(
-	'emailQueue',
-	async (job) => {
-		const { mailQueueId, emailContent, to, from } =
-			job.data as EmailQueueData;
+/*
+ * The worker runs inside the API process and owns no lifecycle of its own: it registers no
+ * signal handlers and never calls `process.exit`. Shutdown belongs to `server.ts`, which closes
+ * it through `closeEmailWorker()` before the database and Redis connections a job in progress
+ * still writes through. Importing this module has no side effect - nothing connects until
+ * `startEmailWorker()` runs.
+ */
+let emailWorker: Worker<EmailQueueData> | null = null;
 
-		try {
-			getSystemLogger().info(
-				`Processing email job ${job.id} for mailQueueId: ${mailQueueId}`,
-			);
+async function processEmailJob(job: Job<EmailQueueData>): Promise<void> {
+	const { mailQueueId, emailContent, to, from } = job.data;
 
-			await sendEmail({
-				content: emailContent,
-				to: to,
-				from: from,
-			});
+	try {
+		getSystemLogger().info(
+			`Processing email job ${job.id} for mailQueueId: ${mailQueueId}`,
+		);
 
-			await getMailQueueRepository().update(mailQueueId, {
-				status: MailQueueStatusEnum.SENT,
-				error: null,
-				sent_at: createCurrentDate(),
-			});
+		await sendEmail({
+			content: emailContent,
+			to: to,
+			from: from,
+		});
 
-			getSystemLogger().info(
-				`Successfully processed email job ${job.id}`,
-			);
-		} catch (error) {
-			const errorMessage =
-				error instanceof Error ? error.message : 'Unknown error';
+		await getMailQueueRepository().update(mailQueueId, {
+			status: MailQueueStatusEnum.SENT,
+			error: null,
+			sent_at: createCurrentDate(),
+		});
 
-			getSystemLogger().error(
-				`Failed to process email job ${job.id}: ${errorMessage}`,
-			);
+		getSystemLogger().info(`Successfully processed email job ${job.id}`);
+	} catch (error) {
+		const errorMessage =
+			error instanceof Error ? error.message : 'Unknown error';
 
-			await getMailQueueRepository().update(mailQueueId, {
-				status: MailQueueStatusEnum.ERROR,
-				error: errorMessage,
-				sent_at: createCurrentDate(),
-			});
-		}
-	},
-	{
+		getSystemLogger().error(
+			`Failed to process email job ${job.id}: ${errorMessage}`,
+		);
+
+		await getMailQueueRepository().update(mailQueueId, {
+			status: MailQueueStatusEnum.ERROR,
+			error: errorMessage,
+			sent_at: createCurrentDate(),
+		});
+	}
+}
+
+export function startEmailWorker(): Worker<EmailQueueData> {
+	if (emailWorker) {
+		return emailWorker;
+	}
+
+	emailWorker = new Worker<EmailQueueData>('emailQueue', processEmailJob, {
 		/*
 		 * A dedicated connection, not the shared `getRedisClient()` singleton: a BullMQ
 		 * worker issues blocking reads (BRPOPLPUSH), which occupy the connection for the
@@ -64,58 +74,42 @@ const emailWorker = new Worker(
 			password: Configuration.get('redis.password'),
 		},
 		concurrency: 5,
-	},
-);
+	});
 
-// Error handler for worker-level errors (Redis connection issues, etc.)
-emailWorker.on('error', (err: Error) => {
-	getSystemLogger().error(
-		{
-			err: {
-				message: err.message,
-				stack: err.stack,
-				name: err.name,
+	// Worker-level errors (Redis connection issues, etc.)
+	emailWorker.on('error', (err: Error) => {
+		getSystemLogger().error(
+			{
+				err: {
+					message: err.message,
+					stack: err.stack,
+					name: err.name,
+				},
 			},
-		},
-		'Email worker error',
-	);
-});
+			'Email worker error',
+		);
+	});
 
-// Graceful shutdown
-const shutdown = async () => {
-	getSystemLogger().warn('Shutting down emailQueue worker...');
+	emailWorker.on('ready', () => {
+		getSystemLogger().debug('Email worker is ready and listening for jobs');
+	});
 
-	try {
-		await emailWorker.close();
+	return emailWorker;
+}
 
-		getSystemLogger().info('Worker closed successfully');
-
-		process.exit(0);
-	} catch (error) {
-		getSystemLogger().error({ err: error }, `Error during worker shutdown`);
-
-		process.exit(1);
+/**
+ * Stops taking jobs and waits for the ones in progress to finish, so a send is not cut off
+ * halfway and retried by BullMQ as stalled - which would deliver the email twice. A no-op
+ * when the worker was never started (`worker.enabled` off).
+ */
+export async function closeEmailWorker(): Promise<void> {
+	if (!emailWorker) {
+		return;
 	}
-};
 
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
+	const worker = emailWorker;
 
-// Add event listeners for worker status
-emailWorker.on('ready', () => {
-	getSystemLogger().debug('Email worker is ready and listening for jobs');
-});
+	emailWorker = null;
 
-// emailWorker.on('active', (job) => {
-//     getSystemLogger().info(`Job ${job.id} is now active`);
-// });
-//
-// emailWorker.on('completed', (job) => {
-//     getSystemLogger().info(`Job ${job.id} completed successfully`);
-// });
-//
-// emailWorker.on('failed', (job, err) => {
-//     getSystemLogger().error(err, `Job ${job?.id || 'n/a'} failed with error:`);
-// });
-
-export default emailWorker;
+	await worker.close();
+}

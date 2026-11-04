@@ -13,6 +13,7 @@ import { stopCronJobs } from '@/providers/cron.provider';
 import { destroyDatabase } from '@/providers/database.provider';
 import { getLogStream, getSystemLogger } from '@/providers/logger.provider';
 import { queueFactory } from '@/queues/queue.factory';
+import { closeEmailWorker } from '@/workers/email.worker';
 
 export let server: Server;
 let isShuttingDown = false;
@@ -38,8 +39,15 @@ async function start() {
 			: Configuration.get('app.port'),
 	);
 
-	await new Promise<void>((resolve) => {
-		server = app.listen(appPort, () => {
+	// Express 5 hands a listen failure (EADDRINUSE, EACCES) to this callback rather than throwing
+	await new Promise<void>((resolve, reject) => {
+		server = app.listen(appPort, (error?: Error) => {
+			if (error) {
+				reject(error);
+
+				return;
+			}
+
 			getSystemLogger().debug(`Server listening on port ${appPort}`);
 			resolve();
 		});
@@ -126,26 +134,49 @@ async function shutdown(signal: string): Promise<void> {
 	}, FORCE_SHUTDOWN_TIMEOUT).unref();
 }
 
-export async function closeHandler(): Promise<void> {
-	const closeOperations = [
-		{ name: 'Redis', fn: redisClose },
-		{ name: 'Queues', fn: () => queueFactory.closeAll() },
-		{ name: 'Database', fn: destroyDatabase },
-		{ name: 'Log streams', fn: () => getLogStream().close() },
+type CloseOperation = {
+	readonly name: string;
+	readonly fn: () => unknown;
+};
+
+/*
+ * Stages run in order; the operations inside one stage run in parallel. Each stage only
+ * closes what nothing in a later stage still uses:
+ *
+ *  1. consumers - websocket clients and the email worker (whose in-progress jobs still write
+ *     to the database and log)
+ *  2. queues - producers, now that nothing enqueues from a job or a socket
+ *  3. connections - database and Redis
+ *  4. the log stream, alone and last, so every "closed" / "close warning" line above it
+ *     still reaches it
+ */
+const CLOSE_STAGES: readonly (readonly CloseOperation[])[] = [
+	[
 		{ name: 'WebSockets', fn: () => cleanupWebSockets() },
-	];
+		{ name: 'Email worker', fn: closeEmailWorker },
+	],
+	[{ name: 'Queues', fn: () => queueFactory.closeAll() }],
+	[
+		{ name: 'Database', fn: destroyDatabase },
+		{ name: 'Redis', fn: redisClose },
+	],
+	[{ name: 'Log streams', fn: () => getLogStream().close() }],
+];
 
-	await Promise.allSettled(
-		closeOperations.map(async ({ name, fn }) => {
-			try {
-				await fn();
+export async function closeHandler(): Promise<void> {
+	for (const stage of CLOSE_STAGES) {
+		await Promise.allSettled(
+			stage.map(async ({ name, fn }) => {
+				try {
+					await fn();
 
-				getSystemLogger().debug(`${name} closed successfully`);
-			} catch (error) {
-				getSystemLogger().warn(error, `${name} close warning`);
-			}
-		}),
-	);
+					getSystemLogger().debug(`${name} closed successfully`);
+				} catch (error) {
+					getSystemLogger().warn(error, `${name} close warning`);
+				}
+			}),
+		);
+	}
 }
 
 // Print startup info
