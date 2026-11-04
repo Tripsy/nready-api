@@ -32,6 +32,16 @@ function loadSettings() {
 			email: process.env.APP_EMAIL || 'hello@example.com',
 			timezone: process.env.APP_TIMEZONE || 'UTC',
 			currency: process.env.APP_CURRENCY || 'RON',
+			/** Socket idle time (ms) after which a request is answered with a 503. */
+			request_timeout: parseInt(
+				process.env.REQUEST_TIMEOUT || '60000',
+				10,
+			),
+			/** Grace period (ms) for a graceful shutdown before the process is forced out. */
+			shutdown_timeout: parseInt(
+				process.env.FORCE_SHUTDOWN_TIMEOUT || '10000',
+				10,
+			),
 		},
 		language: {
 			default: process.env.APP_LANGUAGE_DEFAULT || 'ro',

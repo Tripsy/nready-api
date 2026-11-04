@@ -1,7 +1,9 @@
+// First, before any module that defines a TypeORM entity evaluates
+import 'reflect-metadata';
 import 'dotenv/config';
-import type { Server } from 'node:http';
+import { createServer, type Server } from 'node:http';
 import { createApp } from '@/app';
-import { bootstrap } from '@/bootstrap';
+import { bootstrap, resolveAppPort } from '@/bootstrap';
 import { redisClose } from '@/config/init-redis.config';
 import {
 	cleanupWebSockets,
@@ -15,15 +17,16 @@ import { getLogStream, getSystemLogger } from '@/providers/logger.provider';
 import { queueFactory } from '@/queues/queue.factory';
 import { closeEmailWorker } from '@/workers/email.worker';
 
-export let server: Server;
+let server: Server | undefined;
 let isShuttingDown = false;
 
-const FORCE_SHUTDOWN_TIMEOUT = Number(
-	process.env.FORCE_SHUTDOWN_TIMEOUT ?? 10000,
-);
+const FORCE_SHUTDOWN_TIMEOUT = Configuration.get('app.shutdown_timeout');
 
-// Under the force timeout, so the close operations still get their turn after it
-const CRON_SHUTDOWN_TIMEOUT = Math.floor(FORCE_SHUTDOWN_TIMEOUT * 0.6);
+/*
+ * How long a cron run in progress and the open HTTP connections get to finish. Kept under the
+ * force timeout so `closeHandler` still gets its turn in the time that is left.
+ */
+const DRAIN_TIMEOUT = Math.floor(FORCE_SHUTDOWN_TIMEOUT * 0.6);
 
 async function start() {
 	// 1. Infrastructure first
@@ -32,35 +35,29 @@ async function start() {
 	// 2. Create Express app
 	const app = await createApp();
 
-	// 3. Start HTTP server
-	const appPort = Number(
-		Configuration.isEnvironment('test')
-			? Configuration.get('app.port_while_testing') || 3001
-			: Configuration.get('app.port'),
-	);
+	// 3. Create the HTTP server and attach WebSockets before it accepts a connection
+	const httpServer = createServer(app);
+	server = httpServer;
 
-	// Express 5 hands a listen failure (EADDRINUSE, EACCES) to this callback rather than throwing
+	await setupWebSockets(httpServer);
+
+	// 4. Listen - a bind failure (EADDRINUSE, EACCES) rejects instead of passing for a start
+	const appPort = resolveAppPort();
+
 	await new Promise<void>((resolve, reject) => {
-		server = app.listen(appPort, (error?: Error) => {
-			if (error) {
-				reject(error);
-
-				return;
-			}
-
+		httpServer.once('error', reject);
+		httpServer.listen(appPort, () => {
+			httpServer.off('error', reject);
 			getSystemLogger().debug(`Server listening on port ${appPort}`);
 			resolve();
 		});
 	});
 
-	// 4. Setup WebSockets
-	await setupWebSockets(server);
-
 	// 5. Setup signal handlers
 	setupSignalHandlers();
 
 	// 6. Print startup banner
-	printStartupInfo();
+	printStartupInfo(appPort);
 }
 
 start().catch((error) => {
@@ -76,18 +73,19 @@ function setupSignalHandlers() {
 	process.on('SIGINT', () => shutdown('SIGINT'));
 	process.on('SIGTERM', () => shutdown('SIGTERM'));
 
+	// A crash still drains gracefully, but exits non-zero so a supervisor sees the failure
 	process.on('uncaughtException', (error) => {
 		getSystemLogger().fatal(error, 'Uncaught exception');
-		shutdown('uncaughtException').then((r) => console.error(r));
+		shutdown('uncaughtException', 1);
 	});
 
 	process.on('unhandledRejection', (reason) => {
 		getSystemLogger().fatal(reason, 'Unhandled rejection');
-		shutdown('unhandledRejection').then((r) => console.error(r));
+		shutdown('unhandledRejection', 1);
 	});
 }
 
-async function shutdown(signal: string): Promise<void> {
+function shutdown(signal: string, exitCode: 0 | 1 = 0): void {
 	if (isShuttingDown) {
 		return;
 	}
@@ -101,30 +99,49 @@ async function shutdown(signal: string): Promise<void> {
 	if (!server) {
 		getSystemLogger().debug('No server instance to close');
 
-		process.exit(0);
+		process.exit(exitCode);
 	}
+
+	const httpServer = server;
 
 	/*
 	 * Stops new ticks at once, alongside the HTTP drain rather than after it, and gives a run in
 	 * progress part of the grace period - the connections it writes through are closed only once
 	 * it has settled or timed out.
 	 */
-	const cronsStopped = stopCronJobs(CRON_SHUTDOWN_TIMEOUT).catch((error) => {
+	const cronsStopped = stopCronJobs(DRAIN_TIMEOUT).catch((error) => {
 		getSystemLogger().warn(error, 'Cron jobs stop warning');
 	});
 
-	server.close(() => {
+	httpServer.close(() => {
 		cronsStopped
 			.then(() => closeHandler())
 			.then(() => {
 				getSystemLogger().debug('Shutdown complete');
-				process.exit(0);
+				process.exit(exitCode);
 			})
 			.catch((err) => {
 				getSystemLogger().fatal(err, 'Shutdown error');
 				process.exit(1);
 			});
 	});
+
+	/*
+	 * `server.close()` stops accepting and closes idle keep-alive connections, but its callback
+	 * waits for every other connection. An upgraded websocket socket never becomes idle, so the
+	 * gateways are torn down now, not from `closeHandler`, which only runs after that callback.
+	 * A gateway's `cleanup` must therefore terminate its own clients.
+	 */
+	cleanupWebSockets();
+
+	/*
+	 * A connection busy at shutdown is not closed when its response goes out, and a slow one may
+	 * not finish at all. Once the drain window is up, every connection still open is cut, so the
+	 * close callback - and `closeHandler` with it - runs inside the force timeout.
+	 */
+	setTimeout(() => {
+		httpServer.closeAllConnections();
+	}, DRAIN_TIMEOUT).unref();
 
 	setTimeout(() => {
 		getSystemLogger().fatal(
@@ -143,18 +160,15 @@ type CloseOperation = {
  * Stages run in order; the operations inside one stage run in parallel. Each stage only
  * closes what nothing in a later stage still uses:
  *
- *  1. consumers - websocket clients and the email worker (whose in-progress jobs still write
- *     to the database and log)
+ *  1. consumers - the email worker, whose in-progress jobs still write to the database and log
+ *     (websocket gateways are closed earlier, by `shutdown`, since they hold `server.close()`)
  *  2. queues - producers, now that nothing enqueues from a job or a socket
  *  3. connections - database and Redis
  *  4. the log stream, alone and last, so every "closed" / "close warning" line above it
  *     still reaches it
  */
 const CLOSE_STAGES: readonly (readonly CloseOperation[])[] = [
-	[
-		{ name: 'WebSockets', fn: () => cleanupWebSockets() },
-		{ name: 'Email worker', fn: closeEmailWorker },
-	],
+	[{ name: 'Email worker', fn: closeEmailWorker }],
 	[{ name: 'Queues', fn: () => queueFactory.closeAll() }],
 	[
 		{ name: 'Database', fn: destroyDatabase },
@@ -180,9 +194,9 @@ export async function closeHandler(): Promise<void> {
 }
 
 // Print startup info
-function printStartupInfo(): void {
+function printStartupInfo(port: number): void {
 	const appConfig = {
-		port: Configuration.get('app.port'),
+		port,
 		environment: Configuration.environment(),
 		name: Configuration.get('app.name'),
 		url: Configuration.get('app.url'),

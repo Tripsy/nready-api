@@ -55,10 +55,11 @@ Every feature with HTTP endpoints has a `<feature>.routes.ts` that default-expor
 
 Don't reorder this chain without a specific reason - later middleware depends on earlier ones (`outputHandler` before anything that reads `res.locals.output`; `authMiddleware` before any route needs `res.locals.auth`):
 
-`helmet` → `corsHandler` → `clientKeyMiddleware` → `compression` → body parsers (`cookie-parser`, `express.json({limit:'10mb'})`, `express.urlencoded`) → request-id → request-timeout → `outputHandler` → `languageMiddleware` → `authMiddleware` → `requestContextMiddleware` → feature routes → `/health`, `/ready` → `notFoundHandler` → `errorHandler`.
+`helmet` → `corsHandler` → `clientKeyMiddleware` → `/health`, `/ready` → `compression` → body parsers (`cookie-parser`, `express.json({limit:'10mb'})`, `express.urlencoded`) → request-id → request-timeout → `outputHandler` → `languageMiddleware` → `authMiddleware` → `requestContextMiddleware` → feature routes → `notFoundHandler` → `errorHandler`.
 
 `clientKeyMiddleware` sits directly behind CORS and ahead of the body parsers so an unkeyed caller is refused before a 10mb body is read; `/health` and `/ready` are exempt inside the middleware.
 
 - `languageMiddleware` sets `res.locals.language`, which selects **content** language (brand/address/place/template entries, email rendering) - it has no effect on response messages, which are English-only (see §2).
 - `authMiddleware` is skipped when `Configuration.isEnvironment('test')` - auth is never real in tests (see `testing.md`).
-- `/health` and `/ready` are defined directly in `app.ts`.
+- `/health` and `/ready` are defined directly in `app.ts`, ahead of parsing and auth, which they don't need. `/health` is liveness only; `/ready` answers 503 unless the database and Redis are both up. Both answer raw JSON, outside the envelope.
+- request-timeout (`request-timeout.middleware.ts`) is an idle timer on the response socket, not a total-duration one: a stalled handler gets a 503, a long-lived response that keeps writing is never cut. It formats the 503 by calling `errorHandler` directly, and `errorHandler` hands off to Express's default handler when headers are already sent - so a handler finishing after the 503 cannot write a second response.

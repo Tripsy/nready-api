@@ -13,7 +13,8 @@ export type HttpStatusCode =
 	| 429 // Too Many Requests
 	| 500 // Internal Server Error
 	| 501 // Not Implemented - the request is well-formed, this deployment does not offer the capability (e.g. an unconfigured OAuth provider)
-	| 502; // Bad Gateway - an upstream the server depends on failed (e.g. an identity provider)
+	| 502 // Bad Gateway - an upstream the server depends on failed (e.g. an identity provider)
+	| 503; // Service Unavailable - the request outran `app.request_timeout`
 
 export class CustomError extends Error {
 	public statusCode: HttpStatusCode;

@@ -10,6 +10,7 @@
 		"too_early": "Too early; a longer-term attempt counter has to lapse first",
 		"not_implemented": "This deployment does not offer the capability",
 		"bad_gateway": "An upstream service could not be reached",
+		"request_timeout": "The request took too long to complete; its outcome is unknown",
 		"db_delete_zero": "Failed to delete; No entries were found",
 		"db_delete_one": "Failed to delete just one entry; Based on filters multiple entries were found",
 		"db_restore_one": "Failed to restore just one entry; Based on filters multiple entries were found",
