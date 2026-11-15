@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { hostname } from 'node:os';
+import { APP_VERSION } from '@/config/app-version';
 import { getObjectValue, type ObjectValue } from '@/helpers/objects.helper';
 import { SOURCE_EXTENSION } from '@/helpers/system.helper';
 import type { LogDataLevel } from '@/shared/types/log-data.type';
@@ -29,6 +30,7 @@ function loadSettings() {
 				10,
 			),
 			name: process.env.APP_NAME || 'nready-api',
+			version: APP_VERSION,
 			email: process.env.APP_EMAIL || 'hello@example.com',
 			timezone: process.env.APP_TIMEZONE || 'UTC',
 			currency: process.env.APP_CURRENCY || 'RON',

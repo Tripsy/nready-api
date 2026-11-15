@@ -177,10 +177,11 @@ export async function createApp() {
 	app.use(express.json({ limit: '10mb' }));
 	app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-	// Request ID middleware
+	// Request ID and build version on every response
 	app.use((_req, res, next) => {
 		res.locals.request_id = randomUUID();
 		res.setHeader('X-Request-ID', res.locals.request_id);
+		res.setHeader('X-App-Version', Configuration.get('app.version'));
 
 		next();
 	});
