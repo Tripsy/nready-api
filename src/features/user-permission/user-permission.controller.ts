@@ -24,7 +24,13 @@ class UserPermissionController extends BaseController {
 	public create = asyncHandler(async (req: Request, res: Response) => {
 		this.policy.canGrant(res.locals.auth);
 
-		const data = this.validate(this.validator.create, req.body, res);
+		// `user_id` comes from the path (`/:user_id`); spread last so a body value cannot
+		// redirect the write to another user
+		const data = this.validate(
+			this.validator.create,
+			{ ...req.body, user_id: req.params.user_id },
+			res,
+		);
 
 		const results = await this.userPermissionService.create(data);
 
