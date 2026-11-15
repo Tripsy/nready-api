@@ -15,6 +15,8 @@ import ProductEntity, {
 	ProductSaleStatusEnum,
 	ProductTypeEnum,
 	ProductUnitEnum,
+	type ProductVatCategory,
+	ProductVatCategoryEnum,
 	type ProductWorkflow,
 	UNITS_BY_TYPE,
 	WORKFLOW_TRANSITIONS,
@@ -55,8 +57,12 @@ import ProductVariantEntity from '@/features/product/product-variant.entity';
 import ProductVariantRepository, {
 	type ResolvedVariant,
 } from '@/features/product/product-variant.repository';
+import {
+	type VatResolver,
+	vatRateService,
+} from '@/features/vat-rate/vat-rate.service';
 import { pickValuesFromObject } from '@/helpers/objects.helper';
-import { apportion, resolveVatRate, roundMoney } from '@/helpers/shop.helper';
+import { apportion, roundMoney } from '@/helpers/shop.helper';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
 import {
 	assertValidStatusTransition,
@@ -1508,7 +1514,7 @@ export class ProductService {
 		T extends {
 			id: number;
 			composition: ProductComposition;
-			vat_category: Parameters<typeof resolveVatRate>[0];
+			vat_category: ProductVatCategory;
 			variants: {
 				prices?: {
 					currency: string;
@@ -1517,7 +1523,7 @@ export class ProductService {
 				}[];
 			}[];
 		},
-	>(entries: T[]): Promise<T[]> {
+	>(entries: T[], vatRate: VatResolver): Promise<T[]> {
 		const bundleIds = entries
 			.filter(
 				(entry) => entry.composition === ProductCompositionEnum.BUNDLE,
@@ -1590,7 +1596,7 @@ export class ProductService {
 			const kit = kits.get(entry.id);
 
 			if (!kit || kit.length === 0) {
-				const rate = resolveVatRate(entry.vat_category);
+				const rate = vatRate(entry.vat_category);
 
 				return roundMoney(sale + roundMoney((sale * rate) / 100));
 			}
@@ -1605,8 +1611,9 @@ export class ProductService {
 
 				return {
 					weight: standalone * part.units,
-					rate: resolveVatRate(
-						component?.product?.vat_category ?? 'standard',
+					rate: vatRate(
+						component?.product?.vat_category ??
+							ProductVatCategoryEnum.STANDARD,
 					),
 				};
 			});
@@ -1910,8 +1917,11 @@ export class ProductService {
 		 * label of its own, so a page offering a choice between them needs the axis values resolved
 		 * through `term_content`, which the dashboard's read has no use for and does not join.
 		 */
+		const vatRate = await vatRateService.resolverFor();
+
 		const [entryWithVariants] = await this.attachGrossPrices(
 			await this.attachVariants([entry], language),
+			vatRate,
 		);
 
 		const entryWithAttributes = await this.attachPublicAttributes(
@@ -1928,11 +1938,13 @@ export class ProductService {
 		const entryWithComposition = await this.attachPublicComposition(
 			entryWithAttributes,
 			language,
+			vatRate,
 		);
 
 		const entryWithOptions = this.attachPublicOptions(
 			entryWithComposition,
 			language,
+			vatRate,
 		);
 
 		const [entryWithCover] = await this.attachCoverImages([
@@ -1962,7 +1974,11 @@ export class ProductService {
 			bundle_groups?: ProductBundleGroupEntity[];
 			bundle_items?: ProductBundleItemEntity[];
 		},
-	>(entry: T, language: string | undefined): Promise<WithComposition<T>> {
+	>(
+		entry: T,
+		language: string | undefined,
+		vatRate: VatResolver,
+	): Promise<WithComposition<T>> {
 		const groups = entry.bundle_groups ?? [];
 		const items = entry.bundle_items ?? [];
 
@@ -2066,10 +2082,11 @@ export class ProductService {
 						}
 					: null,
 				label: variant?.product?.contents?.[0]?.label ?? null,
-				// An unresolved component falls back to the standard rate, the same way
-				// `resolveVatRate` treats an unknown class: under-quoting VAT is the costly error.
-				vat_rate: resolveVatRate(
-					variant?.product?.vat_category ?? 'standard',
+				// An unresolved component is taxed at the standard rate: under-quoting VAT is the
+				// costly error.
+				vat_rate: vatRate(
+					variant?.product?.vat_category ??
+						ProductVatCategoryEnum.STANDARD,
 				),
 			};
 		});
@@ -2091,10 +2108,14 @@ export class ProductService {
 	 */
 	private attachPublicOptions<
 		T extends {
-			vat_category: Parameters<typeof resolveVatRate>[0];
+			vat_category: ProductVatCategory;
 			option_groups?: ProductOptionGroupEntity[];
 		},
-	>(entry: T, language: string | undefined): WithPublicOptions<T> {
+	>(
+		entry: T,
+		language: string | undefined,
+		vatRate: VatResolver,
+	): WithPublicOptions<T> {
 		const narrow = (
 			term:
 				| {
@@ -2141,7 +2162,7 @@ export class ProductService {
 					label: narrow(option.label),
 				})),
 			})),
-			vat_rate: resolveVatRate(entry.vat_category),
+			vat_rate: vatRate(entry.vat_category),
 		};
 	}
 
@@ -2316,6 +2337,7 @@ export class ProductService {
 
 		const withVariants = await this.attachGrossPrices(
 			await this.attachVariants(entries, data.filter.language),
+			await vatRateService.resolverFor(),
 		);
 
 		return [await this.attachCoverImages(withVariants), total] as const;

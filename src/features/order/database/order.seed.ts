@@ -28,7 +28,8 @@ import { type PlaceType, PlaceTypeEnum } from '@/features/place/place.entity';
 import ProductEntity from '@/features/product/product.entity';
 import ProductPriceEntity from '@/features/product/product-price.entity';
 import ProductVariantEntity from '@/features/product/product-variant.entity';
-import { resolveVatRate, roundMoney } from '@/helpers/shop.helper';
+import { vatRateService } from '@/features/vat-rate/vat-rate.service';
+import { roundMoney } from '@/helpers/shop.helper';
 
 const TARGET = 24;
 const MIN_LINES_PER_ORDER = 1;
@@ -212,11 +213,13 @@ export const orderSeed: SeedDefinition = {
 				vat_category: ProductEntity['vat_category'];
 			}>();
 
+		const vatRate = await vatRateService.resolverFor();
+
 		const sellable: SellableVariant[] = priced.map((row) => ({
 			variant_id: Number(row.variant_id),
 			product_id: Number(row.product_id),
 			price: Number(row.sale_price),
-			vat_rate: resolveVatRate(row.vat_category),
+			vat_rate: vatRate(row.vat_category),
 		}));
 
 		const tableTotal = await repository.count({ withDeleted: true });

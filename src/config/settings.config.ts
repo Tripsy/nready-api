@@ -221,23 +221,6 @@ function loadSettings() {
 			termMinLength: 3,
 		},
 		/*
-		 * The percentage each `ProductVatCategoryEnum` class resolves to. The product declares a
-		 * class, not a rate, because the rate is a function of jurisdiction and date - so it is
-		 * resolved when a line is priced and snapshot onto `order_line.vat_rate` at
-		 * confirmation, and a later rate change cannot move an invoice already issued.
-		 *
-		 * Defaults are the Romanian rates. A deployment in another jurisdiction overrides them
-		 * through the environment; nothing here is derived from the currency, which says where the
-		 * money is quoted rather than which tax authority applies.
-		 */
-		vat: {
-			standard: Number(process.env.VAT_RATE_STANDARD ?? 21),
-			reduced: Number(process.env.VAT_RATE_REDUCED ?? 11),
-			second_reduced: Number(process.env.VAT_RATE_SECOND_REDUCED ?? 5),
-			zero: 0,
-			exempt: 0,
-		},
-		/*
 		 * What moving goods costs, by the kind of movement. Every figure is in the base currency
 		 * (`app.currency`); a quote in another currency is converted at the order's exchange rate.
 		 *

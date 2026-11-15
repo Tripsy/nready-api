@@ -1,6 +1,6 @@
 {
 	"name": "order",
-	"version": "2.3.0",
+	"version": "2.4.0",
 	"relativePath": "/order",
 	"entities": ["order", "order-line"],
 	"depends_on": [
@@ -9,7 +9,8 @@
 		"product",
 		"discount",
 		"document-series",
-		"exchange-rate"
+		"exchange-rate",
+		"vat-rate"
 	],
 	"required_by": [
 		"shipping",

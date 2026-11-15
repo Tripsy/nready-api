@@ -1,0 +1,24 @@
+{
+	"validation": {
+		"invalid_country_code": "Invalid country; expected a 2-letter ISO 3166-1 code",
+		"invalid_category": "Invalid VAT category",
+		"invalid_rate": "Invalid rate; expected a percentage from 0 to below 100 with at most 2 decimals",
+		"invalid_valid_from": "Invalid start date",
+		"invalid_valid_from_format": "Start date must be in the format YYYY-MM-DD"
+	},
+	"error": {
+		"not_found": "VAT rate not found",
+		"already_exists": "A {{category}} VAT rate for {{country_code}} from {{valid_from}} already exists",
+		"not_configured": "No VAT rate is configured for {{country_code}} on {{day}}"
+	},
+	"success": {
+		"create": "VAT rate created successfully",
+		"update": "VAT rate updated successfully",
+		"delete": "VAT rate deleted successfully"
+	},
+	"history": {
+		"created": "VAT rate #{{entity_id}} created by user #{{auth_id}}",
+		"updated": "VAT rate #{{entity_id}} updated by user #{{auth_id}}",
+		"removed": "VAT rate {{entity_ids}} removed by user #{{auth_id}}"
+	}
+}

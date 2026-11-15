@@ -37,7 +37,8 @@ import {
 import ProductPriceEntity from '@/features/product/product-price.entity';
 import ProductVariantEntity from '@/features/product/product-variant.entity';
 import TermContentEntity from '@/features/term/term-content.entity';
-import { resolveVatRate, roundMoney } from '@/helpers/shop.helper';
+import { vatRateService } from '@/features/vat-rate/vat-rate.service';
+import { roundMoney } from '@/helpers/shop.helper';
 
 /**
  * Why a line cannot be bought as it stands. The line is still returned when one of these is set -
@@ -239,7 +240,12 @@ export class CartPricingService {
 
 		const now = context.now ?? new Date();
 
-		const catalog = await this.loadCatalog(cart.currency, language, items);
+		const catalog = await this.loadCatalog(
+			cart.currency,
+			language,
+			items,
+			now,
+		);
 
 		const childrenByParent = new Map<number, CartItemEntity[]>();
 
@@ -435,6 +441,7 @@ export class CartPricingService {
 		currency: string,
 		language: string,
 		items: CartItemEntity[],
+		now: Date,
 	) {
 		const variantIds = [...new Set(items.map((item) => item.variant_id))];
 		const productIds = [...new Set(items.map((item) => item.product_id))];
@@ -469,6 +476,7 @@ export class CartPricingService {
 			bundleDeltas,
 			compositions,
 			productContents,
+			vatRate,
 		] = await Promise.all([
 			dataSource.getRepository(ProductVariantEntity).find({
 				where: { id: In(variantIds) },
@@ -544,6 +552,8 @@ export class CartPricingService {
 				select: { product_id: true, label: true, slug: true },
 				where: { product_id: In(productIds), language: language },
 			}),
+			// Rates in force at `now`, so a basket priced across a rate change takes the new one
+			vatRateService.resolverFor(now),
 		]);
 
 		const categoriesByProduct = new Map<number, number[]>();
@@ -567,6 +577,7 @@ export class CartPricingService {
 		}
 
 		return {
+			vatRate: vatRate,
 			variantById: new Map(
 				variants.map((variant) => [variant.id, variant]),
 			),
@@ -958,7 +969,7 @@ export class CartPricingService {
 		}
 
 		const unitPrice = roundMoney(Number(basePrice) + optionsDelta);
-		const vatRate = resolveVatRate(product.vat_category);
+		const vatRate = catalog.vatRate(product.vat_category);
 		const subtotal = roundMoney(unitPrice * item.quantity);
 
 		return {

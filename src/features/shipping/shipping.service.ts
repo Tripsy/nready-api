@@ -54,6 +54,8 @@ import {
 	type ShippingRateService,
 	shippingRateService,
 } from '@/features/shipping/shipping-rate.service';
+import { VatCategoryEnum } from '@/features/vat-rate/vat-rate.entity';
+import { vatRateService } from '@/features/vat-rate/vat-rate.service';
 import {
 	type WarehouseService,
 	warehouseService,
@@ -591,16 +593,21 @@ export class ShippingService {
 				? await this.orderService.resolveExchangeRate(data.currency)
 				: 1;
 
-		const quote = quoteShipping({
-			scope: data.scope,
-			method: data.method,
-			countryCode: await this.shippingRateService.resolveCountryCode(
-				data.scope === ShippingScopeEnum.RETURN
-					? data.pickup_client_address_id
-					: data.destination_client_address_id,
-			),
-			exchangeRate: exchangeRate,
-		});
+		const vatRate = await vatRateService.resolverFor();
+
+		const quote = quoteShipping(
+			{
+				scope: data.scope,
+				method: data.method,
+				countryCode: await this.shippingRateService.resolveCountryCode(
+					data.scope === ShippingScopeEnum.RETURN
+						? data.pickup_client_address_id
+						: data.destination_client_address_id,
+				),
+				exchangeRate: exchangeRate,
+			},
+			vatRate(VatCategoryEnum.STANDARD),
+		);
 
 		return {
 			...data,

@@ -178,6 +178,7 @@ Meanwhile, we're open to suggestions / feedback, and if you find this project us
 - [x] stats
 - [ ] subscription
 - [x] term
+- [x] vat-rate
 - [x] vendor
 - [x] warehouse
 

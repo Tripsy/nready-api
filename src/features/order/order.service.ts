@@ -65,6 +65,7 @@ import {
 import ProductContentEntity from '@/features/product/product-content.entity';
 import type { ProductOptionSnapshot } from '@/features/product/product-option.entity';
 import ProductVariantEntity from '@/features/product/product-variant.entity';
+import { vatRateService } from '@/features/vat-rate/vat-rate.service';
 import { pickValuesFromObject } from '@/helpers/objects.helper';
 import { roundMoney } from '@/helpers/shop.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
@@ -768,9 +769,16 @@ export class OrderService {
 		context: OrderDiscountContext,
 		orderDiscount?: ManualDiscount | null,
 	): Promise<{ rows: OrderLineInput[]; discount: DiscountSnapshot | null }> {
+		// Components are taxed at the rates in force when the document was raised - `context.now`
+		const vatRate = await vatRateService.resolverFor(context.now);
+
 		const [options, bundles] = await Promise.all([
 			this.optionService.resolveForLines(lines, context.currency),
-			this.bundleService.explodeForLines(lines, context.currency),
+			this.bundleService.explodeForLines(
+				lines,
+				context.currency,
+				vatRate,
+			),
 		]);
 
 		lines.forEach((line, index) => {

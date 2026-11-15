@@ -14,7 +14,8 @@ import {
 } from '@/features/product/product-bundle-selection.service';
 import ProductPriceEntity from '@/features/product/product-price.entity';
 import ProductVariantEntity from '@/features/product/product-variant.entity';
-import { resolveVatRate, roundMoney } from '@/helpers/shop.helper';
+import type { VatResolver } from '@/features/vat-rate/vat-rate.service';
+import { roundMoney } from '@/helpers/shop.helper';
 
 /** What the explosion needs from one line of the document being composed. */
 type BundleLine = {
@@ -66,6 +67,7 @@ export class OrderBundleService {
 	public async explodeForLines(
 		lines: readonly BundleLine[],
 		currency: string,
+		vatRate: VatResolver,
 	): Promise<(BundleComponentLine[] | null)[]> {
 		const productIds = [...new Set(lines.map((line) => line.product_id))];
 
@@ -210,7 +212,7 @@ export class OrderBundleService {
 				product_id: entry.variant.product_id,
 				quantity: roundMoney(entry.component.units * line.quantity),
 				price: unitPrices[position],
-				vat_rate: resolveVatRate(entry.variant.product.vat_category),
+				vat_rate: vatRate(entry.variant.product.vat_category),
 				bundle_item_id: entry.component.item.id,
 			}));
 		});
