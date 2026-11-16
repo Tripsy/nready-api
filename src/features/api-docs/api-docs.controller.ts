@@ -1,6 +1,10 @@
 import type { Request, Response } from 'express';
 import { Configuration } from '@/config/settings.config';
 import { NotFoundError } from '@/exceptions';
+import {
+	type ApiDocsPolicy,
+	apiDocsPolicy,
+} from '@/features/api-docs/api-docs.policy';
 import { ApiDocsValidator } from '@/features/api-docs/api-docs.validator';
 import {
 	type FeatureDocumentationEntry,
@@ -50,14 +54,20 @@ function authorizationScope(
 /**
  * Serves the documentation generated at boot from every `<module>.docs.ts`.
  *
- * Open to anyone, and mounted under `/public` with the other open modules: this is the
- * published API reference the frontend's `/api-docs` pages render, so the bearer-gated modules
- * are described here too. Nothing it returns is data - only the shape of a request and the
- * sample payloads the docs files declare - and every documented endpoint still enforces its own
- * permission when called.
+ * Admin only (`ApiDocsPolicy.canView`) - the frontend's `/api-docs` pages and its dashboard
+ * usage guide render it, both for an admin alone. Nothing it returns is data - only the shape
+ * of a request and the sample payloads the docs files declare - and every documented endpoint
+ * still enforces its own permission when called; the gate keeps the map of the whole API to
+ * administrators.
+ *
+ * Mounted under `/public` although every action asks for a token, like `complaint-public`: the
+ * path is what the frontend calls, and `authorization` on each action is what is enforced.
  */
 class ApiDocsController extends BaseController {
-	constructor(private validator: ApiDocsValidator) {
+	constructor(
+		private policy: ApiDocsPolicy,
+		private validator: ApiDocsValidator,
+	) {
 		super();
 	}
 
@@ -69,6 +79,9 @@ class ApiDocsController extends BaseController {
 	 * Gated here rather than at route registration: the registry is still filled at boot,
 	 * because the development-only `meta.documentation` echo on a failing request reads
 	 * from the same generated output.
+	 *
+	 * Runs before the policy, so a disabled reference answers 404 to everyone - a 401 to a
+	 * visitor would confirm the endpoint exists.
 	 */
 	private assertEnabled(): void {
 		if (!Configuration.get('apiDocs.enabled')) {
@@ -82,6 +95,7 @@ class ApiDocsController extends BaseController {
 	 */
 	public find = asyncHandler(async (_req: Request, res: Response) => {
 		this.assertEnabled();
+		this.policy.canView(res.locals.auth);
 
 		const entries = listFeatureDocumentation().map((entry) => ({
 			feature: entry.feature,
@@ -107,6 +121,7 @@ class ApiDocsController extends BaseController {
 
 	public read = asyncHandler(async (req: Request, res: Response) => {
 		this.assertEnabled();
+		this.policy.canView(res.locals.auth);
 
 		const { feature } = this.validate(this.validator.read, req.params, res);
 
@@ -135,5 +150,6 @@ class ApiDocsController extends BaseController {
 }
 
 export const apiDocsController = new ApiDocsController(
+	apiDocsPolicy,
 	new ApiDocsValidator('api-docs'),
 );
