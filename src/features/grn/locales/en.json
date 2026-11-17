@@ -1,0 +1,47 @@
+{
+	"validation": {
+		"invalid_warehouse_id": "Invalid warehouse",
+		"invalid_vendor_id": "Invalid vendor",
+		"invalid_supplier_document_number": "Invalid supplier document number",
+		"invalid_received_at": "Invalid receiving date",
+		"invalid_currency": "Invalid currency",
+		"invalid_exchange_rate": "Invalid exchange rate",
+		"invalid_items": "Invalid receipt lines",
+		"duplicate_variant": "A variant can appear only once per receipt - enter a second lot of it as a separate receipt",
+		"invalid_variant_id": "Invalid variant",
+		"invalid_qty": "Invalid quantity",
+		"invalid_unit_cost": "Invalid unit cost",
+		"invalid_vat_rate": "Invalid VAT rate",
+		"invalid_lot_code": "Invalid lot code",
+		"invalid_expires_at": "Invalid expiry date"
+	},
+	"error": {
+		"not_found": "Goods receipt not found",
+		"variant_not_found": "Variant #{{variant_id}} does not exist or was removed",
+		"variant_untracked": "Variant #{{variant_id}} does not track stock, so it cannot be received",
+		"exchange_rate_unavailable": "No exchange rate is published for {{currency}} on the receiving day - state the rate the invoice was converted at",
+		"canceled_locked": "A canceled receipt can no longer be changed",
+		"confirmed_locked": "A confirmed receipt has already moved stock - only the supplier document number and the notes can still change",
+		"status_changed": "The receipt changed status while it was being edited - reload it and try again",
+		"no_items": "A receipt with no lines cannot be confirmed",
+		"lot_consumed": "Variant #{{variant_id}} has only {{remaining}} of {{qty}} left in this receipt's lot - stock already drawn from it cannot be canceled",
+		"lot_moved": "Variant #{{variant_id}} already has a {{movement_type}} movement against this receipt's lot - stock that has moved cannot be canceled",
+		"delete_confirmed": "A confirmed receipt cannot be deleted - cancel it instead",
+		"movement_append_only": "Stock movements are never removed - post a reversing movement instead"
+	},
+	"success": {
+		"create": "Goods receipt created successfully",
+		"update": "Goods receipt updated successfully",
+		"delete": "Goods receipt deleted successfully",
+		"restore": "Goods receipt restored successfully",
+		"status_update": "Goods receipt status updated successfully"
+	},
+	"history": {
+		"created": "Goods receipt #{{entity_id}} created by user #{{auth_id}}",
+		"updated": "Goods receipt #{{entity_id}} updated by user #{{auth_id}}",
+		"deleted": "Goods receipt(s) {{entity_ids}} marked as deleted by user #{{auth_id}}",
+		"removed": "Goods receipt(s) {{entity_ids}} removed by user #{{auth_id}}",
+		"restored": "Goods receipt(s) {{entity_ids}} restored by user #{{auth_id}}",
+		"status": "Goods receipt #{{entity_id}} updated from {{oldStatus}} to {{newStatus}} by user #{{auth_id}}"
+	}
+}

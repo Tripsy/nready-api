@@ -104,6 +104,7 @@ export default class WarehouseMovementEntity extends EntityAppendOnlyAbstract {
 		scale: 2,
 		nullable: false,
 		comment: 'Signed quantity; positive is inbound, negative is outbound',
+		transformer: numericTransformer,
 	})
 	qty!: number;
 

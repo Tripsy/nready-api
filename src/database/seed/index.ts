@@ -15,6 +15,7 @@ import { commentSeed } from '@/features/comment/database/comment.seed';
 import { complaintSeed } from '@/features/complaint/database/complaint.seed';
 import { discountSeed } from '@/features/discount/database/discount.seed';
 import { documentSeriesSeed } from '@/features/document-series/database/document-series.seed';
+import { grnSeed } from '@/features/grn/database/grn.seed';
 import { imageSeed } from '@/features/image/database/image.seed';
 import { invoiceSeed } from '@/features/invoice/database/invoice.seed';
 import { orderSeed } from '@/features/order/database/order.seed';
@@ -57,6 +58,9 @@ const seeds: readonly SeedDefinition[] = [
 	// Reads category, term, brand ids; seeds the category attribute definitions
 	// its products answer to before the products themselves
 	productSeed,
+	// Reads warehouse, supplier and stock-tracked variant ids; allocates its numbers from the `NIR`
+	// series, and confirming re-averages `product_variant.cost_price` - so it follows `productSeed`
+	grnSeed,
 	discountSeed,
 	// Reads discount ids alongside client, category and brand ids
 	discountTargetSeed,

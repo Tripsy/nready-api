@@ -29,19 +29,14 @@ describe('ApiDocsPolicy.canView', () => {
 	});
 
 	it('refuses a visitor with 401', () => {
-		expect(() => policy.canView(undefined as unknown as AuthContext)).toThrow(
-			UnauthorizedError,
-		);
+		expect(() =>
+			policy.canView(undefined as unknown as AuthContext),
+		).toThrow(UnauthorizedError);
 	});
 
-	it.each<UserRole>(['operator', 'member'])(
-		'refuses a %s',
-		(role) => {
-			expect(() =>
-				policy.canView(
-					buildAuth(role, { 'api-docs': ['read', 'find'] }),
-				),
-			).toThrow(NotAllowedError);
-		},
-	);
+	it.each<UserRole>(['operator', 'member'])('refuses a %s', (role) => {
+		expect(() =>
+			policy.canView(buildAuth(role, { 'api-docs': ['read', 'find'] })),
+		).toThrow(NotAllowedError);
+	});
 });

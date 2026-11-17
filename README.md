@@ -42,7 +42,7 @@ The database is **PostgreSQL**, using **TypeORM** as the ORM layer.
 A ready-to-use Docker environment is provided for quick [setup](#-setup).
 
 This project is still a work in progress, and the next goals are:
-   - Stock handling - goods receipts (`grn`) and warehouse movements are entity-only so far
+   - Stock handling - goods receipts (`grn`) confirm and cancel with FIFO lots and a weighted-average cost; FIFO allocation on shipment and reconciliation are still to come
    - Subscriptions - entity-only so far
    - Returns
    - Create documentation
@@ -165,7 +165,7 @@ Meanwhile, we're open to suggestions / feedback, and if you find this project us
 - [x] discount
 - [x] document-series
 - [x] exchange-rate
-- [ ] grn
+- [x] grn
 - [x] image
 - [x] invoice
 - [x] order

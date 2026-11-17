@@ -515,9 +515,10 @@ These need the service layer. None of them can be pushed into a constraint.
 `grn_item`, `warehouse_movement`. Nothing about quantity belongs in `product`; the catalog's only
 part in it is `product_variant.track_stock` (§2).
 
-The entities exist; none of the behaviour does. FIFO allocation, the weighted-average cost
-recompute on receipt, cancellation reversals and reconciliation are all still unwritten, and the
-full design is in the README TODO. Two things settled here because they touch the catalog:
+Receiving is built (`GrnService`): confirming a receipt opens its lots, posts `receipt` movements and
+re-averages `cost_price`; canceling a confirmed one posts reversals and is refused once a lot has
+been drawn from. FIFO allocation on shipment and the reconciliation cron are still unwritten - the
+design is in TODO.md. Two things settled here because they touch the catalog:
 
 - **Stock leaves on shipment, not on order confirmation.** `order_shipping` carries the
   `warehouse_id`, so one order can ship from two warehouses, and a lot cannot be picked before the

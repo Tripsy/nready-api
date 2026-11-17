@@ -1,8 +1,14 @@
 {
 	"name": "grn",
-	"version": "1.1.0",
+	"version": "1.2.0",
 	"relativePath": "/grn",
 	"entities": ["grn", "grn-item", "warehouse-movement"],
-	"depends_on": ["warehouse", "vendor@^2.0.0", "product", "document-series"],
+	"depends_on": [
+		"warehouse",
+		"vendor@^2.0.0",
+		"product",
+		"document-series",
+		"exchange-rate"
+	],
 	"required_by": []
 }
