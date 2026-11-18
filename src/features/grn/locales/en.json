@@ -27,7 +27,7 @@
 		"lot_consumed": "Variant #{{variant_id}} has only {{remaining}} of {{qty}} left in this receipt's lot - stock already drawn from it cannot be canceled",
 		"lot_moved": "Variant #{{variant_id}} already has a {{movement_type}} movement against this receipt's lot - stock that has moved cannot be canceled",
 		"delete_confirmed": "A confirmed receipt cannot be deleted - cancel it instead",
-		"movement_append_only": "Stock movements are never removed - post a reversing movement instead"
+		"lots_short": "Warehouse #{{warehouse_id}} holds only {{available}} of variant #{{variant_id}} - {{requested}} to ship"
 	},
 	"success": {
 		"create": "Goods receipt created successfully",

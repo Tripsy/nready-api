@@ -2,7 +2,7 @@ import type { Repository } from 'typeorm';
 import dataSource from '@/config/data-source.config';
 import { lang } from '@/config/message.setup';
 import { CustomError } from '@/exceptions';
-import WarehouseMovementEntity from '@/features/grn/warehouse-movement.entity';
+import WarehouseMovementEntity from '@/features/warehouse-movement/warehouse-movement.entity';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
 
 /**
@@ -18,11 +18,17 @@ export class WarehouseMovementQuery extends RepositoryAbstract<WarehouseMovement
 	}
 
 	override async delete(): Promise<number> {
-		throw new CustomError(500, lang('grn.error.movement_append_only'));
+		throw new CustomError(
+			500,
+			lang('warehouse-movement.error.append_only'),
+		);
 	}
 
 	override async restore(): Promise<number> {
-		throw new CustomError(500, lang('grn.error.movement_append_only'));
+		throw new CustomError(
+			500,
+			lang('warehouse-movement.error.append_only'),
+		);
 	}
 }
 

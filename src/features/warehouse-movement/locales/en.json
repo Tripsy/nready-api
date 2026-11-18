@@ -1,0 +1,15 @@
+{
+	"validation": {
+		"invalid_warehouse_id": "Warehouse ID is invalid",
+		"invalid_variant_id": "Variant ID is invalid",
+		"invalid_grn_item_id": "Receipt line ID is invalid",
+		"invalid_movement_type": "Movement type is invalid",
+		"invalid_source_type": "Movement source type is invalid",
+		"invalid_source_id": "Movement source ID is invalid",
+		"invalid_reversal_of_id": "Reversed movement ID is invalid"
+	},
+	"error": {
+		"append_only": "Stock movements are never removed - post a reversing movement instead",
+		"insufficient_stock": "Only {{available}} of {{sku}} left in stock - {{requested}} requested"
+	}
+}

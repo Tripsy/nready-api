@@ -28,6 +28,7 @@ import { termSeed } from '@/features/term/database/term.seed';
 import { userSeed } from '@/features/user/database/user.seed';
 import { vendorSeed } from '@/features/vendor/database/vendor.seed';
 import { warehouseSeed } from '@/features/warehouse/database/warehouse.seed';
+import { warehouseMovementSeed } from '@/features/warehouse-movement/database/warehouse-movement.seed';
 
 /**
  * Declaration order is the foreign-key order and is not arbitrary: `place → address`, and
@@ -83,6 +84,10 @@ const seeds: readonly SeedDefinition[] = [
 	// Reads orders with their lines, plus warehouse, carrier and client address ids - so it has to
 	// follow `orderSeed`, `warehouseSeed` and `clientAddressSeed`
 	shippingSeed,
+	// Reads the receipts `grnSeed` confirmed and canceled and the orders `orderSeed` placed - seeds
+	// run without the bootstraps that would have posted their movements and reservations, so both
+	// are backfilled
+	warehouseMovementSeed,
 	// Its general movements have no parents, but the payment request it raises per pending order
 	// is priced off that order's lines *and* its delivery - so it follows `orderSeed` and
 	// `shippingSeed`, and still precedes the `invoiceSeed` that settles against its movements

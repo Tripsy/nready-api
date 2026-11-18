@@ -2,6 +2,7 @@ import { In } from 'typeorm';
 import dataSource from '@/config/data-source.config';
 import { Configuration } from '@/config/settings.config';
 import type CartEntity from '@/features/cart/cart.entity';
+import { resolveStockAvailability } from '@/features/cart/cart.hooks';
 import type CartItemEntity from '@/features/cart/cart-item.entity';
 import type { DiscountSnapshot } from '@/features/discount/discount.entity';
 import {
@@ -52,6 +53,7 @@ export const CartLineIssueEnum = {
 	OPTION_GONE: 'option_gone', // A chosen option no longer exists on the product
 	OPTION_SELECTION: 'option_selection', // The options no longer answer the product's questions within their bounds
 	BUNDLE_CHANGED: 'bundle_changed', // The bundle's composition moved under the line
+	INSUFFICIENT_STOCK: 'insufficient_stock', // The basket asks for more than is available to sell
 } as const;
 
 export type CartLineIssue =
@@ -112,6 +114,15 @@ export type CartLine = {
 	/** `subtotal - discount_reduction`, excluding VAT. What the line actually costs. */
 	total: number;
 	vat_amount: number;
+
+	/**
+	 * What is left to sell of this line's variant, floored at 0 - stated only when it matters: the
+	 * basket asks for more than that (the line then carries `insufficient_stock`), or it is at or
+	 * under the variant's own `low_stock_threshold`, which is the merchant saying "say so when
+	 * this runs low". Null otherwise, so a well-stocked shelf does not publish its count. Always
+	 * null on a bundle header, which holds no stock - its components state their own.
+	 */
+	stock_available: number | null;
 
 	issue: CartLineIssue | null;
 };
@@ -262,7 +273,7 @@ export class CartPricingService {
 
 		// First pass: what each line costs before any discount. The basket subtotal has to exist
 		// before the discounts are resolved, since `min_order_value` is a condition on it.
-		const draftLines = items
+		const builtLines = items
 			.filter((item) => item.parent_id === null)
 			.flatMap((item) =>
 				this.buildGroup(
@@ -273,6 +284,9 @@ export class CartPricingService {
 					now,
 				),
 			);
+
+		// Before the subtotal: a line short of stock drops out of it like any other issue
+		const draftLines = await this.applyStock(builtLines);
 
 		const subtotal = roundMoney(
 			draftLines.reduce(
@@ -614,6 +628,94 @@ export class CartPricingService {
 	}
 
 	/**
+	 * Checks the basket against what is left to sell, per variant across **all** its lines - two
+	 * lines of one shirt draw on one shelf, and so does a component shared by two bundles.
+	 *
+	 * A variant asked for beyond what is available, and not sold on backorder, flags every line
+	 * of it `insufficient_stock`. A component flagged that way takes its whole bundle with it -
+	 * header and siblings - because a bundle cannot be bought in part. Lines already carrying an
+	 * issue keep theirs and ask for nothing.
+	 *
+	 * Measured against stock **available** (on hand less what orders already reserve) rather than
+	 * on hand: units promised to someone else are not on the shelf for this shopper. This is a
+	 * read-time quote, so it can still lose a race - the reservation taken at checkout is what
+	 * actually holds the units, and refuses with 409 if they went in between.
+	 */
+	private async applyStock(lines: CartLine[]): Promise<CartLine[]> {
+		const physical = lines.filter(
+			(line) => line.issue === null && !line.is_bundle,
+		);
+
+		if (physical.length === 0) {
+			return lines;
+		}
+
+		const availability = await resolveStockAvailability([
+			...new Set(physical.map((line) => line.variant_id)),
+		]);
+
+		if (availability.size === 0) {
+			return lines;
+		}
+
+		const requested = new Map<number, number>();
+
+		for (const line of physical) {
+			requested.set(
+				line.variant_id,
+				(requested.get(line.variant_id) ?? 0) + line.quantity,
+			);
+		}
+
+		const short = new Set<number>();
+
+		for (const [variantId, quantity] of requested) {
+			const stock = availability.get(variantId);
+
+			if (stock && !stock.allow_backorder && quantity > stock.available) {
+				short.add(variantId);
+			}
+		}
+
+		// A short component takes its bundle down: every line of the same group is flagged
+		const shortBundles = new Set(
+			physical.flatMap((line) =>
+				line.parent_id !== null && short.has(line.variant_id)
+					? [line.parent_id]
+					: [],
+			),
+		);
+
+		return lines.map((line) => {
+			const stock = line.is_bundle
+				? undefined
+				: availability.get(line.variant_id);
+			const isShort =
+				line.issue === null &&
+				(short.has(line.variant_id) ||
+					shortBundles.has(line.id) ||
+					(line.parent_id !== null &&
+						shortBundles.has(line.parent_id)));
+
+			const isLow =
+				stock !== undefined &&
+				stock.low_stock_threshold !== null &&
+				stock.available <= stock.low_stock_threshold;
+
+			return {
+				...line,
+				stock_available:
+					stock !== undefined && (short.has(line.variant_id) || isLow)
+						? Math.max(stock.available, 0)
+						: null,
+				issue: isShort
+					? CartLineIssueEnum.INSUFFICIENT_STOCK
+					: line.issue,
+			};
+		});
+	}
+
+	/**
 	 * One line a shopper added, plus its components when it is a bundle.
 	 *
 	 * A line with no components prices exactly as it always has. A bundle takes the second path,
@@ -888,6 +990,8 @@ export class CartPricingService {
 			discount: null,
 			total: 0,
 			vat_amount: 0,
+			// Filled by `applyStock` once every line is built - it reads the whole basket
+			stock_available: null,
 			issue: CartLineIssueEnum.VARIANT_GONE,
 		};
 

@@ -511,14 +511,15 @@ These need the service layer. None of them can be pushed into a constraint.
 
 ## 11. Stock lives elsewhere
 
-`warehouse` and `grn` are their own features and own every stock table - `warehouse`, `grn`,
-`grn_item`, `warehouse_movement`. Nothing about quantity belongs in `product`; the catalog's only
-part in it is `product_variant.track_stock` (§2).
+`warehouse`, `grn` and `warehouse-movement` are their own features and own every stock table -
+`warehouse`, `grn`, `grn_item`, `warehouse_movement`, `stock_reservation`. Nothing about quantity
+belongs in `product`; the catalog's only part in it is `product_variant.track_stock` (§2).
 
-Receiving is built (`GrnService`): confirming a receipt opens its lots, posts `receipt` movements and
-re-averages `cost_price`; canceling a confirmed one posts reversals and is refused once a lot has
-been drawn from. FIFO allocation on shipment and the reconciliation cron are still unwritten - the
-design is in TODO.md. Two things settled here because they touch the catalog:
+Receiving is `GrnService`: confirming a receipt opens its lots and re-averages `cost_price`;
+canceling a confirmed one is refused once a lot has been drawn from. `warehouse-movement` keeps the
+ledger and the reservations through hooks in `grn`, `order`, `shipping` and `cart` - an order
+reserves on placement, a delivery draws its lots FIFO as it ships, and a nightly cron reports drift.
+What is still open is in TODO.md. Two things settled here because they touch the catalog:
 
 - **Stock leaves on shipment, not on order confirmation.** `order_shipping` carries the
   `warehouse_id`, so one order can ship from two warehouses, and a lot cannot be picked before the

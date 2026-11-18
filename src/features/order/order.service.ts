@@ -36,6 +36,9 @@ import {
 	notifyOrderCanceled,
 	notifyOrderConfirmed,
 	notifyOrderFulfillmentReleased,
+	releaseOrderStock,
+	reserveOrderStock,
+	type StockDemand,
 	syncOrderDelivery,
 	syncOrderPayment,
 } from '@/features/order/order.hooks';
@@ -334,6 +337,32 @@ const PUBLIC_DETAIL_CLIENT_COLUMNS = [
 ];
 
 /**
+ * What a line set asks of stock, per variant. A bundle header names what was sold and holds no
+ * stock, so its components stand in for it - their quantities are already absolute (`product.md`
+ * §8.3). Summed per variant: two lines of one variant draw on one pool.
+ */
+function toStockDemands(lines: readonly OrderLineInput[]): StockDemand[] {
+	const totals = new Map<number, number>();
+
+	for (const line of lines) {
+		const physical =
+			line.children && line.children.length > 0 ? line.children : [line];
+
+		for (const item of physical) {
+			totals.set(
+				item.variant_id,
+				(totals.get(item.variant_id) ?? 0) + item.quantity,
+			);
+		}
+	}
+
+	return [...totals].map(([variantId, quantity]) => ({
+		variant_id: variantId,
+		quantity: quantity,
+	}));
+}
+
+/**
  * The document as its buyer sees it. `deleted_at` is dropped because a soft-deleted order is never
  * served to them; `client_id` stays so a buyer holding several clients can tell which one was billed.
  */
@@ -611,6 +640,10 @@ export class OrderService {
 				discount: data.discount ?? null,
 			}),
 		);
+
+		// Before the lines: the reserver locks the variants, and must do so ahead of the share locks
+		// the line inserts take on them (see `order.hooks.ts`)
+		await reserveOrderStock(manager, order.id, toStockDemands(data.lines));
 
 		await this.writeLines(
 			manager,
@@ -970,6 +1003,12 @@ export class OrderService {
 			const order = await manager.save(entry);
 
 			if (lines) {
+				await reserveOrderStock(
+					manager,
+					order.id,
+					toStockDemands(lines.rows),
+				);
+
 				await this.replaceLines(
 					manager,
 					order.id,
@@ -1175,6 +1214,12 @@ export class OrderService {
 
 			locked.status = newStatus;
 
+			// Fulfilled: whatever is still reserved was never going to ship - a line nothing
+			// carries - and would hold stock against nobody
+			if (newStatus === OrderStatusEnum.COMPLETED) {
+				await releaseOrderStock(manager, locked.id);
+			}
+
 			return manager.save(locked);
 		});
 
@@ -1256,6 +1301,8 @@ export class OrderService {
 				}
 
 				locked.status = OrderStatusEnum.CANCELED;
+
+				await releaseOrderStock(manager, locked.id);
 
 				return {
 					saved: await manager.save(locked),

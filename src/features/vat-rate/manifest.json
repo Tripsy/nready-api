@@ -5,5 +5,5 @@
 	"relativePath": "/vat-rate",
 	"entities": ["vat-rate"],
 	"depends_on": [],
-	"required_by": ["cart", "order", "product"]
+	"required_by": ["cart", "order", "product", "shipping"]
 }

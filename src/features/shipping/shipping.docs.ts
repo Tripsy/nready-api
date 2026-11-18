@@ -419,7 +419,7 @@ export const docs: Record<
 		withAuthErrors: true,
 		withErrors: [400, 404, 409, 422],
 		request: {
-			notes: `Allowed moves: ${statusTransitionNote}. A repeat of the current status answers 400, anything else 409. ${endsNote}, and the same move stamps shipped_at; ${ShippingStatusEnum.DELIVERED} stamps delivered_at. Neither stamp is ever rewritten`,
+			notes: `Allowed moves: ${statusTransitionNote}. A repeat of the current status answers 400, anything else 409. ${endsNote}, and the same move stamps shipped_at; ${ShippingStatusEnum.DELIVERED} stamps delivered_at. Neither stamp is ever rewritten. With warehouse-movement installed, a delivery moving to ${ShippingStatusEnum.SHIPPED} draws its stock-tracked lines from the pickup warehouse's lots, oldest first, and lowers the order's reservation - 409 when the warehouse holds less than a line asks, backorder or not; ${ShippingStatusEnum.SHIPPED} to ${ShippingStatusEnum.RETURNED} puts the goods back into the same lots. ${ShippingStatusEnum.FAILED} after shipping moves no stock`,
 			params: {
 				id: {
 					type: 'number',

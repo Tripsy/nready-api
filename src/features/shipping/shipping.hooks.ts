@@ -1,9 +1,18 @@
-import { createNotification } from '@/helpers/hook.helper';
+import type { EntityManager } from 'typeorm';
+import type { ShippingScope } from '@/features/shipping/shipping.entity';
+import { createNotification, createQuery } from '@/helpers/hook.helper';
 
 /**
- * What `shipping` announces about its own rows - answered by whichever feature bills orders
- * (`invoice`), which depends on `shipping` and registers from its bootstrap. See
- * `invoice.hooks.ts` for the invoice-first chain this step belongs to.
+ * What `shipping` announces about its own rows, and what it asks while moving one along.
+ *
+ * - **After the commit** - `notifyShippingChanged`, answered by whichever feature bills orders
+ *   (`invoice`). See `invoice.hooks.ts` for the invoice-first chain this step belongs to.
+ * - **Inside the status transaction** - `moveShippedStock` and `restoreReturnedStock`, answered by
+ *   `warehouse-movement`: the goods leave stock in the same transaction that says they left, and
+ *   a shortage refuses the move rather than leaving a shipped parcel nothing was drawn for.
+ *
+ * Both answering features depend on `shipping` and register from their bootstrap. With either
+ * absent its slot is empty: movements are billed with no stock kept, or kept with nothing billed.
  */
 
 /**
@@ -21,3 +30,34 @@ const shippingChanged = createNotification<ShippingChangedPayload>(
 
 export const registerShippingChangedHandler = shippingChanged.register;
 export const notifyShippingChanged = shippingChanged.notify;
+
+/** The movement whose goods are leaving or coming back - its lines are read by id. */
+export type ShippingStockMove = {
+	shipping_id: number;
+	order_id: number | null;
+	scope: ShippingScope;
+	pickup_warehouse_id: number | null;
+};
+
+const shippedStockMover = createQuery<
+	[manager: EntityManager, move: ShippingStockMove],
+	void
+>(() => undefined);
+
+const returnedStockRestorer = createQuery<
+	[manager: EntityManager, move: ShippingStockMove],
+	void
+>(() => undefined);
+
+export const registerShippedStockMover = shippedStockMover.register;
+
+/** Takes a movement's goods out of stock as it ships; nothing without `warehouse-movement`. */
+export const moveShippedStock = shippedStockMover.ask;
+
+export const registerReturnedStockRestorer = returnedStockRestorer.register;
+
+/**
+ * Puts a shipped movement's goods back as it comes back undelivered (`shipped` -> `returned`);
+ * nothing without `warehouse-movement`.
+ */
+export const restoreReturnedStock = returnedStockRestorer.ask;

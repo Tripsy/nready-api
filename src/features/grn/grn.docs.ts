@@ -302,7 +302,7 @@ export const docs: Record<keyof typeof grnController, ApiInputDocumentation> = {
 		withAuthErrors: true,
 		withErrors: [400, 404, 409, 422],
 		request: {
-			notes: `Allowed transitions: ${statusTransitionNote}. Confirming opens each line's lot, posts a receipt movement per line and re-averages each variant's \`cost_price\` against the stock on hand across every warehouse; it answers 409 for a receipt with no lines. Canceling a draft changes nothing else; canceling a confirmed receipt posts a reversing movement per line and takes the lot back out of the average - refused with 409 once any lot has been drawn from. Asking for the current status answers 400`,
+			notes: `Allowed transitions: ${statusTransitionNote}. Confirming opens each line's lot, posts a receipt movement per line (when warehouse-movement is installed) and re-averages each variant's \`cost_price\` against the stock on hand across every warehouse; it answers 409 for a receipt with no lines. Canceling a draft changes nothing else; canceling a confirmed receipt posts a reversing movement per line (likewise) and takes the lot back out of the average - refused with 409 once any lot has been drawn from. Asking for the current status answers 400`,
 			params: {
 				...idParams,
 				status: {

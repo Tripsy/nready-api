@@ -42,7 +42,12 @@ import ShippingEntity, {
 	ShippingStatusEnum,
 	STATUS_TRANSITIONS,
 } from '@/features/shipping/shipping.entity';
-import { notifyShippingChanged } from '@/features/shipping/shipping.hooks';
+import {
+	moveShippedStock,
+	notifyShippingChanged,
+	restoreReturnedStock,
+	type ShippingStockMove,
+} from '@/features/shipping/shipping.hooks';
 import { getShippingRepository } from '@/features/shipping/shipping.repository';
 import {
 	paramsUpdateList,
@@ -808,6 +813,12 @@ export class ShippingService {
 	 * prepared or handed over before then could disagree with what is finally billed. Withdrawing
 	 * it (`failed`, `canceled`) stays open whatever the order's status.
 	 *
+	 * **Stock moves with two of the moves**, inside the same transaction and under a lock on the
+	 * row: into `shipped` the goods are drawn from the pickup warehouse's lots (`moveShippedStock`),
+	 * and from `shipped` into `returned` they are put back (`restoreReturnedStock`). Both are
+	 * answered by `warehouse-movement`; a shortage refuses the move with 409. `failed` after
+	 * shipping moves nothing - the goods did leave, and the status already says they were lost.
+	 *
 	 * Every move is announced once written: a delivery arriving can complete the order it
 	 * belongs to, and a failed one stops being billable.
 	 */
@@ -861,9 +872,44 @@ export class ShippingService {
 			entry.delivered_at = entry.delivered_at ?? new Date();
 		}
 
-		entry.status = newStatus;
+		const saved = await dataSource.transaction(async (manager) => {
+			// Read again under the lock: two requests shipping the same movement would otherwise
+			// both draw its goods from stock
+			const locked = await manager
+				.getRepository(ShippingEntity)
+				.findOneOrFail({
+					select: { id: true, status: true },
+					where: { id: entry.id },
+					lock: { mode: 'pessimistic_write' },
+				});
 
-		const saved = await this.update(entry);
+			assertValidStatusTransition(
+				STATUS_TRANSITIONS,
+				locked.status,
+				newStatus,
+			);
+
+			const move: ShippingStockMove = {
+				shipping_id: entry.id,
+				order_id: entry.order_id,
+				scope: entry.scope,
+				pickup_warehouse_id: entry.pickup_warehouse_id,
+			};
+
+			if (newStatus === ShippingStatusEnum.SHIPPED) {
+				await moveShippedStock(manager, move);
+			}
+
+			if (newStatus === ShippingStatusEnum.RETURNED) {
+				await restoreReturnedStock(manager, move);
+			}
+
+			entry.status = newStatus;
+
+			return manager.save(entry);
+		});
+
+		await cleanEntityCache(ShippingEntity, saved.id);
 
 		await notifyShippingChanged({
 			shipping_id: saved.id,

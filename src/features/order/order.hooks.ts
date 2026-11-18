@@ -193,3 +193,40 @@ export const registerOrdersAwaitingPaymentResolver =
  * no order has one.
  */
 export const findOrdersAwaitingPayment = ordersAwaitingPayment.ask;
+
+/** How much of one variant an order's physical lines ask for - bundle headers already resolved. */
+export type StockDemand = {
+	variant_id: number;
+	quantity: number;
+};
+
+/*
+ * Asked **inside** the transaction that writes an order's lines - placing it, or re-lining it while
+ * pending - and **before** the lines are written: the answering feature locks the variants first,
+ * so the foreign-key share locks the line inserts take come after it, never before. Propagates: a
+ * shortage refuses the write, and the order, its series number and the checkout around it roll
+ * back with it.
+ */
+const orderStockReserver = createQuery<
+	[manager: EntityManager, orderId: number, demands: StockDemand[]],
+	void
+>(() => undefined);
+
+export const registerOrderStockReserver = orderStockReserver.register;
+
+/**
+ * Restates what an order holds against stock to `demands`. Answered by `warehouse-movement`;
+ * with nothing registered orders are placed with no stock check, as before.
+ */
+export const reserveOrderStock = orderStockReserver.ask;
+
+/* Asked inside the transaction that cancels an order, so the units are released with it */
+const orderStockReleaser = createQuery<
+	[manager: EntityManager, orderId: number],
+	void
+>(() => undefined);
+
+export const registerOrderStockReleaser = orderStockReleaser.register;
+
+/** Releases everything an order holds against stock; nothing without `warehouse-movement`. */
+export const releaseOrderStock = orderStockReleaser.ask;

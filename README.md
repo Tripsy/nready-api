@@ -42,7 +42,7 @@ The database is **PostgreSQL**, using **TypeORM** as the ORM layer.
 A ready-to-use Docker environment is provided for quick [setup](#-setup).
 
 This project is still a work in progress, and the next goals are:
-   - Stock handling - goods receipts (`grn`) confirm and cancel with FIFO lots and a weighted-average cost; FIFO allocation on shipment and reconciliation are still to come
+   - Stock handling - goods receipts (`grn`) confirm and cancel with FIFO lots and a weighted-average cost; an optional stock feature (`warehouse-movement`) keeps an append-only ledger of every receipt and its reversal, and reserves stock for orders from the moment they are placed (available = on hand - reserved, refused with 409 when short unless the variant allows backorders), and draws a delivery's goods from the oldest lots as it ships (put back if it returns undelivered); a nightly reconcile mails any drift between lots, ledger and reservations, and a morning digest lists variants under their low-stock threshold; relocations and return shipments are still to come
    - Subscriptions - entity-only so far
    - Returns
    - Create documentation
@@ -181,6 +181,7 @@ Meanwhile, we're open to suggestions / feedback, and if you find this project us
 - [x] vat-rate
 - [x] vendor
 - [x] warehouse
+- [x] warehouse-movement
 
 Unchecked features hold their entities only - no routes, services or seeds yet.
 

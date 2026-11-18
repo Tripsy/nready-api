@@ -33,7 +33,7 @@ import {
  * (6) skips tests and the feature's `database/` directory - see `isExcludedFromImportScan`. It is
  * otherwise deliberately **one-directional**: an undeclared import is an error, an unimported
  * declaration is not. Plenty of real dependencies leave no import behind -
- * `warehouse_movement.source_type = 'order_shipping_product'` is a polymorphic reference with no
+ * `warehouse_movement.source_type = 'shipping_line'` is a polymorphic reference with no
  * foreign key and no import, seed ordering is expressed in `src/database/seed/index.ts`, and
  * `invoice` declares `cash-flow` ahead of the code that will need it. So the check can only ever
  * ask for a declaration to be added, never removed, and cannot be wrong about intent.

@@ -1,4 +1,4 @@
-import { type EntityManager, In, Not } from 'typeorm';
+import { type EntityManager, In } from 'typeorm';
 import dataSource from '@/config/data-source.config';
 import { lang } from '@/config/message.setup';
 import { Configuration } from '@/config/settings.config';
@@ -18,13 +18,14 @@ import GrnEntity, {
 	GrnStatusEnum,
 	STATUS_TRANSITIONS,
 } from '@/features/grn/grn.entity';
+import {
+	findLotMovement,
+	recordReceipts,
+	reverseReceipts,
+} from '@/features/grn/grn.hooks';
 import { getGrnRepository } from '@/features/grn/grn.repository';
 import type { GrnValidator } from '@/features/grn/grn.validator';
 import GrnItemEntity from '@/features/grn/grn-item.entity';
-import WarehouseMovementEntity, {
-	WarehouseMovementSourceEnum,
-	WarehouseMovementTypeEnum,
-} from '@/features/grn/warehouse-movement.entity';
 import ProductEntity from '@/features/product/product.entity';
 import ProductContentEntity from '@/features/product/product-content.entity';
 import ProductVariantEntity from '@/features/product/product-variant.entity';
@@ -86,6 +87,22 @@ export type GrnItemWithLabel = GrnItemEntity & {
 };
 
 export type GrnWithItems = GrnEntity & { items: GrnItemWithLabel[] };
+
+/** One thing to draw from lots. `key` is the caller's own - a shipment line id - echoed back. */
+export type LotDemand = {
+	key: number;
+	variant_id: number;
+	quantity: number;
+};
+
+/** What was drawn from one lot for one demand, at that lot's base cost. */
+export type LotPiece = {
+	key: number;
+	grn_item_id: number;
+	variant_id: number;
+	qty: number;
+	unit_cost_base: number;
+};
 
 /** What a confirm or cancel touched, for the caller to drop the caches of once it commits. */
 type StockChange = { productIds: number[] };
@@ -558,11 +575,188 @@ export class GrnService {
 	}
 
 	/**
+	 * @description Used by `warehouse-movement` when a delivery ships, inside that transaction
+	 *
+	 * Draws `demands` from the warehouse's open lots, **oldest first** - by the receiving day, then
+	 * by line id, so a tie is broken the same way every time. A demand larger than one lot spans
+	 * several, which is why one shipment line can yield several pieces at several costs.
+	 *
+	 * Every candidate lot is locked before any is touched, in id order (`FOR UPDATE OF item`, the
+	 * receipt rows themselves stay unlocked). Id order is what keeps this from deadlocking against
+	 * `cancelWithin`, which also locks its lots by id before anything else; the variant locks a
+	 * caller takes afterwards come later in both.
+	 *
+	 * Refused with 409 when the warehouse holds less than asked - goods may be sold on backorder,
+	 * never shipped from nothing. `allowShort` takes what there is instead and leaves the rest
+	 * undrawn, for a backfill catching up on deliveries that already left.
+	 */
+	public async consumeLots(
+		manager: EntityManager,
+		warehouseId: number,
+		demands: readonly LotDemand[],
+		options: { allowShort?: boolean } = {},
+	): Promise<LotPiece[]> {
+		const wanted = demands.filter((demand) => demand.quantity > 0);
+
+		if (wanted.length === 0) {
+			return [];
+		}
+
+		const lots = await manager
+			.getRepository(GrnItemEntity)
+			.createQueryBuilder('item')
+			.innerJoin(
+				GrnEntity,
+				'grn',
+				'grn.id = item.grn_id AND grn.deleted_at IS NULL AND grn.status = :status',
+				{ status: GrnStatusEnum.CONFIRMED },
+			)
+			.select([
+				'item.id',
+				'item.variant_id',
+				'item.qty_remaining',
+				'item.unit_cost_base',
+			])
+			.addSelect('grn.received_at', 'received_at')
+			.where('grn.warehouse_id = :warehouseId', {
+				warehouseId: warehouseId,
+			})
+			.andWhere('item.variant_id IN (:...variantIds)', {
+				variantIds: [
+					...new Set(wanted.map((demand) => demand.variant_id)),
+				],
+			})
+			.andWhere('item.qty_remaining > 0')
+			.orderBy('item.id', 'ASC')
+			.setLock('pessimistic_write', undefined, ['item'])
+			.getRawAndEntities();
+
+		const receivedAt = new Map(
+			lots.raw.map((row: { item_id: number; received_at: Date }) => [
+				Number(row.item_id),
+				new Date(row.received_at).getTime(),
+			]),
+		);
+
+		// FIFO order, decided after the lock: the lock itself is taken in id order
+		const open = [...lots.entities].sort(
+			(a, b) =>
+				(receivedAt.get(a.id) ?? 0) - (receivedAt.get(b.id) ?? 0) ||
+				a.id - b.id,
+		);
+		const remaining = new Map(
+			open.map((lot) => [lot.id, Number(lot.qty_remaining)]),
+		);
+
+		const pieces: LotPiece[] = [];
+
+		for (const demand of wanted) {
+			let left = demand.quantity;
+
+			for (const lot of open) {
+				if (left <= 0) {
+					break;
+				}
+
+				const inLot = remaining.get(lot.id) ?? 0;
+
+				if (lot.variant_id !== demand.variant_id || inLot <= 0) {
+					continue;
+				}
+
+				const taken = Math.min(inLot, left);
+
+				remaining.set(lot.id, roundMoney(inLot - taken));
+				left = roundMoney(left - taken);
+
+				pieces.push({
+					key: demand.key,
+					grn_item_id: lot.id,
+					variant_id: lot.variant_id,
+					qty: roundMoney(taken),
+					unit_cost_base: Number(lot.unit_cost_base),
+				});
+			}
+
+			if (left > 0 && !options.allowShort) {
+				throw new CustomError(
+					409,
+					lang('grn.error.lots_short', {
+						variant_id: String(demand.variant_id),
+						warehouse_id: String(warehouseId),
+						available: String(roundMoney(demand.quantity - left)),
+						requested: String(demand.quantity),
+					}),
+				);
+			}
+		}
+
+		for (const lot of open) {
+			const after = remaining.get(lot.id) ?? 0;
+
+			if (after !== Number(lot.qty_remaining)) {
+				await manager.update(
+					GrnItemEntity,
+					{ id: lot.id },
+					{ qty_remaining: after },
+				);
+			}
+		}
+
+		return pieces;
+	}
+
+	/**
+	 * @description Used by `warehouse-movement` when a shipped delivery comes back, inside that
+	 * transaction
+	 *
+	 * Puts units back into the lots they were drawn from, so the cost they leave at next time is the
+	 * one they arrived at. Locked in id order, as `consumeLots` locks. Capped by nothing but the
+	 * lot's `qty` - the ledger rows being reversed are what say how much left each lot.
+	 */
+	public async restoreLots(
+		manager: EntityManager,
+		pieces: readonly { grn_item_id: number; qty: number }[],
+	): Promise<void> {
+		const totals = new Map<number, number>();
+
+		for (const piece of pieces) {
+			totals.set(
+				piece.grn_item_id,
+				roundMoney((totals.get(piece.grn_item_id) ?? 0) + piece.qty),
+			);
+		}
+
+		const ids = [...totals.keys()].sort((a, b) => a - b);
+
+		if (ids.length === 0) {
+			return;
+		}
+
+		await manager.getRepository(GrnItemEntity).find({
+			select: { id: true },
+			where: { id: In(ids) },
+			order: { id: 'ASC' },
+			lock: { mode: 'pessimistic_write' },
+		});
+
+		for (const id of ids) {
+			await manager
+				.createQueryBuilder()
+				.update(GrnItemEntity)
+				.set({ qty_remaining: () => 'qty_remaining + :back' })
+				.setParameter('back', totals.get(id))
+				.where('id = :id', { id: id })
+				.execute();
+		}
+	}
+
+	/**
 	 * Confirms a draft inside the caller's transaction. Public for the demo seed, which confirms
 	 * the receipts it writes through exactly this path.
 	 *
 	 * Per line: the lot opens, a `receipt` movement is posted at the lot's base cost and the
-	 * receiving day, and the variant's `cost_price` becomes the weighted moving average
+	 * receiving day (through `grn.hooks.ts` - nothing without `warehouse-movement`), and the variant's `cost_price` becomes the weighted moving average
 	 * `(on_hand × cost_price + qty × unit_cost_base) / (on_hand + qty)`. A variant with no cost yet,
 	 * or nothing on hand, simply takes the lot's cost. Rounded to the cent, the column's scale.
 	 */
@@ -633,22 +827,16 @@ export class GrnService {
 			.where('grn_id = :grnId', { grnId: entry.id })
 			.execute();
 
-		await manager.save(
-			items.map((item) =>
-				manager.create(WarehouseMovementEntity, {
-					movement_type: WarehouseMovementTypeEnum.RECEIPT,
-					qty: item.qty,
-					unit_cost_base: item.unit_cost_base,
-					source_type: WarehouseMovementSourceEnum.GRN_ITEM,
-					source_id: item.id,
-					occurred_at: entry.received_at,
-					warehouse_id: entry.warehouse_id,
-					variant_id: item.variant_id,
-					grn_item_id: item.id,
-					reversal_of_id: null,
-					notes: null,
-				}),
-			),
+		await recordReceipts(
+			manager,
+			items.map((item) => ({
+				grn_item_id: item.id,
+				warehouse_id: entry.warehouse_id,
+				variant_id: item.variant_id,
+				qty: item.qty,
+				unit_cost_base: item.unit_cost_base,
+				occurred_at: entry.received_at,
+			})),
 		);
 
 		await this.saveCosts(manager, [...variants.values()]);
@@ -677,9 +865,9 @@ export class GrnService {
 	 *   or an adjustment, not a cancellation. Two checks hold this: `qty_remaining` below `qty`,
 	 *   and any ledger row on the lot besides its own receipt - a sale answered by a return nets
 	 *   `qty_remaining` back to `qty`, yet its cost was reported against this lot all the same.
-	 * - Each `receipt` movement is answered by an opposing row with `reversal_of_id` set. It is an
-	 *   `adjustment`, the one movement type the ledger's direction CHECK lets carry a negative
-	 *   quantity for a correction; `IDX_warehouse_movement_reversal_of_id` stops a second reversal.
+	 *   The second is asked of the ledger through `grn.hooks.ts`; without it only the first holds.
+	 * - Each `receipt` movement is answered by a reversing row - posted by `warehouse-movement`
+	 *   through `grn.hooks.ts`, nothing without it.
 	 * - `cost_price` is taken back out of the average:
 	 *   `(on_hand × cost_price - qty × unit_cost_base) / (on_hand - qty)`. Left as it is when no
 	 *   stock remains, or when the result would go negative - an average already moved by later
@@ -724,17 +912,11 @@ export class GrnService {
 			);
 		}
 
+		const itemIds = items.map((item) => item.id);
+
 		// `qty_remaining` is a net figure - a sale answered by a return brings it back to `qty`.
 		// The ledger is what says the lot moved: any row on it besides its own receipt.
-		const moved = await manager
-			.getRepository(WarehouseMovementEntity)
-			.findOne({
-				where: {
-					grn_item_id: In(items.map((item) => item.id)),
-					movement_type: Not(WarehouseMovementTypeEnum.RECEIPT),
-				},
-				order: { id: 'ASC' },
-			});
+		const moved = await findLotMovement(manager, itemIds);
 
 		if (moved) {
 			const item = items.find((row) => row.id === moved.grn_item_id);
@@ -747,16 +929,6 @@ export class GrnService {
 				}),
 			);
 		}
-
-		const receipts = await manager
-			.getRepository(WarehouseMovementEntity)
-			.find({
-				where: {
-					grn_item_id: In(items.map((item) => item.id)),
-					movement_type: WarehouseMovementTypeEnum.RECEIPT,
-				},
-				order: { id: 'ASC' },
-			});
 
 		const variantIds = items.map((item) => item.variant_id);
 		const variants = await this.lockVariants(manager, variantIds);
@@ -786,26 +958,7 @@ export class GrnService {
 			}
 		}
 
-		const now = new Date();
-
-		await manager.save(
-			receipts.map((receipt) =>
-				manager.create(WarehouseMovementEntity, {
-					movement_type: WarehouseMovementTypeEnum.ADJUSTMENT,
-					qty: -receipt.qty,
-					unit_cost_base: receipt.unit_cost_base,
-					source_type: receipt.source_type,
-					source_id: receipt.source_id,
-					occurred_at: now,
-					warehouse_id: receipt.warehouse_id,
-					variant_id: receipt.variant_id,
-					grn_item_id: receipt.grn_item_id,
-					reversal_of_id: receipt.id,
-					// `reversal_of_id` is what says this row cancels another; no prose is stored beside it
-					notes: null,
-				}),
-			),
-		);
+		await reverseReceipts(manager, itemIds, new Date());
 
 		await manager
 			.createQueryBuilder()

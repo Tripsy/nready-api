@@ -1,6 +1,6 @@
 {
 	"name": "cart",
-	"version": "1.8.0",
+	"version": "1.9.0",
 	"relativePath": "/cart",
 	"entities": ["cart", "cart-item"],
 	"depends_on": [
@@ -16,5 +16,5 @@
 		"term",
 		"vat-rate"
 	],
-	"required_by": []
+	"required_by": ["warehouse-movement"]
 }

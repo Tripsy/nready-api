@@ -1,0 +1,15 @@
+{
+	"name": "warehouse-movement",
+	"version": "1.0.0",
+	"relativePath": "/warehouse-movement",
+	"entities": ["warehouse-movement", "stock-reservation"],
+	"depends_on": [
+		"grn@^2.0.0",
+		"order@^2.5.0",
+		"shipping@^3.7.0",
+		"cart@^1.9.0",
+		"warehouse",
+		"product"
+	],
+	"required_by": []
+}

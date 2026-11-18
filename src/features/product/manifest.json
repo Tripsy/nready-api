@@ -29,6 +29,7 @@
 		"cart",
 		"shipping",
 		"invoice",
-		"order-settlement"
+		"order-settlement",
+		"warehouse-movement"
 	]
 }
