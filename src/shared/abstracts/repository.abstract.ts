@@ -197,8 +197,11 @@ abstract class RepositoryAbstract<TEntity extends ObjectLiteral> {
 		operator: string,
 	): string {
 		switch (operator) {
+			// The list is spread into one parameter per value - bound whole, it reaches Postgres as
+			// `IN $1`, which is not valid SQL
 			case 'IN':
-				return `${this.prepareColumn(column)} IN (:...${columnKey})`;
+			case 'NOT IN':
+				return `${this.prepareColumn(column)} ${operator} (:...${columnKey})`;
 			default:
 				return `${this.prepareColumn(column)} ${operator} :${columnKey}`;
 		}
@@ -524,7 +527,11 @@ abstract class RepositoryAbstract<TEntity extends ObjectLiteral> {
 			let operator = filter.operator;
 			let value = filter.value;
 
-			if (operator !== 'IN' && Array.isArray(value)) {
+			if (
+				operator !== 'IN' &&
+				operator !== 'NOT IN' &&
+				Array.isArray(value)
+			) {
 				throw new CustomError(
 					500,
 					'`value` cannot be an array for operator other than `IN` or `NOT IN`',

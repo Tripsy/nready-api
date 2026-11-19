@@ -198,14 +198,22 @@ const logger = pino(
 			const ctx = requestContext.getStore();
 
 			if ('err' in context && context.err instanceof Error) {
-				const debugStack: string = context.err.stack || '';
+				const { name, message, stack } = context.err;
 
 				delete context.err; // Removes the 'err' key from the context object
 
 				return {
 					...context,
+					/*
+					 * What went wrong, kept apart from where: `formatCallStack` drops the stack's
+					 * first line, which is the only place the name and message appear, and a
+					 * handler that logs and swallows - every hook notification - leaves nothing
+					 * else behind. Name and message only: a driver error's `query` / `parameters`
+					 * would carry bound values into the log (`rules/database.md` §7).
+					 */
+					error: `${name}: ${message}`,
 					request_id: ctx?.request_id,
-					debugStack: formatCallStack(debugStack),
+					debugStack: formatCallStack(stack || ''),
 				};
 			}
 
