@@ -9,6 +9,12 @@ import {
 	type SeedSummary,
 } from '@/database/seed/seed.helper';
 import { runSeedFile } from '@/database/seed/seed.runner';
+import {
+	adjust,
+	available,
+	loadSiteStock,
+	loadTrackedVariantIds,
+} from '@/database/seed/stock.seed-helper';
 import ClientEntity from '@/features/client/client.entity';
 import ClientAddressEntity, {
 	ClientAddressTypeEnum,
@@ -34,6 +40,9 @@ import { roundMoney } from '@/helpers/shop.helper';
 const TARGET = 24;
 const MIN_LINES_PER_ORDER = 1;
 const MAX_LINES_PER_ORDER = 4;
+
+/** The share of a live order's lines drawn from the goods its site stocks (see the line loop). */
+const STOCKED_SHARE = 0.7;
 
 /** How far back the order book stretches, so the date filters have something to narrow. */
 const CREATED_WITHIN_DAYS = 180;
@@ -222,6 +231,17 @@ export const orderSeed: SeedDefinition = {
 			vat_rate: vatRate(row.vat_category),
 		}));
 
+		/*
+		 * What each warehouse can still promise. A live order takes its stock-tracked goods from
+		 * one site, within what that site holds, so the delivery `shippingSeed` writes for it can
+		 * actually ship and the reservations never outrun the shelves. Untracked goods are not
+		 * held anywhere and sell freely; with no receipt tables installed nothing is constrained.
+		 */
+		const [stock, tracked] = await Promise.all([
+			loadSiteStock(manager),
+			loadTrackedVariantIds(manager),
+		]);
+
 		const tableTotal = await repository.count({ withDeleted: true });
 
 		if (clientIds.length === 0 || sellable.length === 0) {
@@ -236,14 +256,51 @@ export const orderSeed: SeedDefinition = {
 
 		const missing = Math.max(0, TARGET - tableTotal);
 
+		let inserted = 0;
+
 		for (let index = 0; index < missing; index++) {
+			const status = randomPick(random, STATUSES);
+			const clientId = randomPick(random, buyerIds);
+
+			// A canceled order never draws stock, so it is the one shape free to name anything
+			const isLive = status !== OrderStatusEnum.CANCELED;
+			const sites = stock
+				? [...stock.entries()]
+						.filter(([, variants]) =>
+							[...variants.values()].some((qty) => qty >= 1),
+						)
+						.map(([warehouseId]) => warehouseId)
+						.sort((a, b) => a - b)
+				: [];
+			const site =
+				stock && isLive && sites.length > 0
+					? randomPick(random, sites)
+					: null;
+
+			// What this order can name: untracked goods always, tracked ones only from its site
+			const candidates =
+				stock && isLive
+					? sellable.filter(
+							(variant) =>
+								!tracked.has(variant.variant_id) ||
+								(site !== null &&
+									available(
+										stock,
+										site,
+										variant.variant_id,
+									) >= 1),
+						)
+					: sellable;
+
+			// Checked before a number is allocated - a skipped order must not leave a gap in the series
+			if (candidates.length === 0) {
+				continue;
+			}
+
 			const reference = await documentSeriesService.allocate(
 				manager,
 				DocumentTypeEnum.ORDER,
 			);
-
-			const status = randomPick(random, STATUSES);
-			const clientId = randomPick(random, buyerIds);
 
 			const order = await repository.save(
 				repository.create({
@@ -261,14 +318,26 @@ export const orderSeed: SeedDefinition = {
 
 			const lineCount = Math.min(
 				randomInt(random, MIN_LINES_PER_ORDER, MAX_LINES_PER_ORDER),
-				sellable.length,
+				candidates.length,
 			);
 
 			const usedVariants = new Set<number>();
 			const lines: Partial<OrderLineEntity>[] = [];
 
+			/*
+			 * A site holds a handful of the tracked variants against every untracked one, so an
+			 * even draw would leave the open deliveries carrying almost nothing that moves stock.
+			 * Weighted toward the site's own goods, the way a shop's book leans on what it stocks.
+			 */
+			const stocked = candidates.filter((variant) =>
+				tracked.has(variant.variant_id),
+			);
+
 			for (let line = 0; line < lineCount; line++) {
-				const pick = randomPick(random, sellable);
+				const pick =
+					stocked.length > 0 && random() < STOCKED_SHARE
+						? randomPick(random, stocked)
+						: randomPick(random, candidates);
 
 				// One line per variant, as a basket reads: buying the same thing twice is a
 				// quantity, not a second line.
@@ -278,12 +347,27 @@ export const orderSeed: SeedDefinition = {
 
 				usedVariants.add(pick.variant_id);
 
+				const isHeld =
+					stock !== null &&
+					site !== null &&
+					tracked.has(pick.variant_id);
+				const quantity = isHeld
+					? Math.min(
+							randomInt(random, 1, 3),
+							Math.floor(available(stock, site, pick.variant_id)),
+						)
+					: randomInt(random, 1, 3);
+
+				if (isHeld) {
+					adjust(stock, site, pick.variant_id, -quantity);
+				}
+
 				lines.push({
 					order_id: order.id,
 					parent_id: null,
 					variant_id: pick.variant_id,
 					product_id: pick.product_id,
-					quantity: randomInt(random, 1, 3),
+					quantity: quantity,
 					vat_rate: pick.vat_rate,
 					price: roundMoney(pick.price),
 					currency: currency,
@@ -298,14 +382,16 @@ export const orderSeed: SeedDefinition = {
 			}
 
 			await lineRepository.save(lines);
+
+			inserted++;
 		}
 
 		return {
 			entity: 'order',
 			alreadyPresent: Math.min(tableTotal, TARGET),
-			inserted: missing,
+			inserted: inserted,
 			target: TARGET,
-			tableTotal: tableTotal + missing,
+			tableTotal: tableTotal + inserted,
 		};
 	},
 };

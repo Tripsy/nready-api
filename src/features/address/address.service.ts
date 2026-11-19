@@ -1,10 +1,13 @@
-import type { DeepPartial } from 'typeorm';
+import type { DeepPartial, EntityManager } from 'typeorm';
 import { lang } from '@/config/message.setup';
 import { Configuration } from '@/config/settings.config';
 import { CustomError } from '@/exceptions';
 import type { AddressSnapshot } from '@/features/address/address.entity';
 import AddressEntity from '@/features/address/address.entity';
-import { getAddressRepository } from '@/features/address/address.repository';
+import {
+	createAddressQuery,
+	getAddressRepository,
+} from '@/features/address/address.repository';
 import {
 	type AddressValidator,
 	paramsUpdateList,
@@ -110,9 +113,12 @@ export class AddressService {
 	 * walking city -> parent -> grandparent reaches the country either way, and the levels are told
 	 * apart by `place_type` rather than by position.
 	 */
-	private createPlaceQuery(language: string) {
-		return this.repository
-			.createQuery()
+	private createPlaceQuery(language: string, manager?: EntityManager) {
+		return (
+			manager
+				? createAddressQuery(manager)
+				: this.repository.createQuery()
+		)
 			.joinAndSelect('address.city', 'city', 'LEFT')
 			.joinAndSelect(
 				'city.contents',
@@ -150,8 +156,14 @@ export class AddressService {
 	 * kept for good and read by the back office, so it has to say the same thing whichever language
 	 * the request happened to arrive in.
 	 */
-	public async getSnapshotById(id: number): Promise<AddressSnapshot> {
-		const entry = await this.createPlaceQuery(Configuration.language())
+	public async getSnapshotById(
+		id: number,
+		manager?: EntityManager,
+	): Promise<AddressSnapshot> {
+		const entry = await this.createPlaceQuery(
+			Configuration.language(),
+			manager,
+		)
 			.filterById(id)
 			.firstOrFail();
 

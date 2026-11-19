@@ -29,6 +29,34 @@ const CANCEL_EVERY = 6;
 
 const SUPPLIER_DOCUMENT_PREFIX = 'DEMO-AVZ-';
 
+/** A receipt that ends up holding stock: confirmed and never canceled. */
+const isStocking = (index: number): boolean =>
+	index < TARGET - 1 && (index + 1) % CANCEL_EVERY !== 0;
+
+/** The indexes of the stocking receipts, in order. */
+const STOCKING_INDEXES = Array.from(
+	{ length: TARGET },
+	(_, index) => index,
+).filter(isStocking);
+
+/**
+ * The variants a stocking receipt takes: every `STOCKING_INDEXES.length`-th tracked variant from
+ * its own position, and again from half a turn further on - so the confirmed receipts between
+ * them cover the whole catalog twice. Received twice, a variant usually sits in two warehouses,
+ * which is what lets `shippingSeed` split an order across two sites that can each send their half.
+ */
+function stockedLines<T>(index: number, variants: readonly T[]): T[] {
+	const count = STOCKING_INDEXES.length;
+	const position = STOCKING_INDEXES.indexOf(index);
+	const second = (position + Math.floor(count / 2)) % count;
+
+	return variants.filter(
+		(_, variantIndex) =>
+			variantIndex % count === position ||
+			variantIndex % count === second,
+	);
+}
+
 const naturalKey = (index: number): string =>
 	`${SUPPLIER_DOCUMENT_PREFIX}${sequenceLabel(index)}`;
 
@@ -46,6 +74,11 @@ const naturalKey = (index: number): string =>
  *
  * Statuses: the newest receipt stays `draft`, every sixth is confirmed then `canceled` (the
  * reversal path, which a fresh lot always allows), the rest are `confirmed`.
+ *
+ * **Every stock-tracked variant is received, twice**: the receipts that stay confirmed share the
+ * tracked variants round-robin (`stockedLines`), so the order and shipping seeds can sell any of
+ * them and split an order across two sites. The draft and the canceled ones take a random run of variants, since they stock
+ * nothing.
  */
 export const grnSeed: SeedDefinition = {
 	name: 'grn',
@@ -118,8 +151,19 @@ export const grnSeed: SeedDefinition = {
 				Math.min(5, variants.length),
 			);
 			const offset = randomInt(random, 0, variants.length - 1);
-			const lines = Array.from({ length: lineCount }, (_, line) => {
-				const variant = variants[(offset + line) % variants.length];
+			const share = isStocking(index)
+				? stockedLines(index, variants)
+				: [];
+			// A catalog smaller than the stocking receipts leaves some with no share of their own
+			const picked =
+				share.length > 0
+					? share
+					: Array.from(
+							{ length: lineCount },
+							(_, line) =>
+								variants[(offset + line) % variants.length],
+						);
+			const lines = picked.map((variant) => {
 				const reference = Number(variant.cost_price ?? 0) || 10;
 
 				return {

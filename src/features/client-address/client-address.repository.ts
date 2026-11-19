@@ -1,4 +1,4 @@
-import type { Repository } from 'typeorm';
+import type { EntityManager, Repository } from 'typeorm';
 import dataSource from '@/config/data-source.config';
 import { Configuration } from '@/config/settings.config';
 import ClientAddressEntity from '@/features/client-address/client-address.entity';
@@ -50,3 +50,10 @@ export const getClientAddressRepository = () =>
 			return new ClientAddressQuery(this);
 		},
 	});
+
+/**
+ * A query bound to a caller's transaction rather than to the data source - for a caller that has to
+ * read rows its own uncommitted transaction wrote (the demo seed, which runs as one transaction).
+ */
+export const createClientAddressQuery = (manager: EntityManager) =>
+	new ClientAddressQuery(manager.getRepository(ClientAddressEntity));

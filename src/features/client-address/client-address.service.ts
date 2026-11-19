@@ -1,4 +1,4 @@
-import type { DeepPartial } from 'typeorm';
+import type { DeepPartial, EntityManager } from 'typeorm';
 import dataSource from '@/config/data-source.config';
 import { lang } from '@/config/message.setup';
 import { Configuration } from '@/config/settings.config';
@@ -17,7 +17,10 @@ import ClientAddressEntity, {
 	type ClientAddressType,
 	ClientAddressTypeEnum,
 } from '@/features/client-address/client-address.entity';
-import { getClientAddressRepository } from '@/features/client-address/client-address.repository';
+import {
+	createClientAddressQuery,
+	getClientAddressRepository,
+} from '@/features/client-address/client-address.repository';
 import {
 	type ClientAddressValidator,
 	paramsUpdateList,
@@ -129,9 +132,12 @@ export class ClientAddressService {
 	 * country: walking city -> parent -> grandparent reaches the country either way, and
 	 * `toPlaceNames` sorts the levels by `place_type` rather than by position.
 	 */
-	private createPlaceQuery(language: string) {
-		return this.repository
-			.createQuery()
+	private createPlaceQuery(language: string, manager?: EntityManager) {
+		return (
+			manager
+				? createClientAddressQuery(manager)
+				: this.repository.createQuery()
+		)
 			.joinAndSelect('client_address.address', 'address', 'INNER')
 			.joinAndSelect('address.city', 'city', 'LEFT')
 			.joinAndSelect(
@@ -450,8 +456,14 @@ export class ClientAddressService {
 	 * By id alone: a shipment reached this point through its own `client_address_id`, and whose
 	 * address it is was settled when the order was placed. Nothing here is a permission check.
 	 */
-	public async getSnapshotById(id: number): Promise<ClientAddressSnapshot> {
-		const entry = await this.createPlaceQuery(Configuration.language())
+	public async getSnapshotById(
+		id: number,
+		manager?: EntityManager,
+	): Promise<ClientAddressSnapshot> {
+		const entry = await this.createPlaceQuery(
+			Configuration.language(),
+			manager,
+		)
 			.filterById(id)
 			.firstOrFail();
 
