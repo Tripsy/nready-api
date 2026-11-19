@@ -1,4 +1,7 @@
-import { registerStockAvailabilityResolver } from '@/features/cart/cart.hooks';
+import {
+	registerStockAvailabilityResolver,
+	registerWarehouseAvailabilityResolver,
+} from '@/features/cart/cart.hooks';
 import {
 	registerLotMovementFinder,
 	registerReceiptRecorder,
@@ -19,7 +22,8 @@ import { warehouseMovementService } from '@/features/warehouse-movement/warehous
  * Keeps stock: answers the slots `grn` raises while a receipt is confirmed or canceled (the
  * ledger), the ones `order` raises while an order is placed, re-lined, canceled or completed (the
  * reservations), the ones `shipping` raises as a delivery ships or comes back (both), and the
- * one `cart` asks while pricing a basket (availability). None of them imports this feature - it
+ * ones `cart` asks while pricing a basket (availability) and while splitting a checkout across
+ * warehouses (availability per site). None of them imports this feature - it
  * depends on all four.
  *
  * Without this feature nothing is registered: receipts open and close their lots with no audit
@@ -62,5 +66,9 @@ export default function registerWarehouseMovementBootstrap() {
 
 	registerStockAvailabilityResolver((variantIds) =>
 		stockReservationService.getAvailability(variantIds),
+	);
+
+	registerWarehouseAvailabilityResolver((manager, variantIds) =>
+		stockReservationService.getWarehouseAvailability(manager, variantIds),
 	);
 }

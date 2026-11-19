@@ -2,7 +2,7 @@
 paths:
   - "src/features/product/**"
   - "src/features/order/order-line.entity.ts"
-  - "src/features/order-shipping/**"
+  - "src/features/shipping/shipping-line.entity.ts"
   - "src/features/cart/**"
 ---
 
@@ -487,14 +487,14 @@ These need the service layer. None of them can be pushed into a constraint.
    component wearing a prompt; the count spans two tables, so only the service can take it.
 7. **No nested bundles**, and no bundle that contains one of its own variants.
 8. **Bundle apportionment reconciles to the charged total**, remainder to the largest share (§8.3).
-9. **Shipment allocation must not exceed what was ordered.** The sum of
-   `order_shipping_line.quantity` across every shipment of one `order_line` has to stay
-   within that line's `quantity`. Nothing stops shipping 15 of an ordered 14 - and with stock
-   tracking on, the surplus consumes real lots.
-10. **A bundle is shipped by its children, never its header.** `order_shipping_line` points at
-   `order_line`, and for a bundle the header line carries no variant worth picking - the
-   component lines hold the real, stockable variants. Allocating the header would leave the stock
-   movement with nothing to consume.
+9. **Shipment allocation must not exceed what was ordered.** The sum of `shipping_line.quantity`
+   per variant across every movement of an order has to stay within what the order holds of that
+   variant - shipping 15 of an ordered 14 would, with stock tracking on, consume real lots.
+   `ShippingService.assertLinesAllocatable` holds it (`shipping.md` §3).
+10. **A bundle is shipped by its children, never its header.** For a bundle the header line
+   carries no variant worth picking - the component lines hold the real, stockable variants - so
+   `toShippingLines` and `syncLinesForOrder` leave the header out. Shipping it would leave the
+   stock movement with nothing to consume.
 
 11. **A list-backed attribute definition has at least one option**, and a recorded `value_term_id`
     is one of them. `value_type = 'term'` implies rows in `product_category_attribute_option`, which
@@ -521,10 +521,11 @@ ledger and the reservations through hooks in `grn`, `order`, `shipping` and `car
 reserves on placement, a delivery draws its lots FIFO as it ships, and a nightly cron reports drift.
 What is still open is in TODO.md. Two things settled here because they touch the catalog:
 
-- **Stock leaves on shipment, not on order confirmation.** `order_shipping` carries the
-  `warehouse_id`, so one order can ship from two warehouses, and a lot cannot be picked before the
-  warehouse holding it is known. The movement's source is an `order_shipping_line`;
-  `order_line` carries no lot reference at all, because one line routinely spans several lots.
+- **Stock leaves on shipment, not on order confirmation.** Each `shipping` row carries its
+  `pickup_warehouse_id`, so one order can ship from several warehouses, and a lot cannot be picked
+  before the warehouse holding it is known. The movement's source is a `shipping_line` (by
+  variant); `order_line` carries no lot reference at all, because one line routinely spans several
+  lots. Which warehouses a checkout leaves from is `shipping.md` §5.
 - **A damaged return must not go back into its lot.** A customer return normally re-enters the lot
   it was picked from, at the cost it left with - the movement records its source, so the lot is
   known. Damaged goods are the exception: returning them to stock means they get picked and sold

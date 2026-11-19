@@ -1352,7 +1352,8 @@ export class ShippingService {
 	 * return against it happened in. The order is resolved through `OrderService.findOwnById` first,
 	 * so somebody else's order answers the same 404 as a missing one and no row of theirs is read.
 	 *
-	 * Unpaginated: an order has one delivery and rarely more than a return beside it.
+	 * Unpaginated: an order has a delivery per warehouse it leaves from - one, or a few when
+	 * checkout split it - and rarely more than a return beside them.
 	 */
 	public async findForOwnOrder(
 		orderId: number,

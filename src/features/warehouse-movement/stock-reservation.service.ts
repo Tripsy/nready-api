@@ -2,17 +2,21 @@ import { type EntityManager, In } from 'typeorm';
 import dataSource from '@/config/data-source.config';
 import { lang } from '@/config/message.setup';
 import { CustomError } from '@/exceptions';
-import type { VariantAvailability } from '@/features/cart/cart.hooks';
+import type {
+	VariantAvailability,
+	WarehouseAvailability,
+} from '@/features/cart/cart.hooks';
 import GrnEntity, { GrnStatusEnum } from '@/features/grn/grn.entity';
 import GrnItemEntity from '@/features/grn/grn-item.entity';
 import OrderEntity, { OrderStatusEnum } from '@/features/order/order.entity';
 import type { StockDemand } from '@/features/order/order.hooks';
 import OrderLineEntity from '@/features/order/order-line.entity';
 import ProductVariantEntity from '@/features/product/product-variant.entity';
-import {
+import ShippingEntity, {
 	ShippingScopeEnum,
 	ShippingStatusEnum,
 } from '@/features/shipping/shipping.entity';
+import ShippingLineEntity from '@/features/shipping/shipping-line.entity';
 import WarehouseEntity, {
 	WarehouseStatusEnum,
 } from '@/features/warehouse/warehouse.entity';
@@ -519,12 +523,13 @@ export class StockReservationService {
 		};
 	}
 
-	/** Open lots on confirmed, live receipts in active warehouses, per variant. */
-	private async sumOnHand(
-		manager: EntityManager,
-		variantIds: number[],
-	): Promise<Map<number, number>> {
-		const rows = await manager
+	/**
+	 * Open lots on confirmed, live receipts in active warehouses, for `variantIds`. Ungrouped -
+	 * each caller adds the grouping it needs, so the per-variant and per-site figures stay one
+	 * definition of "on hand".
+	 */
+	private onHandQuery(manager: EntityManager, variantIds: number[]) {
+		return manager
 			.getRepository(GrnItemEntity)
 			.createQueryBuilder('item')
 			.innerJoin(
@@ -544,7 +549,15 @@ export class StockReservationService {
 			.where('item.variant_id IN (:...variantIds)', {
 				variantIds: variantIds,
 			})
-			.andWhere('item.qty_remaining > 0')
+			.andWhere('item.qty_remaining > 0');
+	}
+
+	/** Open lots on confirmed, live receipts in active warehouses, per variant. */
+	private async sumOnHand(
+		manager: EntityManager,
+		variantIds: number[],
+	): Promise<Map<number, number>> {
+		const rows = await this.onHandQuery(manager, variantIds)
 			.groupBy('item.variant_id')
 			.getRawMany<{ variant_id: number; on_hand: string }>();
 
@@ -554,6 +567,115 @@ export class StockReservationService {
 				roundQuantity(Number(row.on_hand)),
 			]),
 		);
+	}
+
+	/**
+	 * @description Used through `cart.hooks.ts` by `CartService.toOrder`, inside the checkout
+	 * transaction and after the order has reserved its stock
+	 *
+	 * What each active warehouse can still send of each stock-tracked variant among `variantIds`:
+	 * its open lots less what live deliveries **not yet shipped** (`pending`, `preparing`) are set
+	 * to pick from it. Untracked or deleted variants are left out; a site holding none of a
+	 * variant is absent from its inner map.
+	 *
+	 * Unshipped deliveries are the only per-site claim there is - a reservation names a variant,
+	 * not a warehouse (see `StockReservationEntity`). So an order that reserves without a delivery,
+	 * as a back-office order may, is not subtracted from any site here. The per-variant
+	 * reservation has already refused a checkout the business cannot cover overall, and the FIFO
+	 * draw on `shipped` is the last word on a site that turns out short.
+	 */
+	public async getWarehouseAvailability(
+		manager: EntityManager,
+		variantIds: readonly number[],
+	): Promise<WarehouseAvailability> {
+		if (variantIds.length === 0) {
+			return new Map();
+		}
+
+		const variants = await manager
+			.getRepository(ProductVariantEntity)
+			.find({
+				select: { id: true },
+				where: { id: In([...variantIds]), track_stock: true },
+			});
+
+		if (variants.length === 0) {
+			return new Map();
+		}
+
+		const ids = variants.map((variant) => variant.id);
+
+		const onHand = await this.onHandQuery(manager, ids)
+			.addSelect('grn.warehouse_id', 'warehouse_id')
+			.groupBy('item.variant_id')
+			.addGroupBy('grn.warehouse_id')
+			.getRawMany<{
+				variant_id: number;
+				warehouse_id: number;
+				on_hand: string;
+			}>();
+
+		const committed = await manager
+			.getRepository(ShippingLineEntity)
+			.createQueryBuilder('line')
+			.innerJoin(
+				ShippingEntity,
+				'shipping',
+				'shipping.id = line.shipping_id AND shipping.deleted_at IS NULL',
+			)
+			.innerJoin(
+				OrderEntity,
+				'shipping_order',
+				'shipping_order.id = shipping.order_id AND shipping_order.deleted_at IS NULL',
+			)
+			.select('line.variant_id', 'variant_id')
+			.addSelect('shipping.pickup_warehouse_id', 'warehouse_id')
+			.addSelect('SUM(line.quantity)', 'committed')
+			.where('line.variant_id IN (:...variantIds)', { variantIds: ids })
+			.andWhere('line.deleted_at IS NULL')
+			.andWhere('shipping.scope = :scope', {
+				scope: ShippingScopeEnum.DELIVERY,
+			})
+			.andWhere('shipping.status IN (:...statuses)', {
+				statuses: [
+					ShippingStatusEnum.PENDING,
+					ShippingStatusEnum.PREPARING,
+				],
+			})
+			.andWhere('shipping.pickup_warehouse_id IS NOT NULL')
+			.groupBy('line.variant_id')
+			.addGroupBy('shipping.pickup_warehouse_id')
+			.getRawMany<{
+				variant_id: number;
+				warehouse_id: number;
+				committed: string;
+			}>();
+
+		const result: WarehouseAvailability = new Map(
+			ids.map((id) => [id, new Map<number, number>()]),
+		);
+
+		for (const row of onHand) {
+			result
+				.get(Number(row.variant_id))
+				?.set(
+					Number(row.warehouse_id),
+					roundQuantity(Number(row.on_hand)),
+				);
+		}
+
+		// Only sites with stock are listed: a claim on a site holding nothing is no supply either way
+		for (const row of committed) {
+			const sites = result.get(Number(row.variant_id));
+			const siteId = Number(row.warehouse_id);
+			const held = sites?.get(siteId);
+
+			if (sites && held !== undefined) {
+				sites.set(siteId, roundQuantity(held - Number(row.committed)));
+			}
+		}
+
+		return result;
 	}
 
 	/** What live orders reserve per variant, leaving out `excludeOrderId`'s own rows. */
