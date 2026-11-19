@@ -533,6 +533,14 @@ What is still open is in TODO.md. Two things settled here because they touch the
   automatically; the return has to ask - it does, through `shipping_line.condition`, and a damaged
   line is written off on its lot as it is received (`shipping.md` §7). Quarantine is not built.
 
+**The storefront states a level, never a count.** `GET /public/products/:id/stock`
+(`product-stock.service.ts`) answers `in_stock` / `low_stock` (at or under the variant's own `low_stock_threshold`,
+the comparison the cart makes too; no threshold, never low) / `backorder` / `out_of_stock`, or `null` for a variant that keeps no stock. It asks
+`shared/registries/stock-availability.registry.ts`, the same slot the cart prices against, and is
+never cached - the product read beside it is. A bundle states one level from its components: the
+worst always-included one, each choice as its best candidate, optional tick boxes ignored -
+"none left" counted in whole bundles, "low" in the component's own units.
+
 ## 12. Category-declared attributes
 
 `product_category_attribute` declares what a product in a category is expected to say about itself.

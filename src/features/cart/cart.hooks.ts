@@ -2,41 +2,15 @@ import type { EntityManager } from 'typeorm';
 import { createQuery } from '@/helpers/hook.helper';
 
 /**
- * What `cart` asks while pricing a basket and while turning one into an order.
+ * What `cart` asks while turning a basket into an order.
  *
- * Both are answered by `warehouse-movement`, which depends on `cart` and registers from its
- * bootstrap. With it absent - or in the `test` environment - each answer is empty:
+ * Answered by `warehouse-movement`, which depends on `cart` and registers from its bootstrap. With
+ * it absent - or in the `test` environment - no site is known to hold anything, so checkout writes
+ * a single delivery from the default warehouse.
  *
- * - `resolveStockAvailability` - every line reads as untracked, nothing is flagged short, and
- *   checkout sells as it would with no stock kept.
- * - `resolveWarehouseAvailability` - no site is known to hold anything, so checkout writes a single
- *   delivery from the default warehouse.
+ * The availability the basket is priced against is not here: `product` asks the same question for
+ * the storefront, so it lives in `shared/registries/stock-availability.registry.ts`.
  */
-
-/** What can still be sold of one stock-tracked variant. */
-export type VariantAvailability = {
-	/** On hand in active warehouses less what live orders reserve; negative when over-committed. */
-	available: number;
-	allow_backorder: boolean;
-	low_stock_threshold: number | null;
-};
-
-/*
- * A query rather than a notification: the basket waits for the answer. A failure propagates - a
- * cart priced as if the stock were there would promise what checkout then refuses.
- */
-const stockAvailability = createQuery<
-	[variantIds: readonly number[]],
-	Map<number, VariantAvailability>
->(() => new Map());
-
-export const registerStockAvailabilityResolver = stockAvailability.register;
-
-/**
- * Availability per variant, for the stock-tracked ones among `variantIds` only - an untracked
- * variant is absent from the map, which is how the cart tells "never short" from "none left".
- */
-export const resolveStockAvailability = stockAvailability.ask;
 
 /**
  * What each active warehouse can still send of a stock-tracked variant: `variant_id` ->

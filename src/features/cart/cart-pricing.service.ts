@@ -2,7 +2,6 @@ import { In } from 'typeorm';
 import dataSource from '@/config/data-source.config';
 import { Configuration } from '@/config/settings.config';
 import type CartEntity from '@/features/cart/cart.entity';
-import { resolveStockAvailability } from '@/features/cart/cart.hooks';
 import type CartItemEntity from '@/features/cart/cart-item.entity';
 import type { DiscountSnapshot } from '@/features/discount/discount.entity';
 import {
@@ -40,6 +39,7 @@ import ProductVariantEntity from '@/features/product/product-variant.entity';
 import TermContentEntity from '@/features/term/term-content.entity';
 import { vatRateService } from '@/features/vat-rate/vat-rate.service';
 import { roundMoney } from '@/helpers/shop.helper';
+import { resolveStockAvailability } from '@/shared/registries/stock-availability.registry';
 
 /**
  * Why a line cannot be bought as it stands. The line is still returned when one of these is set -

@@ -2,10 +2,7 @@ import { type EntityManager, In } from 'typeorm';
 import dataSource from '@/config/data-source.config';
 import { lang } from '@/config/message.setup';
 import { CustomError } from '@/exceptions';
-import type {
-	VariantAvailability,
-	WarehouseAvailability,
-} from '@/features/cart/cart.hooks';
+import type { WarehouseAvailability } from '@/features/cart/cart.hooks';
 import GrnEntity, { GrnStatusEnum } from '@/features/grn/grn.entity';
 import GrnItemEntity from '@/features/grn/grn-item.entity';
 import OrderEntity, { OrderStatusEnum } from '@/features/order/order.entity';
@@ -21,6 +18,7 @@ import WarehouseEntity, {
 	WarehouseStatusEnum,
 } from '@/features/warehouse/warehouse.entity';
 import StockReservationEntity from '@/features/warehouse-movement/stock-reservation.entity';
+import type { VariantAvailability } from '@/shared/registries/stock-availability.registry';
 
 /** Stock figures for one variant. */
 export type VariantStock = {

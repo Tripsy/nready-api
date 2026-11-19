@@ -1,13 +1,13 @@
 import { expect, jest } from '@jest/globals';
 import {
-	registerStockAvailabilityResolver,
-	type VariantAvailability,
-} from '@/features/cart/cart.hooks';
-import {
 	type CartLine,
 	CartLineIssueEnum,
 	CartPricingService,
 } from '@/features/cart/cart-pricing.service';
+import {
+	registerStockAvailabilityResolver,
+	type VariantAvailability,
+} from '@/shared/registries/stock-availability.registry';
 
 function line(overrides: Partial<CartLine>): CartLine {
 	return {

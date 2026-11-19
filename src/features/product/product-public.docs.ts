@@ -57,6 +57,32 @@ export const docs: Record<
 			sample: productInputPayloads.publicRead,
 		},
 	}),
+	stock: helperApiInputDocumentation({
+		description:
+			'Get the stock level of each variant of a storefront product',
+		success: {
+			status: 200,
+			description: 'Stock level per variant',
+			dataSample: {
+				entries: [
+					{ variant_id: 1, stock_status: 'in_stock' },
+					{ variant_id: 2, stock_status: 'low_stock' },
+					{ variant_id: 3, stock_status: null },
+				],
+			},
+		},
+		withErrors: [404],
+		request: {
+			notes: `A level, never a count: \`in_stock\`, \`low_stock\` (at or under the variant's own \`low_stock_threshold\`; never, when it has none), \`backorder\` (none left, still taking orders) or \`out_of_stock\`. \`null\` means not stated - the variant keeps no stock, or no stock-keeping feature is installed - and a page should then say nothing. A bundle states one level for all its variants, from its components: every always-included one must be there, a choice needs one of its candidates, and an optional component never holds it back. Not cached, unlike the product read - ask it when the page renders. Same sellable rule as the read: anything else answers 404`,
+			params: {
+				id: {
+					type: 'number',
+					required: true,
+				},
+			},
+			sample: productInputPayloads.publicStock,
+		},
+	}),
 	find: helperApiInputDocumentation({
 		description: 'Get the storefront catalog listing',
 		success: {

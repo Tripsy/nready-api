@@ -1,7 +1,4 @@
-import {
-	registerStockAvailabilityResolver,
-	registerWarehouseAvailabilityResolver,
-} from '@/features/cart/cart.hooks';
+import { registerWarehouseAvailabilityResolver } from '@/features/cart/cart.hooks';
 import {
 	registerLotMovementFinder,
 	registerReceiptRecorder,
@@ -18,14 +15,16 @@ import {
 } from '@/features/shipping/shipping.hooks';
 import { stockReservationService } from '@/features/warehouse-movement/stock-reservation.service';
 import { warehouseMovementService } from '@/features/warehouse-movement/warehouse-movement.service';
+import { registerStockAvailabilityResolver } from '@/shared/registries/stock-availability.registry';
 
 /**
  * Keeps stock: answers the slots `grn` raises while a receipt is confirmed or canceled (the
  * ledger), the ones `order` raises while an order is placed, re-lined, canceled or completed (the
- * reservations), the ones `shipping` raises as a delivery ships or comes back (both), and the
- * ones `cart` asks while pricing a basket (availability) and while splitting a checkout across
- * warehouses (availability per site). None of them imports this feature - it
- * depends on all four.
+ * reservations), the ones `shipping` raises as a delivery ships or comes back (both), the one
+ * `cart` asks while splitting a checkout across warehouses (availability per site), and the shared
+ * availability registry `cart` asks while pricing a basket and `product` while telling a visitor
+ * whether a variant is in stock. None of them imports this feature - it depends on the first four,
+ * and the registry lives in `shared/registries/`.
  *
  * Without this feature nothing is registered: receipts open and close their lots with no audit
  * trail, orders are placed with no stock check, and deliveries ship drawing nothing. See

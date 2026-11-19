@@ -1,3 +1,4 @@
+import { validateParamsWhenId } from '@/middleware/validate-params.middleware';
 import type { FeatureRoutesModule } from '@/shared/types/routes.type';
 
 export default async () => {
@@ -12,6 +13,12 @@ export default async () => {
 			find: {
 				path: '',
 				method: 'get',
+			},
+			// Two segments, so `/:slug` never takes it - an id is not a slug's shape anyway
+			stock: {
+				path: '/:id/stock',
+				method: 'get',
+				handlers: [validateParamsWhenId('id')],
 			},
 			read: {
 				path: '/:slug',

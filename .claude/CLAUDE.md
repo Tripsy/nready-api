@@ -201,7 +201,8 @@ factories in `helpers/hook.helper.ts` - `createNotification` (after commit, logs
 - **`src/shared/registries/` - polymorphic slots only**, asked by several features of one optional
   answerer (or the reverse), so no feature can own them: `target-participation.registry.ts`
   (`comment` / `rating` / `complaint` ask, `article` answers about its own rows) and
-  `target-image.registry.ts` (`article` / `product` ask, `image` provides). Don't add a registry
+  `target-image.registry.ts` (`article` / `product` ask, `image` provides) and
+  `stock-availability.registry.ts` (`cart` / `product` ask, `warehouse-movement` answers). Don't add a registry
   here when one feature raises the hook - give it a `.hooks.ts`.
 
 ### Configuration
