@@ -23,6 +23,7 @@ const publicSample: Record<string, unknown> = {
 	decided_at: '2026-11-12T14:02:00.000Z',
 	received_at: null,
 	closed_at: null,
+	refund_shipping: false,
 	order_id: 118,
 	shipping: {
 		id: 64,

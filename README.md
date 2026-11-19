@@ -340,11 +340,15 @@ $ docker compose -f docker-compose.prod.yml up -d --build
 ```
 
 On an empty database, create the database itself first - `migrate` creates the `system` and `logs`
-schemas and everything inside them. Then, once, the reference data and the first administrator:
+schemas and everything inside them. Then, once, the reference data and the first administrator. The document series (`INV`, `ORD`,
+`NIR`, `S`, `RMA`) are what every order, invoice, receipt and return numbers from; the seed only adds
+the ones missing, so it is safe to re-run, and a code can be changed in the dashboard before the
+first document is raised:
 
 ```
 $ docker compose -f docker-compose.prod.yml run --rm api node src/features/template/database/template.seed.js
 $ docker compose -f docker-compose.prod.yml run --rm api node src/features/permission/database/permission.seed.js
+$ docker compose -f docker-compose.prod.yml run --rm api node src/features/document-series/database/document-series.seed.js
 $ docker compose -f docker-compose.prod.yml run --rm -e ADMIN_EMAIL=... -e ADMIN_PASSWORD=... api node src/features/account/database/admin.seed.js
 ```
 

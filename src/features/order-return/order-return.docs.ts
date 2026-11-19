@@ -22,7 +22,7 @@ import {
 } from '@/helpers/api-documentation.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
 
-/** Written out: the feature has no mock, and a return is read with its lines attached. */
+/** Written out rather than taken from the mock: a return is read with its lines attached. */
 const lineSample: Record<string, unknown> = {
 	id: 31,
 	order_return_id: 7,
@@ -35,6 +35,13 @@ const lineSample: Record<string, unknown> = {
 	updated_at: null,
 	deleted_at: null,
 };
+
+const refundShippingParam = {
+	type: 'boolean',
+	required: false,
+	condition:
+		'pay back the outbound delivery fee with the goods; read when the refund is drafted',
+} as const;
 
 const entrySample: Record<string, unknown> = {
 	id: 7,
@@ -49,6 +56,7 @@ const entrySample: Record<string, unknown> = {
 	received_at: null,
 	closed_at: null,
 	reversal_invoice_ids: [],
+	refund_shipping: true,
 	order_id: 118,
 	shipping_id: 64,
 	user_id: 42,
@@ -184,7 +192,7 @@ export const docs: Record<
 		withAuthErrors: true,
 		withErrors: [404, 409, 422],
 		request: {
-			notes: `Provide at least one of ${paramsUpdateList.join(', ')}. While ${OrderReturnStatusEnum.REQUESTED} everything may change, lines re-checked against what is left; once decided only the notes and the response (409 otherwise) - the movement holds what travels`,
+			notes: `Provide at least one of ${paramsUpdateList.join(', ')}. While ${OrderReturnStatusEnum.REQUESTED} everything may change, lines re-checked against what is left; once decided only the notes and the response (409 otherwise) - the movement holds what travels. refund_shipping changes until the refund is drafted, on a return not rejected or canceled (409)`,
 			params: idParams,
 			body: {
 				reason: {
@@ -196,6 +204,7 @@ export const docs: Record<
 				response: textParam('what the client is told'),
 				notes: textParam('internal'),
 				lines: { ...linesParam, required: false },
+				refund_shipping: refundShippingParam,
 			},
 			sample: { response: 'Please pack the item in its original box' },
 		},
@@ -337,9 +346,11 @@ export const docs: Record<
 				},
 				vat_rate: { type: 'number', required: false },
 				response: textParam('what the client is told'),
+				refund_shipping: refundShippingParam,
 			},
 			sample: {
 				carrier_id: 3,
+				refund_shipping: true,
 				response: 'Approved - the courier will collect it',
 			},
 		},
@@ -355,7 +366,7 @@ export const docs: Record<
 		withAuthErrors: true,
 		withErrors: [404, 409],
 		request: {
-			notes: `Raised automatically when the return is received; this action raises it again when that failed or found nothing. Only once ${OrderReturnStatusEnum.RECEIVED} or ${OrderReturnStatusEnum.CLOSED}, and only while no draft is recorded (409). Drafts one quantity reversal per issued invoice of the order, for what the return movement carried; issuing a draft is what refunds the client. 409 when nothing was billed to take back`,
+			notes: `Raised automatically when the return is received; this action raises it again when that failed or found nothing. Only once ${OrderReturnStatusEnum.RECEIVED} or ${OrderReturnStatusEnum.CLOSED}, and only while no draft is recorded (409). Drafts one quantity reversal per issued invoice of the order, for what the return movement carried, and - with refund_shipping - one value reversal per issued delivery fee document (by value, so the delivery stays billed and is never charged again); issuing a draft is what refunds the client. 409 when nothing was billed to take back`,
 			params: idParams,
 		},
 	}),

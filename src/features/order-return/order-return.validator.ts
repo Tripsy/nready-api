@@ -16,6 +16,7 @@ import {
 /**
  * What an update may change. `lines` and `reason` are taken only while the return is `requested`
  * - after that the return movement holds what travels (`OrderReturnService.updateData`).
+ * `refund_shipping` only until the refund is drafted.
  */
 export const paramsUpdateList: string[] = [
 	'reason',
@@ -23,6 +24,7 @@ export const paramsUpdateList: string[] = [
 	'response',
 	'notes',
 	'lines',
+	'refund_shipping',
 ];
 
 export const OrderByEnum = {
@@ -69,6 +71,12 @@ export class OrderReturnValidator extends BaseValidator<
 			required: false,
 			maxChars: ORDER_RETURN_NOTES_MAX,
 		});
+	}
+
+	private refundShippingSchema() {
+		return this.validateBoolean(this.getMessage('invalid_boolean'), {
+			required: false,
+		}).optional();
 	}
 
 	private idParam(name: string) {
@@ -148,6 +156,7 @@ export class OrderReturnValidator extends BaseValidator<
 			response: this.textSchema('invalid_response'),
 			notes: this.textSchema('invalid_notes'),
 			lines: this.linesSchema().optional(),
+			refund_shipping: this.refundShippingSchema(),
 		})
 		.refine((data) => hasAtLeastOneValue(data, paramsUpdateList), {
 			message: this.getMessage('params_at_least_one', {
@@ -274,6 +283,8 @@ export class OrderReturnValidator extends BaseValidator<
 				{ message: this.getMessage('invalid_vat_rate') },
 			),
 			response: this.textSchema('invalid_response'),
+			// Left out, the outbound delivery fee is not paid back with the goods
+			refund_shipping: this.refundShippingSchema(),
 		})
 		.refine(
 			(data) =>

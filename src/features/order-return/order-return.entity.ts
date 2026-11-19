@@ -196,6 +196,19 @@ export default class OrderReturnEntity extends EntityAbstract {
 	})
 	reversal_invoice_ids!: number[];
 
+	/**
+	 * Whether the refund also pays back what the buyer was charged to have the goods delivered -
+	 * the operator's call (a wrong item sent, a full withdrawal), never inferred from `reason`. Read
+	 * when the refund is drafted, so it can change only until then.
+	 */
+	@Column('boolean', {
+		nullable: false,
+		default: false,
+		comment:
+			'Refund the outbound delivery fee with the goods; read when the refund is drafted',
+	})
+	refund_shipping!: boolean;
+
 	// OTHER
 	@Column('text', {
 		nullable: true,

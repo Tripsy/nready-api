@@ -31,11 +31,13 @@
 		"delete_locked": "An approved return has moved goods and money - it cannot be deleted",
 		"wrong_warehouse": "Variant #{{variant_id}} was not delivered from warehouse #{{warehouse_id}} - a stocked item goes back to the warehouse it left from",
 		"destination_required": "None of these goods left from a warehouse on a delivered delivery - state the warehouse they go back to",
-		"cancel_decided": "The return has already been decided and can no longer be withdrawn"
+		"cancel_decided": "The return has already been decided and can no longer be withdrawn",
+		"refund_shipping_locked": "The refund has already been drafted, or the return was rejected or canceled - the delivery fee can no longer be added to or taken out of it"
 	},
 	"label": {
 		"movement_notes": "Return {{reference}}",
-		"reversal_notes": "Goods returned - {{reference}}"
+		"reversal_notes": "Goods returned - {{reference}}",
+		"fee_reversal_notes": "Delivery fee refunded - {{reference}}"
 	},
 	"success": {
 		"create": "Return created successfully",

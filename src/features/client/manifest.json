@@ -11,6 +11,7 @@
 		"stats",
 		"cart",
 		"client-address",
-		"client-ledger"
+		"client-ledger",
+		"order-return"
 	]
 }

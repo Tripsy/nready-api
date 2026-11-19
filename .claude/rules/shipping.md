@@ -181,5 +181,13 @@ depending on `order`, `shipping`, `invoice`, `document-series`.
   issued `order` invoice for what the movement carried (`draftRefund`, ids in
   `reversal_invoice_ids`). An operator issues them; issuing refunds. `POST /:id/refund` re-drafts
   only while none is recorded.
+- **`refund_shipping`** (approve or update, until the refund is drafted on a live return) adds a
+  **value** reversal of each issued `shipping` document of the order's deliveries. Never by
+  quantity: that releases the movement as a billing source (`getBilledSourceIds`) and the next
+  `notifyShippingChanged` would bill the fee again.
+- **Buyer emails** on approved / rejected / received (`order-return-email.service.ts`, templates in
+  `database/order-return.templates.ts`), after commit through `runInBackground`. Sent to the
+  client's account (its language), else `client.contact_email`; none when neither exists.
+- The `RMA` series row comes from migration `1795800000000` (insert-if-missing), not only the seed.
 - **Cancel** of an approved return withdraws its movement while `pending` / `preparing`; 409 once
   `shipped`. `received` is never set by hand.

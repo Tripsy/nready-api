@@ -1,6 +1,6 @@
 {
 	"name": "order-return",
-	"version": "1.0.0",
+	"version": "1.1.0",
 	"relativePath": "/order-return",
 	"entities": ["order-return", "order-return-line"],
 	"depends_on": [
@@ -9,6 +9,7 @@
 		"invoice@^6.0.0",
 		"document-series@^1.2.0",
 		"product",
+		"client",
 		"user"
 	],
 	"required_by": []

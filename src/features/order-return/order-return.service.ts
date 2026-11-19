@@ -3,6 +3,7 @@ import dataSource from '@/config/data-source.config';
 import { lang } from '@/config/message.setup';
 import { Configuration } from '@/config/settings.config';
 import { CustomError, NotFoundError } from '@/exceptions';
+import ClientEntity from '@/features/client/client.entity';
 import { DocumentTypeEnum } from '@/features/document-series/document-series.entity';
 import {
 	type DocumentSeriesService,
@@ -15,7 +16,10 @@ import {
 	type InvoiceService,
 	invoiceService,
 } from '@/features/invoice/invoice.service';
-import { InvoiceSourceTypeEnum } from '@/features/invoice/invoice-source.entity';
+import { InvoiceLineKindEnum } from '@/features/invoice/invoice-line.entity';
+import InvoiceSourceEntity, {
+	InvoiceSourceTypeEnum,
+} from '@/features/invoice/invoice-source.entity';
 import OrderEntity, { OrderStatusEnum } from '@/features/order/order.entity';
 import {
 	type OrderService,
@@ -31,6 +35,13 @@ import OrderReturnEntity, {
 } from '@/features/order-return/order-return.entity';
 import { getOrderReturnRepository } from '@/features/order-return/order-return.repository';
 import type { OrderReturnValidator } from '@/features/order-return/order-return.validator';
+import {
+	type OrderReturnEmailEvent,
+	OrderReturnEmailEventEnum,
+	type OrderReturnEmailService,
+	type OrderReturnRecipient,
+	orderReturnEmailService,
+} from '@/features/order-return/order-return-email.service';
 import OrderReturnLineEntity from '@/features/order-return/order-return-line.entity';
 import ProductContentEntity from '@/features/product/product-content.entity';
 import ProductVariantEntity from '@/features/product/product-variant.entity';
@@ -45,6 +56,7 @@ import {
 	shippingService,
 } from '@/features/shipping/shipping.service';
 import ShippingLineEntity from '@/features/shipping/shipping-line.entity';
+import { runInBackground } from '@/helpers/background.helper';
 import { roundMoney } from '@/helpers/shop.helper';
 import {
 	assertValidStatusTransition,
@@ -65,6 +77,7 @@ const ENTRY_COLUMNS = [
 	'order_return.received_at',
 	'order_return.closed_at',
 	'order_return.reversal_invoice_ids',
+	'order_return.refund_shipping',
 	'order_return.order_id',
 	'order_return.shipping_id',
 	'order_return.user_id',
@@ -85,6 +98,7 @@ const PUBLIC_ENTRY_COLUMNS = [
 	'order_return.decided_at',
 	'order_return.received_at',
 	'order_return.closed_at',
+	'order_return.refund_shipping',
 	'order_return.order_id',
 	'order_return.created_at',
 	'order_return.updated_at',
@@ -135,7 +149,7 @@ export type OrderReturnLineWithLabel = OrderReturnLineEntity & {
 	label: string | null;
 };
 
-export type OrderReturnWithLines = OrderReturnEntity & {
+export type OrderReturnWithLines = Omit<OrderReturnEntity, 'lines'> & {
 	lines: OrderReturnLineWithLabel[];
 };
 
@@ -176,6 +190,7 @@ export class OrderReturnService {
 		private orderService: OrderService,
 		private shippingService: ShippingService,
 		private invoiceService: InvoiceService,
+		private emailService: OrderReturnEmailService,
 	) {}
 
 	public findById(
@@ -518,11 +533,23 @@ export class OrderReturnService {
 	}
 
 	/**
+	 * Whether the refund is still ahead: the return is live (not rejected or canceled) and nothing
+	 * has been drafted. `refund_shipping` is read by the draft, so it changes only while this holds.
+	 */
+	private isRefundOpen(entry: OrderReturnEntity): boolean {
+		return (
+			LIVE_STATUSES.some((status) => status === entry.status) &&
+			entry.reversal_invoice_ids.length === 0
+		);
+	}
+
+	/**
 	 * @description Used in `update` method from controller
 	 *
 	 * While `requested` everything may change, the lines re-checked against what is left (this
 	 * return's own claim left out). Once decided, only the text around it: what travels is the
-	 * movement's from then on, and the reason is part of what was decided on.
+	 * movement's from then on, and the reason is part of what was decided on. `refund_shipping`
+	 * follows the refund instead - open until it is drafted.
 	 */
 	public async updateData(
 		entry: OrderReturnEntity,
@@ -539,6 +566,17 @@ export class OrderReturnService {
 
 		const saved = await dataSource.transaction(async (manager) => {
 			const current = await this.lockEntry(manager, entry);
+
+			if (
+				data.refund_shipping !== undefined &&
+				data.refund_shipping !== current.refund_shipping &&
+				!this.isRefundOpen(current)
+			) {
+				throw new CustomError(
+					409,
+					lang('order-return.error.refund_shipping_locked'),
+				);
+			}
 
 			if (data.lines) {
 				await this.lockOrder(manager, current.order_id);
@@ -562,6 +600,9 @@ export class OrderReturnService {
 					response: data.response || null,
 				}),
 				...(data.notes !== undefined && { notes: data.notes || null }),
+				...(data.refund_shipping !== undefined && {
+					refund_shipping: data.refund_shipping,
+				}),
 			});
 
 			return manager.save(current);
@@ -672,6 +713,9 @@ export class OrderReturnService {
 				status: OrderReturnStatusEnum.APPROVED,
 				shipping_id: movement.id,
 				decided_at: new Date(),
+				...(data.refund_shipping !== undefined && {
+					refund_shipping: data.refund_shipping,
+				}),
 				...(data.response !== undefined && {
 					response: data.response || null,
 				}),
@@ -688,6 +732,8 @@ export class OrderReturnService {
 				order_id: saved.order_id,
 			});
 		}
+
+		this.notifyBuyer(saved.id, OrderReturnEmailEventEnum.APPROVED);
 
 		return saved;
 	}
@@ -855,6 +901,10 @@ export class OrderReturnService {
 		});
 
 		await cleanEntityCache(OrderReturnEntity, entry.id);
+
+		if (newStatus === OrderReturnStatusEnum.REJECTED) {
+			this.notifyBuyer(entry.id, OrderReturnEmailEventEnum.REJECTED);
+		}
 	}
 
 	/**
@@ -889,6 +939,8 @@ export class OrderReturnService {
 
 		await cleanEntityCache(OrderReturnEntity, entry.id);
 
+		this.notifyBuyer(entry.id, OrderReturnEmailEventEnum.RECEIVED);
+
 		await this.draftRefund(entry.id);
 	}
 
@@ -899,7 +951,9 @@ export class OrderReturnService {
 	 * Drafts quantity reversals of the order's issued invoices for what the return movement
 	 * actually carried - the warehouse may have corrected the request on arrival. Per variant, the
 	 * quantity is spread over the invoice lines that billed it, oldest document first, each taken
-	 * only as far as earlier reversals left it. One draft per document touched; none is issued here.
+	 * only as far as earlier reversals left it. With `refund_shipping`, the outbound delivery fee
+	 * is drafted back too (`draftDeliveryFeeReversals`). One draft per document touched; none is
+	 * issued here.
 	 *
 	 * Returns the draft ids, empty when nothing was billed to take back - a document still in draft
 	 * is not reversible, and the operator corrects it instead. Refused once drafts exist, so the
@@ -925,25 +979,61 @@ export class OrderReturnService {
 			);
 		}
 
+		const reference = `${entry.ref_code}-${entry.ref_number}`;
+
+		const raised = [
+			...(await this.draftGoodsReversals(entry, reference)),
+			...(entry.refund_shipping
+				? await this.draftDeliveryFeeReversals(entry, reference)
+				: []),
+		];
+
+		if (raised.length > 0) {
+			await this.repository.update(entry.id, {
+				reversal_invoice_ids: raised,
+			});
+
+			await cleanEntityCache(OrderReturnEntity, entry.id);
+		}
+
+		return raised;
+	}
+
+	/** The issued originals among the given documents, oldest first - the only ones reversible. */
+	private async issuedOriginals(
+		invoiceIds: readonly number[],
+	): Promise<{ id: number }[]> {
+		if (invoiceIds.length === 0) {
+			return [];
+		}
+
+		return dataSource.getRepository(InvoiceEntity).find({
+			select: { id: true },
+			where: {
+				id: In([...invoiceIds]),
+				is_reversal: false,
+				status: InvoiceStatusEnum.ISSUED,
+			},
+			order: { id: 'ASC' },
+		});
+	}
+
+	/**
+	 * Quantity reversals of the order's issued `order` documents for what came back, per variant
+	 * spread over the lines that billed it, oldest document first.
+	 */
+	private async draftGoodsReversals(
+		entry: OrderReturnEntity,
+		reference: string,
+	): Promise<number[]> {
 		const owed = await this.returnedByVariant(entry);
 
-		const invoiceIds = await this.invoiceService.findIdsBySource(
-			InvoiceSourceTypeEnum.ORDER,
-			entry.order_id,
+		const documents = await this.issuedOriginals(
+			await this.invoiceService.findIdsBySource(
+				InvoiceSourceTypeEnum.ORDER,
+				entry.order_id,
+			),
 		);
-
-		const documents =
-			invoiceIds.length === 0
-				? []
-				: await dataSource.getRepository(InvoiceEntity).find({
-						select: { id: true },
-						where: {
-							id: In(invoiceIds),
-							is_reversal: false,
-							status: InvoiceStatusEnum.ISSUED,
-						},
-						order: { id: 'ASC' },
-					});
 
 		const variantByOrderLine = new Map(
 			(
@@ -954,7 +1044,6 @@ export class OrderReturnService {
 			).map((line) => [line.id, line.variant_id]),
 		);
 
-		const reference = `${entry.ref_code}-${entry.ref_number}`;
 		const raised: number[] = [];
 
 		for (const document of documents) {
@@ -1018,12 +1107,86 @@ export class OrderReturnService {
 			raised.push(reversal.id);
 		}
 
-		if (raised.length > 0) {
-			await this.repository.update(entry.id, {
-				reversal_invoice_ids: raised,
+		return raised;
+	}
+
+	/**
+	 * The outbound fee paid back: one reversal per issued `shipping` document of the order's
+	 * deliveries, taking each `shipping` line's remaining net back **by value**.
+	 *
+	 * By value because the delivery did happen. A quantity reversal releases its movement as a
+	 * billing source (`getBilledSourceIds`), and the next change announced on that movement would
+	 * bill the fee again; a value reversal pays the money back and leaves the movement billed. The
+	 * per-line net cap makes a second return asking for the same fee find nothing left.
+	 */
+	private async draftDeliveryFeeReversals(
+		entry: OrderReturnEntity,
+		reference: string,
+	): Promise<number[]> {
+		const deliveries = await dataSource.getRepository(ShippingEntity).find({
+			select: { id: true },
+			where: {
+				order_id: entry.order_id,
+				scope: ShippingScopeEnum.DELIVERY,
+			},
+			withDeleted: true,
+		});
+
+		const sources =
+			deliveries.length === 0
+				? []
+				: await dataSource.getRepository(InvoiceSourceEntity).find({
+						select: { invoice_id: true },
+						where: {
+							source_type: InvoiceSourceTypeEnum.SHIPPING,
+							source_id: In(
+								deliveries.map((delivery) => delivery.id),
+							),
+						},
+					});
+
+		const documents = await this.issuedOriginals(
+			sources.map((source) => source.invoice_id),
+		);
+
+		const raised: number[] = [];
+
+		for (const document of documents) {
+			const [lines, reversed] = await Promise.all([
+				this.invoiceService.getLines(document.id),
+				this.invoiceService.getReversedPerLine(document.id),
+			]);
+
+			const selection = lines
+				.filter((line) => line.kind === InvoiceLineKindEnum.SHIPPING)
+				.map((line) => ({
+					invoice_line_id: line.id,
+					quantity: undefined,
+					amount: roundMoney(
+						Number(line.line_net) -
+							(reversed.get(line.id)?.net ?? 0),
+					),
+				}))
+				.filter((line) => line.amount > 0);
+
+			if (selection.length === 0) {
+				continue;
+			}
+
+			const parent = await this.invoiceService.findById(
+				document.id,
+				false,
+			);
+
+			const reversal = await this.invoiceService.createReversal(parent, {
+				id: document.id,
+				lines: selection,
+				notes: lang('order-return.label.fee_reversal_notes', {
+					reference: reference,
+				}),
 			});
 
-			await cleanEntityCache(OrderReturnEntity, entry.id);
+			raised.push(reversal.id);
 		}
 
 		return raised;
@@ -1106,6 +1269,80 @@ export class OrderReturnService {
 		}
 
 		await this.repository.createQuery().filterById(id).restore();
+	}
+
+	/**
+	 * Emails the buyer after a decision or an arrival has committed. In the background: the email
+	 * is a courtesy on top of a change already made, and a template or queue failure must not turn
+	 * a committed approval into an error response. Failures are logged.
+	 */
+	private notifyBuyer(id: number, event: OrderReturnEmailEvent): void {
+		runInBackground(
+			this.sendBuyerEmail(id, event),
+			`order-return.email.${event} #${id}`,
+		);
+	}
+
+	private async sendBuyerEmail(
+		id: number,
+		event: OrderReturnEmailEvent,
+	): Promise<void> {
+		const entry = await this.getEntryData({ id: id, withDeleted: false });
+		const recipient = await this.resolveRecipient(entry.order?.client_id);
+
+		if (!recipient) {
+			return;
+		}
+
+		await this.emailService.send(event, entry, recipient);
+	}
+
+	/**
+	 * Who hears about the order's returns: the account the client belongs to - the one a
+	 * storefront request is made from - in its own language, else the client's contact email in
+	 * the default one. Null when the client has neither; a back-office client may have no email.
+	 */
+	private async resolveRecipient(
+		clientId: number | undefined,
+	): Promise<OrderReturnRecipient | null> {
+		if (!clientId) {
+			return null;
+		}
+
+		const client = await dataSource.getRepository(ClientEntity).findOne({
+			select: {
+				id: true,
+				company_name: true,
+				person_name: true,
+				contact_name: true,
+				contact_email: true,
+				user: { id: true, name: true, email: true, language: true },
+			},
+			relations: { user: true },
+			where: { id: clientId },
+		});
+
+		if (client?.user) {
+			return {
+				name: client.user.name,
+				address: client.user.email,
+				language: client.user.language,
+			};
+		}
+
+		if (client?.contact_email) {
+			return {
+				name:
+					client.contact_name ??
+					client.person_name ??
+					client.company_name ??
+					'',
+				address: client.contact_email,
+				language: Configuration.language(),
+			};
+		}
+
+		return null;
 	}
 
 	/**
@@ -1338,4 +1575,5 @@ export const orderReturnService = new OrderReturnService(
 	orderService,
 	shippingService,
 	invoiceService,
+	orderReturnEmailService,
 );
