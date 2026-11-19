@@ -23,6 +23,27 @@ import { getWarehouseMovementRepository } from '@/features/warehouse-movement/wa
 import type { WarehouseMovementValidator } from '@/features/warehouse-movement/warehouse-movement.validator';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
+const ENTRY_COLUMNS = [
+	'warehouse_movement.id',
+	'warehouse_movement.movement_type',
+	'warehouse_movement.qty',
+	'warehouse_movement.unit_cost_base',
+	'warehouse_movement.source_type',
+	'warehouse_movement.source_id',
+	'warehouse_movement.occurred_at',
+	'warehouse_movement.notes',
+	'warehouse_movement.warehouse_id',
+	'warehouse_movement.variant_id',
+	'warehouse_movement.grn_item_id',
+	'warehouse_movement.reversal_of_id',
+	'warehouse_movement.created_at',
+];
+
+const WAREHOUSE_COLUMNS = ['warehouse.id', 'warehouse.code', 'warehouse.name'];
+
+// Joined LEFT, so a movement is never dropped from the ledger for what its variant became since
+const VARIANT_COLUMNS = ['variant.id', 'variant.sku', 'variant.product_id'];
+
 /**
  * The stock ledger: written by the documents that move goods, read by people.
  *
@@ -816,16 +837,33 @@ export class WarehouseMovementService {
 	}
 
 	/** @description Used in `read` method from controller */
+	/**
+	 * A ledger read names what it points at - the warehouse and the variant's SKU - so a row reads
+	 * as more than a pair of ids. `join`, not `joinAndSelect`: the named columns only, never the
+	 * warehouse's notes or the variant's prices.
+	 */
+	private createLedgerQuery() {
+		return this.repository
+			.createQuery()
+			.select([
+				...ENTRY_COLUMNS,
+				...WAREHOUSE_COLUMNS,
+				...VARIANT_COLUMNS,
+			])
+			.join('warehouse_movement.warehouse', 'warehouse', 'LEFT')
+			.join('warehouse_movement.variant', 'variant', 'LEFT');
+	}
+
+	/** @description Used in `read` method from controller */
 	public findById(id: number): Promise<WarehouseMovementEntity> {
-		return this.repository.createQuery().filterById(id).firstOrFail();
+		return this.createLedgerQuery().filterById(id).firstOrFail();
 	}
 
 	/** @description Used in `find` method from controller */
 	public findByFilter(
 		data: ValidatorOutput<WarehouseMovementValidator, 'find'>,
 	) {
-		return this.repository
-			.createQuery()
+		return this.createLedgerQuery()
 			.filterBy('warehouse_id', data.filter.warehouse_id)
 			.filterBy('variant_id', data.filter.variant_id)
 			.filterBy('grn_item_id', data.filter.grn_item_id)

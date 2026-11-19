@@ -24,6 +24,9 @@ const entitySample = {
 	variant_id: 1,
 	grn_item_id: 1,
 	reversal_of_id: null,
+	// Joined names - null when the variant has been deleted since
+	warehouse: { id: 1, code: 'BUC-01', name: 'Bucharest Central' },
+	variant: { id: 1, sku: 'TSH-SOL-M-RED', product_id: 47 },
 };
 
 const ledgerNote =
