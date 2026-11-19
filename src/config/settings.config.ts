@@ -276,6 +276,14 @@ function loadSettings() {
 			 */
 			dueDays: Number(process.env.INVOICE_DUE_DAYS ?? 14),
 		},
+		orderReturn: {
+			/*
+			 * How long a buyer may ask to send goods back, counted from the order's last delivery
+			 * arriving. 14 days is the EU right of withdrawal. Applies to the storefront only - an
+			 * operator raising a return in the back office is not held to it.
+			 */
+			windowDays: Number(process.env.ORDER_RETURN_WINDOW_DAYS ?? 14),
+		},
 		shipping: {
 			domesticCountry: (
 				process.env.SHIPPING_DOMESTIC_COUNTRY || 'RO'

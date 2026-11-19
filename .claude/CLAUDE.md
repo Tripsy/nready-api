@@ -36,7 +36,7 @@ context yet. Read the relevant one *before* proposing an approach in that area, 
 | `settlement.md` | Typed invoices, the invoice-first order → invoice → payment chain, FIFO allocation by client, the client ledger - shipping only as its fee is billed (the movement itself is `shipping.md`) | `order`/`invoice`/`order-settlement`/`cash-flow`/`shipping` features, `cart.service.ts`, the `*.hooks.ts` chain |
 | `ui-contract.md` | Keeping `../nready-ui` services and mirrored enums in step with the API | `*.controller.ts`, `*.routes.ts`, `*.entity.ts`, `*.enum.ts` |
 | `product.md` | The product / variant / option / bundle split, availability windows, order-line arithmetic | `src/features/product/**`, `order-line.entity.ts`, `shipping-line.entity.ts`, `src/features/cart/**` |
-| `shipping.md` | Delivery / relocation / return scopes, status lifecycle and the `shipped` freeze, line allocation, fees, checkout's warehouse split | `src/features/shipping/**`, `cart.service.ts`, `cart-fulfillment.ts`, `cart.hooks.ts`, stock-reservation / warehouse-movement services |
+| `shipping.md` | Delivery / relocation / return scopes, status lifecycle and the `shipped` freeze, line allocation, fees, checkout's warehouse split, return authorizations (`order-return`) | `src/features/shipping/**`, `src/features/order-return/**`, `cart.service.ts`, `cart-fulfillment.ts`, `cart.hooks.ts`, stock-reservation / warehouse-movement services |
 | `validation.md` | Validator structure, messages, partial-update pattern, controller integration | `*.validator.ts`, feature/shared `locales/*.json` |
 | `testing.md` | Test layout, reusable builders, mocking conventions | `src/tests/**`, `features/**/tests/*.test.ts`, `*.mock.ts` |
 | `typescript.md` | TS conventions, linting rules, code organization | every `.ts` |
@@ -235,7 +235,7 @@ normalized by `error-handler.middleware.ts`. User-facing strings come from `lang
   the schema gets `undefined` and the endpoint rejects every request with `invalid_id`. This has
   shipped twice.
 - **Never derive a document reference from `MAX(ref_number) + 1`.** `ref_code` / `ref_number` on
-  `invoice`, `order` and `grn` - and `subscription.ref_code` - come from
+  `invoice`, `order`, `grn` and `order_return` - and `subscription.ref_code` - come from
   `documentSeriesService.allocate(manager, document_type)`, called with the caller's
   `EntityManager` so the counter moves and rolls back with the document itself. One series per
   document type, counting continuously - there is no yearly reset.

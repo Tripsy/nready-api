@@ -19,6 +19,7 @@ import { grnSeed } from '@/features/grn/database/grn.seed';
 import { imageSeed } from '@/features/image/database/image.seed';
 import { invoiceSeed } from '@/features/invoice/database/invoice.seed';
 import { orderSeed } from '@/features/order/database/order.seed';
+import { orderReturnSeed } from '@/features/order-return/database/order-return.seed';
 import { placeSeed } from '@/features/place/database/place.seed';
 import { productSeed } from '@/features/product/database/product.seed';
 import { ratingSeed } from '@/features/rating/database/rating.seed';
@@ -102,6 +103,10 @@ const seeds: readonly SeedDefinition[] = [
 	// Reads product, product variant and user ids, and the completed orders a verified review
 	// names - so it has to follow `orderSeed`
 	reviewSeed,
+	// Reads the deliveries `shippingSeed` marked delivered and warehouse ids, writes return
+	// movements through `ShippingService`, and allocates from the `RMA` series - so it follows
+	// `shippingSeed` and `documentSeriesSeed`
+	orderReturnSeed,
 ];
 
 function resolveSeeds(

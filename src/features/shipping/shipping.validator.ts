@@ -5,6 +5,7 @@ import {
 	ShippingScopeEnum,
 	ShippingStatusEnum,
 } from '@/features/shipping/shipping.entity';
+import { ShippingLineConditionEnum } from '@/features/shipping/shipping-line.entity';
 import { hasAtLeastOneValue } from '@/helpers/objects.helper';
 import { CURRENCY_CODE_CHARS, normalizeCurrency } from '@/helpers/shop.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
@@ -92,6 +93,7 @@ const validatorMessages = [
 	'invalid_variant_id',
 	'invalid_product_id',
 	'invalid_quantity',
+	'invalid_condition',
 ] as const;
 
 export class ShippingValidator extends BaseValidator<typeof validatorMessages> {
@@ -179,6 +181,12 @@ export class ShippingValidator extends BaseValidator<typeof validatorMessages> {
 			).refine((value) => value <= QUANTITY_MAX, {
 				message: quantityMessage,
 			}),
+			// Read on a `return` only, and dropped on every other scope by `ShippingService`
+			condition: this.validateEnum(
+				ShippingLineConditionEnum,
+				this.getMessage('invalid_condition'),
+				{ required: false },
+			).optional(),
 			notes: this.notesSchema(),
 		});
 	}

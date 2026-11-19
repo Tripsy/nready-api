@@ -7,12 +7,16 @@ import { createNotification, createQuery } from '@/helpers/hook.helper';
  *
  * - **After the commit** - `notifyShippingChanged`, answered by whichever feature bills orders
  *   (`invoice`). See `invoice.hooks.ts` for the invoice-first chain this step belongs to.
- * - **Inside the status transaction** - `moveShippedStock` and `restoreReturnedStock`, answered by
- *   `warehouse-movement`: the goods leave stock in the same transaction that says they left, and
- *   a shortage refuses the move rather than leaving a shipped parcel nothing was drawn for.
+ * - **After the commit** - `notifyReturnReceived`, answered by `order-return`: a `return` movement
+ *   reached its warehouse, so the return document it carries can move on and its refund be drafted.
+ * - **Inside the status transaction** - `moveShippedStock`, `restoreReturnedStock` and
+ *   `receiveReturnedStock`, answered by `warehouse-movement`: the goods leave or re-enter stock in
+ *   the same transaction that says they moved, and a shortage refuses the move rather than leaving
+ *   a shipped parcel nothing was drawn for.
  *
- * Both answering features depend on `shipping` and register from their bootstrap. With either
- * absent its slot is empty: movements are billed with no stock kept, or kept with nothing billed.
+ * Every answering feature depends on `shipping` and registers from its bootstrap. With one absent
+ * its slot is empty: movements are billed with no stock kept, kept with nothing billed, or received
+ * back with no return document to close.
  */
 
 /**
@@ -37,6 +41,7 @@ export type ShippingStockMove = {
 	order_id: number | null;
 	scope: ShippingScope;
 	pickup_warehouse_id: number | null;
+	destination_warehouse_id: number | null;
 };
 
 const shippedStockMover = createQuery<
@@ -61,3 +66,29 @@ export const registerReturnedStockRestorer = returnedStockRestorer.register;
  * nothing without `warehouse-movement`.
  */
 export const restoreReturnedStock = returnedStockRestorer.ask;
+
+const returnedStockReceiver = createQuery<
+	[manager: EntityManager, move: ShippingStockMove],
+	void
+>(() => undefined);
+
+export const registerReturnedStockReceiver = returnedStockReceiver.register;
+
+/**
+ * Takes a client's `return` into stock as it reaches the warehouse (`shipped` -> `delivered`), by
+ * each line's `condition`; nothing without `warehouse-movement`.
+ */
+export const receiveReturnedStock = returnedStockReceiver.ask;
+
+/** A `return` movement reached its warehouse. Always tied to an order - the scope requires one. */
+export type ReturnReceivedPayload = {
+	shipping_id: number;
+	order_id: number;
+};
+
+const returnReceived = createNotification<ReturnReceivedPayload>(
+	'Failed to move the return document behind a received return',
+);
+
+export const registerReturnReceivedHandler = returnReceived.register;
+export const notifyReturnReceived = returnReceived.notify;

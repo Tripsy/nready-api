@@ -125,7 +125,7 @@ Meanwhile, we're open to suggestions / feedback, and if you find this project us
 - [x] Testing (powered by Jest & Supertest)
 - [x] Documentation provided for APIs endpoints (`*.docs.ts`, served at `/public/api-docs` when `API_DOCS_ENABLED=true`)
 - [x] Packaged features, installable via CLI with version-aware dependency resolution
-- [x] Document numbering from one continuous series per document type (orders, invoices)
+- [x] Document numbering from one continuous series per document type (orders, invoices, receipts, returns)
 - [x] Demo seeds for every feature owning a table
 - [x] Development environment available (Docker)
 - [x] Production image and compose stack, with a one-shot migration step and a dedicated scheduler
@@ -169,6 +169,7 @@ Meanwhile, we're open to suggestions / feedback, and if you find this project us
 - [x] image
 - [x] invoice
 - [x] order
+- [x] order-return
 - [x] order-settlement
 - [x] place
 - [x] product
@@ -196,6 +197,7 @@ Unchecked features hold their entities only - no routes, services or seeds yet.
 - **client-ledger** - what each client owes, reconciled by a cron
 - **shipping** - delivery, return and relocation movements, prepared when the order is confirmed
 - **order-settlement** - optional; moves an order's status as its invoices and deliveries settle. Without it billing runs the same and orders change status by hand
+- **order-return** - optional; a buyer asks to send delivered goods back (within `ORDER_RETURN_WINDOW_DAYS`), an operator approves - which writes the `return` shipping movement - and once it arrives the goods re-enter stock by condition (resellable back into their lot, damaged written off) and a draft invoice reversal is raised for the operator to issue, which is what refunds the money
 
 Each step announces itself through a hook the next one answers, so the dependencies run one way.
 
@@ -255,6 +257,7 @@ Every variable is commented there. The ones worth a look on a first run:
 - `MAIL_*` - outgoing email
 - `COMPANY_*`, `INVOICE_DUE_DAYS` - the seller details printed on invoices
 - `SHIPPING_*` - the flat shipping rates
+- `ORDER_RETURN_WINDOW_DAYS` - how long after delivery a buyer may ask for a return
 - `OAUTH_*` - social sign-in; a provider with an empty client id is disabled
 
 ### 6. Database

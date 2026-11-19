@@ -17,6 +17,7 @@ export const DocumentTypeEnum = {
 	ORDER: 'order',
 	GRN: 'grn',
 	SUBSCRIPTION: 'subscription',
+	ORDER_RETURN: 'order_return',
 } as const;
 
 export type DocumentType =

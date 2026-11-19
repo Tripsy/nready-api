@@ -17,6 +17,7 @@
 		"review",
 		"stats",
 		"cart",
-		"client"
+		"client",
+		"order-return"
 	]
 }

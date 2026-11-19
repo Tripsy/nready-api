@@ -6,6 +6,7 @@ paths:
   - "src/features/cart/cart.hooks.ts"
   - "src/features/warehouse-movement/stock-reservation.service.ts"
   - "src/features/warehouse-movement/warehouse-movement.service.ts"
+  - "src/features/order-return/**"
 ---
 
 # Shipping Protocol
@@ -52,8 +53,12 @@ All moves go through `ShippingService.updateStatus`:
   goods); after it the ends are locked (409 `ends_locked` on `updateData`).
 - **Stock moves inside the status transaction, under a row lock**: `shipped` asks
   `moveShippedStock` (FIFO draw from the pickup warehouse, 409 on a shortage), `shipped → returned`
-  asks `restoreReturnedStock`. Both answered by `warehouse-movement` (`shipping.hooks.ts`); absent,
-  nothing is drawn. `shipped → failed` moves nothing - the goods left.
+  asks `restoreReturnedStock`, and a `return` into `delivered` asks `receiveReturnedStock`. All
+  answered by `warehouse-movement` (`shipping.hooks.ts`); absent, nothing is drawn. `shipped →
+  failed` moves nothing - the goods left.
+- **A `return` reaches `delivered` only once every line has a `condition`** (409
+  `condition_required`, checked under the row lock). Then, after commit, `notifyReturnReceived` -
+  answered by `order-return` (§7).
 - `shipped_at` / `delivered_at` are stamped once and never re-stamped.
 - Every move ends with `notifyShippingChanged` (after commit) - `invoice` bills or stops billing it.
 
@@ -68,10 +73,14 @@ alone by both. A `canceled` row refuses any edit (`canceled_locked`).
 
 - **Lines name a variant, not an order line** - a relocation has no order. `(variant_id,
   product_id)` is a composite FK, so a variant of another product is refused by the database.
-- **Allocation cap** (`assertLinesAllocatable`): per variant, the sum over all the order's
-  non-deleted movements may not exceed what the order holds of it (409 `over_allocated`); a
-  variant the order does not hold is 422 `invalid_line`. The movement being edited is excluded
-  from the count.
+- **Allocation cap** (`assertLinesAllocatable`), per variant, in two pools by direction. A
+  `delivery`: the order's other deliveries may not exceed what the order holds (409
+  `over_allocated`). A `return`: capped by what `delivered` deliveries carried, less the order's
+  other returns not `failed` / `returned` / `canceled` (409 `over_returned`). A variant the order
+  does not hold is 422 `invalid_line`. The movement being edited is excluded from the count.
+  `getReturnableByVariant` reads the return pool for `order-return`.
+- **`condition`** (`resellable` / `damaged`) is a `return` line's only - `writeLines` nulls it on
+  every other scope.
 - **Only physical, non-header goods travel.** A bundle header holds no stock and is left out, its
   components kept; digital products and services never travel. Checkout (`toShippingLines`) and
   the order sync apply the same rules.
@@ -147,3 +156,30 @@ TODO.md.
   `GET /orders/:order_id/shipments`) resolves ownership through `OrderService.findOwnById` first
   and uses `join` (not `joinAndSelect`) so warehouse notes and address ids never reach the buyer.
 - `findDocumentDetails` feeds the printed shipping invoice - live, soft-deleted rows included.
+
+## 7. Returns (`order-return`)
+
+A return authorization (`order_return` + lines, `RMA` series) is the request and the decision;
+the goods move on a `return` movement and the money on invoice reversals. Optional feature,
+depending on `order`, `shipping`, `invoice`, `document-series`.
+
+- **Request** - buyer (`POST /public/orders/:order_id/returns`, held to
+  `orderReturn.windowDays` after the last delivery) or operator (`POST /order-returns`, not held to
+  it). Order `confirmed` / `completed`; lines by variant, `product_id` taken from the order line;
+  capped by the shipping return pool less other returns still `requested`. Written under a row
+  lock on the order.
+- **Approve** (`POST /order-returns/:id/approve`) writes the `return` movement in the same
+  transaction (`ShippingService.prepareCreate` + `createWithin`): pickup = the last delivered
+  delivery's address, free unless `price` + `vat_rate` are stated, operational cost from the rate
+  table. **Destination = the warehouse the goods left from** (`resolveDestination`); a stated one
+  must have sent every stock-tracked line - checked here because once the movement ships its ends
+  are locked and `receiveReturn` would refuse it.
+- **Received** - the movement reaching `delivered` puts the goods back (`receiveReturn`: per lot
+  the order's sales drew from at the destination, newest first; resellable = `sale_return` +
+  lot restored, damaged = `sale_return` + `write_off`, no `reversal_of_id` - a sale can come back
+  in several parcels), then `order-return` moves to `received` and drafts one quantity reversal per
+  issued `order` invoice for what the movement carried (`draftRefund`, ids in
+  `reversal_invoice_ids`). An operator issues them; issuing refunds. `POST /:id/refund` re-drafts
+  only while none is recorded.
+- **Cancel** of an approved return withdraws its movement while `pending` / `preparing`; 409 once
+  `shipped`. `received` is never set by hand.

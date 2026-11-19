@@ -153,5 +153,6 @@ register:
   naming the incoming movement it returns (`parent_id`, newest allocation first), completed
   through `completeWithin` (so booked on the ledger as `refund -`) and allocated to the reversal.
   An unpaid original moves no money. Always refunded, never offset against the client's other
-  documents. FIFO and order settlement read
+  documents. A received customer return drafts its reversals automatically (`order-return`,
+  `shipping.md` §7) - drafted, never issued, so the refund stays an operator's act. FIFO and order settlement read
   originals only (`is_reversal = false`).

@@ -1,5 +1,7 @@
-import { type EntityManager, In, Not } from 'typeorm';
+import { type EntityManager, In, IsNull, Not } from 'typeorm';
 import dataSource from '@/config/data-source.config';
+import { lang } from '@/config/message.setup';
+import { CustomError } from '@/exceptions';
 import { GrnStatusEnum } from '@/features/grn/grn.entity';
 import type { LotMovement, StockReceipt } from '@/features/grn/grn.hooks';
 import { grnService } from '@/features/grn/grn.service';
@@ -9,7 +11,9 @@ import ShippingEntity, {
 	ShippingStatusEnum,
 } from '@/features/shipping/shipping.entity';
 import type { ShippingStockMove } from '@/features/shipping/shipping.hooks';
-import ShippingLineEntity from '@/features/shipping/shipping-line.entity';
+import ShippingLineEntity, {
+	ShippingLineConditionEnum,
+} from '@/features/shipping/shipping-line.entity';
 import { stockReservationService } from '@/features/warehouse-movement/stock-reservation.service';
 import WarehouseMovementEntity, {
 	WarehouseMovementSourceEnum,
@@ -27,7 +31,8 @@ import type { ValidatorOutput } from '@/shared/types/mock.type';
  * through the slot that document's feature declares (`grn.hooks.ts`, `shipping.hooks.ts`). A
  * mistake is corrected by posting a reversing row, never by editing one.
  *
- * Only `delivery` movements touch stock so far. A `relocation` and a `return` shipment change
+ * A `delivery` draws its goods as it ships and puts them back if it comes back undelivered; a
+ * client's `return` takes them back in as it arrives (`receiveReturn`). A `relocation` changes
  * nothing yet: moving a lot between warehouses needs a lot that can split across sites, which
  * `grn_item` - one row, one receipt, one warehouse - cannot be.
  */
@@ -349,6 +354,261 @@ export class WarehouseMovementService {
 	}
 
 	/**
+	 * @description Used through `shipping.hooks.ts` by `shippingService.updateStatus` (a `return`
+	 * into `delivered`)
+	 *
+	 * Goods a client sent back arrive at the return's destination warehouse. Each tracked line goes
+	 * back into the lots the order's own sales drew from **at that warehouse**, newest sale first -
+	 * at the cost it left with, which is what keeps cost of goods honest across the round trip.
+	 *
+	 * - `resellable` - a `sale_return` per lot, and the lot gets the units back.
+	 * - `damaged` - the same `sale_return`, then a `write_off` of it on the same lot, so
+	 *   `qty_remaining` does not move. The ledger says the goods came home and why they are not on
+	 *   the shelf; putting them back would get them picked and sold again.
+	 *
+	 * Both rows name the return's line as their source and carry no `reversal_of_id`: a sale can be
+	 * returned in several parcels, and `IDX_warehouse_movement_reversal_of_id` allows one reversal
+	 * per row - that key stays for the undelivered parcel `returnDelivery` takes back whole.
+	 *
+	 * What a lot can still take back = what the order's sales drew from it, less what undelivered
+	 * parcels and earlier returns of the same order already put back. A line the destination's lots
+	 * cannot absorb answers 409: the goods left from another site, and with lots tied to the
+	 * warehouse of their receipt they cannot be booked in here (TODO.md, relocations). Untracked
+	 * variants come back with nothing posted.
+	 *
+	 * The count is read inside the status transaction but behind the return's own row lock only, so
+	 * two returns of one order received at the same instant could read the same room. The shipping
+	 * cap already keeps the two from bringing back more than was delivered in total.
+	 */
+	public async receiveReturn(
+		manager: EntityManager,
+		move: ShippingStockMove,
+		options: { occurredAt?: Date } = {},
+	): Promise<void> {
+		if (
+			move.scope !== ShippingScopeEnum.RETURN ||
+			!move.order_id ||
+			!move.destination_warehouse_id
+		) {
+			return;
+		}
+
+		const warehouseId = move.destination_warehouse_id;
+		const lines = await this.trackedLines(manager, move.shipping_id);
+
+		if (lines.length === 0) {
+			return;
+		}
+
+		const variantIds = [...new Set(lines.map((line) => line.variant_id))];
+
+		const [deliveryLineIds, returnLineIds] = await Promise.all([
+			this.orderLineIds(
+				manager,
+				move.order_id,
+				ShippingScopeEnum.DELIVERY,
+			),
+			this.orderLineIds(manager, move.order_id, ShippingScopeEnum.RETURN),
+		]);
+
+		const repository = manager.getRepository(WarehouseMovementEntity);
+
+		const sales =
+			deliveryLineIds.length === 0
+				? []
+				: await repository.find({
+						where: {
+							source_type:
+								WarehouseMovementSourceEnum.SHIPPING_LINE,
+							source_id: In(deliveryLineIds),
+							movement_type: WarehouseMovementTypeEnum.SALE,
+							warehouse_id: warehouseId,
+							variant_id: In(variantIds),
+						},
+						order: { occurred_at: 'DESC', id: 'DESC' },
+					});
+
+		const [undelivered, returned] = await Promise.all([
+			sales.length === 0
+				? []
+				: repository.find({
+						select: { reversal_of_id: true, qty: true },
+						where: {
+							reversal_of_id: In(sales.map((sale) => sale.id)),
+						},
+					}),
+			returnLineIds.length === 0
+				? []
+				: repository.find({
+						select: { grn_item_id: true, qty: true },
+						where: {
+							source_type:
+								WarehouseMovementSourceEnum.SHIPPING_LINE,
+							source_id: In(returnLineIds),
+							movement_type:
+								WarehouseMovementTypeEnum.SALE_RETURN,
+							reversal_of_id: IsNull(),
+						},
+					}),
+		]);
+
+		const saleLot = new Map(
+			sales.map((sale) => [sale.id, sale.grn_item_id]),
+		);
+
+		// What each lot can still take back for this order, and the lots in the order to fill them
+		const room = new Map<number, number>();
+		const lotsByVariant = new Map<
+			number,
+			{ grn_item_id: number; unit_cost_base: number }[]
+		>();
+
+		for (const sale of sales) {
+			if (sale.grn_item_id === null) {
+				continue;
+			}
+
+			room.set(
+				sale.grn_item_id,
+				(room.get(sale.grn_item_id) ?? 0) - sale.qty,
+			);
+
+			const lots = lotsByVariant.get(sale.variant_id) ?? [];
+
+			if (!lots.some((lot) => lot.grn_item_id === sale.grn_item_id)) {
+				lots.push({
+					grn_item_id: sale.grn_item_id,
+					unit_cost_base: sale.unit_cost_base,
+				});
+			}
+
+			lotsByVariant.set(sale.variant_id, lots);
+		}
+
+		for (const row of undelivered) {
+			const lot = row.reversal_of_id
+				? saleLot.get(row.reversal_of_id)
+				: null;
+
+			if (lot) {
+				room.set(lot, (room.get(lot) ?? 0) - row.qty);
+			}
+		}
+
+		for (const row of returned) {
+			if (row.grn_item_id !== null && room.has(row.grn_item_id)) {
+				room.set(
+					row.grn_item_id,
+					(room.get(row.grn_item_id) ?? 0) - row.qty,
+				);
+			}
+		}
+
+		const occurredAt = options.occurredAt ?? new Date();
+		const restocked: { grn_item_id: number; qty: number }[] = [];
+		const rows: WarehouseMovementEntity[] = [];
+
+		for (const line of lines) {
+			let need = Number(line.quantity);
+
+			for (const lot of lotsByVariant.get(line.variant_id) ?? []) {
+				const take =
+					Math.round(
+						Math.min(need, room.get(lot.grn_item_id) ?? 0) * 100,
+					) / 100;
+
+				if (take <= 0) {
+					continue;
+				}
+
+				room.set(
+					lot.grn_item_id,
+					(room.get(lot.grn_item_id) ?? 0) - take,
+				);
+				need = Math.round((need - take) * 100) / 100;
+
+				const base = {
+					unit_cost_base: lot.unit_cost_base,
+					source_type: WarehouseMovementSourceEnum.SHIPPING_LINE,
+					source_id: line.id,
+					occurred_at: occurredAt,
+					warehouse_id: warehouseId,
+					variant_id: line.variant_id,
+					grn_item_id: lot.grn_item_id,
+					reversal_of_id: null,
+					notes: null,
+				};
+
+				rows.push(
+					manager.create(WarehouseMovementEntity, {
+						...base,
+						movement_type: WarehouseMovementTypeEnum.SALE_RETURN,
+						qty: take,
+					}),
+				);
+
+				if (line.condition === ShippingLineConditionEnum.DAMAGED) {
+					rows.push(
+						manager.create(WarehouseMovementEntity, {
+							...base,
+							movement_type: WarehouseMovementTypeEnum.WRITE_OFF,
+							qty: -take,
+						}),
+					);
+				} else {
+					restocked.push({ grn_item_id: lot.grn_item_id, qty: take });
+				}
+
+				if (need <= 0) {
+					break;
+				}
+			}
+
+			if (need > 0) {
+				throw new CustomError(
+					409,
+					lang('warehouse-movement.error.return_not_from_warehouse', {
+						variant_id: String(line.variant_id),
+						warehouse_id: String(warehouseId),
+						remaining: String(need),
+					}),
+				);
+			}
+		}
+
+		await grnService.restoreLots(manager, restocked);
+
+		if (rows.length > 0) {
+			await manager.save(rows);
+		}
+	}
+
+	/** Every line ever written on the order's movements of one scope, deleted movements included. */
+	private async orderLineIds(
+		manager: EntityManager,
+		orderId: number,
+		scope:
+			| typeof ShippingScopeEnum.DELIVERY
+			| typeof ShippingScopeEnum.RETURN,
+	): Promise<number[]> {
+		const rows = await manager
+			.getRepository(ShippingLineEntity)
+			.createQueryBuilder('line')
+			.withDeleted()
+			.innerJoin(
+				ShippingEntity,
+				'shipping',
+				'shipping.id = line.shipping_id',
+			)
+			.where('shipping.order_id = :orderId', { orderId: orderId })
+			.andWhere('shipping.scope = :scope', { scope: scope })
+			.select('line.id', 'id')
+			.getRawMany<{ id: number }>();
+
+		return rows.map((row) => Number(row.id));
+	}
+
+	/**
 	 * @description Used in the demo seed
 	 *
 	 * Draws the stock of every delivery that left - `shipped`, `delivered` or `returned` - but has
@@ -400,6 +660,7 @@ export class WarehouseMovementService {
 				order_id: shipping.order_id,
 				scope: shipping.scope,
 				pickup_warehouse_id: shipping.pickup_warehouse_id,
+				destination_warehouse_id: shipping.destination_warehouse_id,
 			};
 			const occurredAt = shipping.shipped_at ?? shipping.created_at;
 
@@ -424,7 +685,12 @@ export class WarehouseMovementService {
 		shippingId: number,
 	): Promise<ShippingLineEntity[]> {
 		const lines = await manager.getRepository(ShippingLineEntity).find({
-			select: { id: true, variant_id: true, quantity: true },
+			select: {
+				id: true,
+				variant_id: true,
+				quantity: true,
+				condition: true,
+			},
 			where: { shipping_id: shippingId },
 			order: { id: 'ASC' },
 		});

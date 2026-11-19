@@ -19,6 +19,7 @@
 		"review",
 		"cart",
 		"order-settlement",
-		"warehouse-movement"
+		"warehouse-movement",
+		"order-return"
 	]
 }

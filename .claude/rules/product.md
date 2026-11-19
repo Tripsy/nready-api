@@ -530,7 +530,8 @@ What is still open is in TODO.md. Two things settled here because they touch the
   it was picked from, at the cost it left with - the movement records its source, so the lot is
   known. Damaged goods are the exception: returning them to stock means they get picked and sold
   again. They belong in a write-off, or in a quarantine location. Nothing detects this
-  automatically; the return has to ask.
+  automatically; the return has to ask - it does, through `shipping_line.condition`, and a damaged
+  line is written off on its lot as it is received (`shipping.md` §7). Quarantine is not built.
 
 ## 12. Category-declared attributes
 

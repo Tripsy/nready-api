@@ -1,12 +1,12 @@
 {
 	"name": "warehouse-movement",
-	"version": "1.1.0",
+	"version": "1.2.0",
 	"relativePath": "/warehouse-movement",
 	"entities": ["warehouse-movement", "stock-reservation"],
 	"depends_on": [
 		"grn@^2.0.0",
 		"order@^2.5.0",
-		"shipping@^3.7.0",
+		"shipping@^3.8.0",
 		"cart@^1.10.0",
 		"warehouse",
 		"product"

@@ -12,6 +12,7 @@ import {
 	registerOrderStockReserver,
 } from '@/features/order/order.hooks';
 import {
+	registerReturnedStockReceiver,
 	registerReturnedStockRestorer,
 	registerShippedStockMover,
 } from '@/features/shipping/shipping.hooks';
@@ -62,6 +63,10 @@ export default function registerWarehouseMovementBootstrap() {
 
 	registerReturnedStockRestorer((manager, move) =>
 		warehouseMovementService.returnDelivery(manager, move),
+	);
+
+	registerReturnedStockReceiver((manager, move) =>
+		warehouseMovementService.receiveReturn(manager, move),
 	);
 
 	registerStockAvailabilityResolver((variantIds) =>
