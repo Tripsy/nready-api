@@ -53,7 +53,7 @@ export const docs: Record<
 			notes: `Creates a cart and returns its \`token\` when the caller has none, so a first page load needs no separate call. Never cached. ${TOKEN_NOTE}. ${PRICING_NOTE}`,
 			query: {
 				client_id: {
-					type: 'number',
+					type: 'string',
 					required: false,
 					condition:
 						"prices the basket against one of the caller's own clients, so a discount scoped to that buyer shows before checkout instead of appearing for the first time on the order; ignored for a guest, and somebody else's client answers 404",
@@ -66,13 +66,13 @@ export const docs: Record<
 						'with client_id, quotes the delivery into `delivery`: the flat rate for the destination country (domestic or international, VAT included, converted into the cart currency) with the best `shipping` discount for that client applied. A self pickup is free. `delivery` stays null without client_id, for a courier with no delivery_address_id, or when nothing in the cart is physical. A rule limited by applicable_countries shows only once billing_address_id names the billing country. `pricing.total` stays the goods alone',
 				},
 				delivery_address_id: {
-					type: 'number',
+					type: 'string',
 					required: false,
 					condition:
 						"a `delivery` address filed under client_id, read for a courier only; somebody else's answers 404",
 				},
 				billing_address_id: {
-					type: 'number',
+					type: 'string',
 					required: false,
 					condition:
 						"a `billing` address filed under client_id, read with client_id only. Its country decides discounts limited by applicable_countries - on the goods and on the delivery - as checkout applies them, so the quote matches the order. Somebody else's answers 404",
@@ -94,13 +94,13 @@ export const docs: Record<
 			notes: `Adding the same variant with the same options again raises the quantity of the line already holding it rather than creating a second one; the option ids are sorted and de-duplicated first, so the order they are sent in does not matter. A different option set is a different line. This is the only write that may create a cart. ${TOKEN_NOTE}`,
 			body: {
 				variant_id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 					condition:
 						'the purchasable unit; every line names exactly one',
 				},
 				product_id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 					condition:
 						"must be the variant's own product - the pair is held by a composite foreign key, so a mismatch is refused by the database",
@@ -142,7 +142,7 @@ export const docs: Record<
 			notes: `Only ${paramsItemUpdateList.join(' and ')} may change. The options are not editable - a different option set is a different line, so the client removes and re-adds instead. ${TOKEN_NOTE}`,
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 					condition:
 						"the line id, resolved within the caller's own cart",
@@ -176,7 +176,7 @@ export const docs: Record<
 			notes: `The line is deleted outright - what a shopper took out of a basket is not a record anybody keeps. ${TOKEN_NOTE}`,
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -239,7 +239,7 @@ export const docs: Record<
 			notes: "Requires an account: the order names a `client` to invoice, and it has to be one of the caller's own - listed by `GET /public/clients`, added by `POST /public/clients`. Somebody else's client answers 404, exactly as a missing one does. Prices are resolved once more here rather than reused from whatever the shopper was last shown, and those are the figures written to the order - so this is the moment they stop moving. They are resolved against `client_id`, so a discount targeting that buyer applies now and never appears on the basket, which names no client - the order can therefore total less than the cart last quoted. An empty cart answers 400, and so does a cart with any line carrying an `issue`. The delivery choice is written as the order's first `shipping` row, leaving from the active default warehouse and carrying the client's contact details. It is priced the way `delivery` on a cart read quotes it - now with the billing country known, so a country-limited shipping discount can apply - and its `operational_cost` starts at the configured estimate - 409 when no default warehouse is configured. The cart is deleted once the order is written, in the same transaction and with its lines - the order is the record of what was bought, and the next visit starts a fresh cart with a new token",
 			body: {
 				client_id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 					condition:
 						"who the order is billed to; one of the caller's own clients",
@@ -250,13 +250,13 @@ export const docs: Record<
 					values: Object.values(ShippingMethodEnum),
 				},
 				billing_address_id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 					condition:
 						'a `billing` address filed under client_id (`GET /public/client-addresses`); copied onto the order as its own `billing_address` snapshot',
 				},
 				delivery_address_id: {
-					type: 'number',
+					type: 'string',
 					required: false,
 					condition: `a \`delivery\` address filed under client_id; required when delivery_method is ${ShippingMethodEnum.COURIER}, ignored for ${ShippingMethodEnum.SELF_PICKUP}; referenced by the shipment as \`client_address_id\` and frozen into \`address_data\` when it ships`,
 				},

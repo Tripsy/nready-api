@@ -9,6 +9,7 @@ import BrandEntity, {
 	BrandTypeEnum,
 } from '@/features/brand/brand.entity';
 import BrandContentEntity from '@/features/brand/brand-content.entity';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /** Real manufacturers - products reference these, and the names show up all over the UI. */
 const brandNames = [
@@ -46,7 +47,7 @@ export const brandSeed: SeedDefinition = {
 			withDeleted: true,
 		});
 
-		const idBySlug = new Map<string, number>(
+		const idBySlug = new Map<string, EntityId>(
 			existingBrands.map((brand) => [brand.slug, brand.id]),
 		);
 
@@ -88,7 +89,7 @@ export const brandSeed: SeedDefinition = {
 			})
 			.map((name) =>
 				contentRepository.create({
-					brand_id: idBySlug.get(toSlug(name)) as number,
+					brand_id: idBySlug.get(toSlug(name)) as EntityId,
 					language: 'en',
 					description: `${name} consumer electronics and accessories.`,
 					meta: {

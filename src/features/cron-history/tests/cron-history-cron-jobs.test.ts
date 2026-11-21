@@ -10,7 +10,9 @@ import CronHistoryEntity, {
 	CronHistoryStatusEnum,
 } from '@/features/cron-history/cron-history.entity';
 import type { CronHistoryQuery } from '@/features/cron-history/cron-history.repository';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import { createMockQuery } from '@/tests/jest-service.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 /*
  * `cron-stuck-check` discovers the jobs on disk and reads `cron_history`; both are replaced
@@ -55,7 +57,7 @@ const { default: cronStuckCheck } = await import(
 const NOW = new Date('2026-10-09T10:00:00Z');
 
 function buildRunning(
-	id: number,
+	id: EntityId,
 	label: string,
 	startedMsAgo: number,
 ): CronHistoryEntity {
@@ -82,9 +84,13 @@ describe('cron-stuck-check', () => {
 
 	it('should close only the runs past their job lease', async () => {
 		// slow-job's lease is 20 minutes; an unknown label falls back to the 5 minute floor
-		const withinLease = buildRunning(1, 'slow-job', 10 * 60 * 1000);
-		const pastLease = buildRunning(2, 'slow-job', 25 * 60 * 1000);
-		const unknownPastFloor = buildRunning(3, 'removed-job', 6 * 60 * 1000);
+		const withinLease = buildRunning(mockId(1), 'slow-job', 10 * 60 * 1000);
+		const pastLease = buildRunning(mockId(2), 'slow-job', 25 * 60 * 1000);
+		const unknownPastFloor = buildRunning(
+			mockId(3),
+			'removed-job',
+			6 * 60 * 1000,
+		);
 
 		cronHistoryQuery.all.mockResolvedValue([
 			withinLease,
@@ -98,7 +104,10 @@ describe('cron-stuck-check', () => {
 			'status',
 			CronHistoryStatusEnum.RUNNING,
 		);
-		expect(result.stuck.map((entry) => entry.id)).toEqual([2, 3]);
+		expect(result.stuck.map((entry) => entry.id)).toEqual([
+			mockId(2),
+			mockId(3),
+		]);
 
 		expect(withinLease.status).toBe(CronHistoryStatusEnum.RUNNING);
 		expect(pastLease.status).toBe(CronHistoryStatusEnum.ERROR);
@@ -110,7 +119,7 @@ describe('cron-stuck-check', () => {
 
 	it('should save nothing when no run is stuck', async () => {
 		cronHistoryQuery.all.mockResolvedValue([
-			buildRunning(1, 'slow-job', 60 * 1000),
+			buildRunning(mockId(1), 'slow-job', 60 * 1000),
 		] as never);
 
 		const result = await cronStuckCheck();

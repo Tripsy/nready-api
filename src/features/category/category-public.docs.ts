@@ -103,7 +103,7 @@ export const docs: Record<
 						default: CategoryTypeEnum.PRODUCT,
 					},
 					parent_id: {
-						type: 'number',
+						type: 'string',
 						required: false,
 						condition:
 							'addresses one sibling group; is_root wins when both are sent',

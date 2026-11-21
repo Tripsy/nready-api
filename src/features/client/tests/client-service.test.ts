@@ -22,6 +22,7 @@ import {
 	testServiceUpdate,
 	testServiceUpdateStatus,
 } from '@/tests/jest-service.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 describe('ClientService', () => {
 	beforeEach(() => {
@@ -72,14 +73,14 @@ describe('ClientService', () => {
 
 		mockClient.repository.save.mockResolvedValue(entity);
 
-		await serviceClient.create(createData, 7);
+		await serviceClient.create(createData, mockId(7));
 
 		/*
 		 * The owner reaches the row from the argument, never from the payload - without it the
 		 * client is stored unlinked and `findOwn` cannot see it again.
 		 */
 		expect(mockClient.repository.save).toHaveBeenCalledWith(
-			expect.objectContaining({ user_id: 7 }),
+			expect.objectContaining({ user_id: mockId(7) }),
 		);
 	});
 
@@ -128,10 +129,10 @@ describe('ClientService', () => {
 		userServiceMock.findById.mockResolvedValue(getUserEntityMock());
 		mockClient.repository.save.mockResolvedValue(entity);
 
-		await serviceClient.updateAccount(entity, 7);
+		await serviceClient.updateAccount(entity, mockId(7));
 
-		expect(userServiceMock.findById).toHaveBeenCalledWith(7, false);
-		expect(entity.user_id).toBe(7);
+		expect(userServiceMock.findById).toHaveBeenCalledWith(mockId(7), false);
+		expect(entity.user_id).toBe(mockId(7));
 		expect(mockClient.repository.save).toHaveBeenCalled();
 	});
 
@@ -159,9 +160,12 @@ describe('ClientService', () => {
 			entries as unknown as [ClientEntity[], number],
 		);
 
-		const result = await serviceClient.findOwn(7);
+		const result = await serviceClient.findOwn(mockId(7));
 
-		expect(mockClient.query.filterBy).toHaveBeenCalledWith('user_id', 7);
+		expect(mockClient.query.filterBy).toHaveBeenCalledWith(
+			'user_id',
+			mockId(7),
+		);
 		expect(mockClient.query.orderBy).toHaveBeenCalledWith('id', 'DESC');
 		expect(result).toBe(entries);
 	});
@@ -171,11 +175,14 @@ describe('ClientService', () => {
 
 		mockClient.query.firstOrFail.mockResolvedValue(entity);
 
-		const result = await serviceClient.findOwnById(entity.id, 7);
+		const result = await serviceClient.findOwnById(entity.id, mockId(7));
 
 		// Both filters, so somebody else's client answers the same 404 a missing one does
 		expect(mockClient.query.filterById).toHaveBeenCalledWith(entity.id);
-		expect(mockClient.query.filterBy).toHaveBeenCalledWith('user_id', 7);
+		expect(mockClient.query.filterBy).toHaveBeenCalledWith(
+			'user_id',
+			mockId(7),
+		);
 		expect(result).toBe(entity);
 	});
 });

@@ -6,12 +6,13 @@ import {
 } from '@/features/template/template.validator';
 import { createPastDate } from '@/helpers/date.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 const templateValidator = new TemplateValidator('template');
 
 export function getTemplateEntityMock(): TemplateEntity {
 	return {
-		id: 1,
+		id: mockId(1),
 		label: 'email-welcome',
 		language: 'en',
 		type: TemplateTypeEnum.EMAIL,
@@ -38,7 +39,7 @@ export const templateInputPayloads = {
 		},
 	},
 	update: {
-		id: 1,
+		id: mockId(1),
 		label: 'email-welcome',
 		language: 'en',
 		type: TemplateTypeEnum.EMAIL,

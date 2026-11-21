@@ -11,6 +11,7 @@ import {
 	isParticipationAllowed,
 	ParticipationEnum,
 } from '@/shared/registries/target-participation.registry';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 /** The columns a reporter may see of their own complaint. The moderation trail is not among them. */
@@ -50,7 +51,7 @@ export class ComplaintService {
 	 */
 	public async create(
 		data: ValidatorOutput<ComplaintValidator, 'create'>,
-		userId: number,
+		userId: EntityId,
 	): Promise<ComplaintEntity> {
 		/*
 		 * The target decides whether it still takes reports - an article whose editor turned
@@ -107,7 +108,7 @@ export class ComplaintService {
 	 */
 	private async announceFiled(
 		entityType: ComplaintEntityType,
-		entityId: number,
+		entityId: EntityId,
 	): Promise<void> {
 		eventEmitter.emit('complaintFiled', {
 			entity_type: entityType,
@@ -122,7 +123,7 @@ export class ComplaintService {
 	 */
 	public countDistinctReporters(
 		entityType: ComplaintEntityType,
-		entityId: number,
+		entityId: EntityId,
 	): Promise<number> {
 		return this.repository
 			.createQuery()
@@ -144,7 +145,7 @@ export class ComplaintService {
 	 */
 	public async updateOwn(
 		data: ValidatorOutput<ComplaintValidator, 'publicUpdate'>,
-		userId: number,
+		userId: EntityId,
 	): Promise<ComplaintEntity> {
 		const entry = await this.resolveOwn(
 			data.entity_type,
@@ -179,7 +180,7 @@ export class ComplaintService {
 	 */
 	public async deleteOwn(
 		data: ValidatorOutput<ComplaintValidator, 'publicDelete'>,
-		userId: number,
+		userId: EntityId,
 	): Promise<void> {
 		const entry = await this.resolveOwn(
 			data.entity_type,
@@ -202,7 +203,7 @@ export class ComplaintService {
 	 */
 	public getOwn(
 		data: ValidatorOutput<ComplaintValidator, 'publicRead'>,
-		userId: number,
+		userId: EntityId,
 	): Promise<ComplaintEntity | null> {
 		return this.repository
 			.createQuery()
@@ -215,8 +216,8 @@ export class ComplaintService {
 
 	private resolveOwn(
 		entityType: ComplaintEntity['entity_type'],
-		entityId: number,
-		userId: number,
+		entityId: EntityId,
+		userId: EntityId,
 	): Promise<ComplaintEntity> {
 		return this.repository
 			.createQuery()
@@ -240,7 +241,7 @@ export class ComplaintService {
 	public updateResolution(
 		entry: ComplaintEntity,
 		isResolved: boolean,
-		resolvedBy: number | null,
+		resolvedBy: EntityId | null,
 	): Promise<ComplaintEntity> {
 		entry.is_resolved = isResolved;
 		entry.resolved_at = isResolved ? createCurrentDate() : null;
@@ -256,14 +257,14 @@ export class ComplaintService {
 	 * readable to anyone allowed to see deleted records, and `restore` brings it back into the
 	 * queue.
 	 */
-	public async delete(id: number): Promise<void> {
+	public async delete(id: EntityId): Promise<void> {
 		await this.repository.createQuery().filterById(id).delete(true);
 	}
 
 	/**
 	 * @description Used in `restore` method from the dashboard controller
 	 */
-	public async restore(id: number): Promise<void> {
+	public async restore(id: EntityId): Promise<void> {
 		await this.repository.createQuery().filterById(id).restore();
 	}
 
@@ -279,7 +280,7 @@ export class ComplaintService {
 	 */
 	public async deleteByTargets(
 		entityType: ComplaintEntityType,
-		entityIds: number[],
+		entityIds: EntityId[],
 	): Promise<void> {
 		if (entityIds.length === 0) {
 			return;
@@ -304,7 +305,7 @@ export class ComplaintService {
 		}
 	}
 
-	public findById(id: number): Promise<ComplaintEntity> {
+	public findById(id: EntityId): Promise<ComplaintEntity> {
 		return this.repository.createQuery().filterById(id).firstOrFail();
 	}
 
@@ -317,7 +318,7 @@ export class ComplaintService {
 	 * than a broken one.
 	 */
 	public getEntryData(
-		id: number,
+		id: EntityId,
 		withDeleted: boolean,
 	): Promise<ComplaintEntity> {
 		return this.repository

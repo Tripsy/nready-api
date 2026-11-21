@@ -5,11 +5,12 @@ import {
 	Index,
 	JoinColumn,
 	ManyToOne,
-	PrimaryGeneratedColumn,
 	UpdateDateColumn,
 } from 'typeorm';
 import type ArticleEntity from '@/features/article/article.entity';
 import type { PageMeta } from '@/shared/abstracts/entity.abstract';
+import { EntityIdAbstract } from '@/shared/abstracts/entity-id.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export type ArticleAuthorType = {
 	name: string;
@@ -44,12 +45,9 @@ export const SLUG_UNIQUE_INDEX = 'IDX_article_content_slug_lang';
 @Index(SLUG_UNIQUE_INDEX, ['slug', 'language'], {
 	unique: true,
 })
-export default class ArticleContentEntity {
+export default class ArticleContentEntity extends EntityIdAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
-
-	@PrimaryGeneratedColumn({ type: 'int' })
-	id!: number;
 
 	@CreateDateColumn({ type: 'timestamp', nullable: false })
 	created_at!: Date;
@@ -57,8 +55,8 @@ export default class ArticleContentEntity {
 	@UpdateDateColumn({ type: 'timestamp', nullable: true })
 	updated_at!: Date | null;
 
-	@Column('int', { nullable: false })
-	article_id!: number;
+	@Column('uuid', { nullable: false })
+	article_id!: EntityId;
 
 	@Column('varchar', {
 		length: 3,

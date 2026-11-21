@@ -2,6 +2,7 @@ import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import type AddressEntity from '@/features/address/address.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import type { StatusTransitions } from '@/shared/types/common.type';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export const WarehouseStatusEnum = {
 	ACTIVE: 'active',
@@ -42,9 +43,9 @@ export default class WarehouseEntity extends EntityAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
 
-	@Column('int', { nullable: false })
+	@Column('uuid', { nullable: false })
 	@Index('IDX_warehouse_address_id')
-	address_id!: number;
+	address_id!: EntityId;
 
 	@Column('varchar', {
 		length: 16,

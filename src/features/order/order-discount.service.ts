@@ -19,11 +19,12 @@ import ProductCategoryEntity from '@/features/product/product-category.entity';
 import ProductPriceEntity from '@/features/product/product-price.entity';
 import ProductVariantEntity from '@/features/product/product-variant.entity';
 import { roundMoney } from '@/helpers/shop.helper';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /** What the resolver needs from one line of the document being composed. */
 export type OrderDiscountLine = {
-	variant_id: number;
-	product_id: number;
+	variant_id: EntityId;
+	product_id: EntityId;
 	quantity: number;
 	/** Unit price excluding VAT, in the document's currency, as the operator stated it. */
 	price: number;
@@ -59,7 +60,7 @@ export type OrderDocumentDiscount = {
 };
 
 export type OrderDiscountContext = {
-	clientId: number;
+	clientId: EntityId;
 	currency: string;
 	/** Rate to the base currency, following `order_line.exchange_rate`. */
 	exchangeRate: number;
@@ -314,7 +315,7 @@ export class OrderDiscountService {
 			}),
 		]);
 
-		const categoriesByProduct = new Map<number, number[]>();
+		const categoriesByProduct = new Map<EntityId, EntityId[]>();
 
 		for (const row of productCategories) {
 			const list = categoriesByProduct.get(row.product_id) ?? [];
@@ -323,7 +324,7 @@ export class OrderDiscountService {
 			categoriesByProduct.set(row.product_id, list);
 		}
 
-		const brandByProduct = new Map<number, number | null>();
+		const brandByProduct = new Map<EntityId, EntityId | null>();
 
 		for (const variant of variants) {
 			if (variant.product) {

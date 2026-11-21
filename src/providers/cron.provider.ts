@@ -124,7 +124,7 @@ export async function executeCron(
 ): Promise<CronHistoryEntity> {
 	return requestContext.run(
 		{
-			auth_id: 0,
+			auth_id: null,
 			performed_by: data.name,
 			source: RequestContextSourceEnum.CRON,
 			request_id: uuid(),

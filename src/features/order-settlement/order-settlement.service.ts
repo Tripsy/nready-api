@@ -23,6 +23,7 @@ import ShippingEntity, {
 import { shippingService } from '@/features/shipping/shipping.service';
 import ShippingLineEntity from '@/features/shipping/shipping-line.entity';
 import { getSystemLogger } from '@/providers/logger.provider';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * Where an order stands against what it was billed and what has arrived.
@@ -64,7 +65,7 @@ export class OrderSettlementService {
 	 * a failed handler - the write that led here has already committed.
 	 */
 	public async evaluateMany(
-		orderIds: readonly (number | null)[],
+		orderIds: readonly (EntityId | null)[],
 	): Promise<void> {
 		for (const orderId of new Set(orderIds)) {
 			if (!orderId) {
@@ -87,7 +88,7 @@ export class OrderSettlementService {
 	 *
 	 * Returns the status the order was moved to, or null when it stays where it is.
 	 */
-	public async evaluate(orderId: number): Promise<OrderStatus | null> {
+	public async evaluate(orderId: EntityId): Promise<OrderStatus | null> {
 		const order = await orderService.findById(orderId, false);
 
 		if (
@@ -148,7 +149,7 @@ export class OrderSettlementService {
 	 * its priced deliveries, gross - within the tolerance a settled document is read with. An order
 	 * that costs nothing is not "paid" by nobody paying: it waits for an operator.
 	 */
-	private async isPrepaid(orderId: number): Promise<boolean> {
+	private async isPrepaid(orderId: EntityId): Promise<boolean> {
 		const [paid, payable] = await Promise.all([
 			cashFlowService.sumCompletedForOrder(orderId),
 			shippingService.computeOrderPayable(orderId),
@@ -157,7 +158,7 @@ export class OrderSettlementService {
 		return payable > 0 && paid >= payable - PAYMENT_SETTLED_TOLERANCE;
 	}
 
-	public async getState(orderId: number): Promise<OrderSettlementState> {
+	public async getState(orderId: EntityId): Promise<OrderSettlementState> {
 		const [orderLines, billedQuantities, unbilledSources] =
 			await Promise.all([
 				orderService.getLines(orderId),
@@ -185,7 +186,7 @@ export class OrderSettlementService {
 	 * Reversals themselves are left out: they are settled by refunds, which the order does not
 	 * wait on.
 	 */
-	private async isPaid(orderId: number): Promise<boolean> {
+	private async isPaid(orderId: EntityId): Promise<boolean> {
 		const ids = await invoiceService.findIdsBySource(
 			InvoiceSourceTypeEnum.ORDER,
 			orderId,
@@ -233,7 +234,7 @@ export class OrderSettlementService {
 	 * Quantities are compared per variant, because that is what a shipping line names.
 	 */
 	private async isDelivered(
-		orderId: number,
+		orderId: EntityId,
 		orderLines: Awaited<ReturnType<typeof orderService.getLines>>,
 	): Promise<boolean> {
 		const deliveries = await dataSource.getRepository(ShippingEntity).find({
@@ -256,7 +257,7 @@ export class OrderSettlementService {
 		const bundleIds = new Set(
 			orderLines
 				.map((line) => line.parent_id)
-				.filter((parentId): parentId is number => parentId !== null),
+				.filter((parentId): parentId is EntityId => parentId !== null),
 		);
 
 		const candidates = orderLines.filter((line) => !bundleIds.has(line.id));
@@ -267,7 +268,7 @@ export class OrderSettlementService {
 
 		const physical =
 			productIds.length === 0
-				? new Set<number>()
+				? new Set<EntityId>()
 				: new Set(
 						(
 							await dataSource.getRepository(ProductEntity).find({
@@ -281,7 +282,7 @@ export class OrderSettlementService {
 						).map((product) => product.id),
 					);
 
-		const orderedByVariant = new Map<number, number>();
+		const orderedByVariant = new Map<EntityId, number>();
 
 		for (const line of candidates) {
 			if (!physical.has(line.product_id)) {
@@ -317,13 +318,10 @@ export class OrderSettlementService {
 				status: ShippingStatusEnum.DELIVERED,
 			})
 			.groupBy('line.variant_id')
-			.getRawMany<{ variant_id: number; quantity: string }>();
+			.getRawMany<{ variant_id: EntityId; quantity: string }>();
 
 		const deliveredByVariant = new Map(
-			delivered.map((row) => [
-				Number(row.variant_id),
-				Number(row.quantity),
-			]),
+			delivered.map((row) => [row.variant_id, Number(row.quantity)]),
 		);
 
 		return [...orderedByVariant].every(

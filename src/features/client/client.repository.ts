@@ -14,55 +14,48 @@ export class ClientQuery extends RepositoryAbstract<ClientEntity> {
 
 	filterByTerm(term?: string, client_type?: ClientType): this {
 		if (term) {
-			if (!Number.isNaN(Number(term)) && term.trim() !== '') {
-				this.filterBy('id', Number(term));
-			} else {
-				if (term.length >= Configuration.get('filter.termMinLength')) {
-					const companyFilters = [
-						{
-							column: 'company_name',
-							value: term,
-							operator: 'ILIKE',
-						},
-						{
-							column: 'company_cui',
-							value: term,
-							operator: 'ILIKE',
-						},
-						{
-							column: 'company_reg_com',
-							value: term,
-							operator: 'ILIKE',
-						},
-					];
+			if (term.length >= Configuration.get('filter.termMinLength')) {
+				const companyFilters = [
+					{
+						column: 'company_name',
+						value: term,
+						operator: 'ILIKE',
+					},
+					{
+						column: 'company_cui',
+						value: term,
+						operator: 'ILIKE',
+					},
+					{
+						column: 'company_reg_com',
+						value: term,
+						operator: 'ILIKE',
+					},
+				];
 
-					const personFilters = [
-						{
-							column: 'person_name',
-							value: term,
-							operator: 'ILIKE',
-						},
-						{
-							column: 'person_identification_number',
-							value: term,
-							operator: 'ILIKE',
-						},
-					];
+				const personFilters = [
+					{
+						column: 'person_name',
+						value: term,
+						operator: 'ILIKE',
+					},
+					{
+						column: 'person_identification_number',
+						value: term,
+						operator: 'ILIKE',
+					},
+				];
 
-					switch (client_type) {
-						case ClientTypeEnum.COMPANY:
-							this.filterAny(companyFilters);
-							break;
-						case ClientTypeEnum.PERSON:
-							this.filterAny(personFilters);
-							break;
-						default:
-							this.filterAny([
-								...companyFilters,
-								...personFilters,
-							]);
-							break;
-					}
+				switch (client_type) {
+					case ClientTypeEnum.COMPANY:
+						this.filterAny(companyFilters);
+						break;
+					case ClientTypeEnum.PERSON:
+						this.filterAny(personFilters);
+						break;
+					default:
+						this.filterAny([...companyFilters, ...personFilters]);
+						break;
 				}
 			}
 		}

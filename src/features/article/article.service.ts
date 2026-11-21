@@ -47,6 +47,7 @@ import {
 	type TargetImage,
 	TargetImageTypeEnum,
 } from '@/shared/registries/target-image.registry';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import { LogHistoryActionEnum } from '@/shared/types/log-history.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
@@ -145,7 +146,7 @@ export class ArticleService {
 	 */
 	public async create(
 		data: ValidatorOutput<ArticleValidator, 'create'>,
-		authorId: number | null,
+		authorId: EntityId | null,
 	): Promise<ArticleEntity> {
 		const conflict = await ArticleContentRepository.findConflictingSlug(
 			data.contents,
@@ -184,7 +185,7 @@ export class ArticleService {
 	 * @description Update any data
 	 */
 	public async update(
-		data: DeepPartial<ArticleEntity> & { id: number },
+		data: DeepPartial<ArticleEntity> & { id: EntityId },
 	): Promise<ArticleEntity> {
 		const saved = await this.repository.save(data);
 
@@ -392,7 +393,7 @@ export class ArticleService {
 	 */
 	private async saveVisibilityRule(
 		manager: EntityManager,
-		article_id: number,
+		article_id: EntityId,
 		rule: ArticleVisibilityRuleType,
 	): Promise<void> {
 		const repository = manager.getRepository(ArticleVisibilityRuleEntity);
@@ -555,8 +556,8 @@ export class ArticleService {
 	 * that recognized only the direct links would reject its own list as incomplete.
 	 */
 	private async resolveCategorySubtree(
-		category_id: number,
-	): Promise<number[]> {
+		category_id: EntityId,
+	): Promise<EntityId[]> {
 		const treeRepository =
 			RepositoryAbstract.getTreeRepository(CategoryEntity);
 
@@ -569,15 +570,18 @@ export class ArticleService {
 		return descendants.map((descendant) => descendant.id);
 	}
 
-	public async delete(id: number) {
+	public async delete(id: EntityId) {
 		await this.repository.createQuery().filterById(id).delete();
 	}
 
-	public async restore(id: number) {
+	public async restore(id: EntityId) {
 		await this.repository.createQuery().filterById(id).restore();
 	}
 
-	public findById(id: number, withDeleted: boolean): Promise<ArticleEntity> {
+	public findById(
+		id: EntityId,
+		withDeleted: boolean,
+	): Promise<ArticleEntity> {
 		return this.repository
 			.createQuery()
 			.filterById(id)
@@ -618,7 +622,7 @@ export class ArticleService {
 	 * @description Used in `read` method from controller; this will return a custom shape
 	 */
 	public async getEntryData(data: {
-		id: number;
+		id: EntityId;
 		language?: string;
 		withDeleted: boolean;
 	}) {
@@ -772,7 +776,7 @@ export class ArticleService {
 	 * edit already runs drops it along with everything else about the row. A `null` is not
 	 * cached - `CacheProvider.set` skips it - so a missing article costs one lookup per attempt.
 	 */
-	public async getSettings(id: number): Promise<ArticleSettings | null> {
+	public async getSettings(id: EntityId): Promise<ArticleSettings | null> {
 		const results = await cacheProvider.get(
 			cacheProvider.buildKey(
 				ArticleEntity.NAME,
@@ -831,7 +835,7 @@ export class ArticleService {
 	 * bootstrap does not run - every article answers `null`. The key stays present either way: a
 	 * client must not have to tell "no image" apart from "no image feature".
 	 */
-	private async attachCoverImages<T extends { id: number }>(
+	private async attachCoverImages<T extends { id: EntityId }>(
 		entries: T[],
 	): Promise<WithCoverImage<T>[]> {
 		if (entries.length === 0) {
@@ -859,7 +863,7 @@ export class ArticleService {
 	 * visibility out of the cached value - both decide access and both move without the
 	 * payload changing.
 	 */
-	public async getPublicEntryById(id: number, language: string) {
+	public async getPublicEntryById(id: EntityId, language: string) {
 		const entry = await this.repository
 			.createQuery()
 			.select([

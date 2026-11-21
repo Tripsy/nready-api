@@ -17,6 +17,7 @@ import {
 	authorizedSpy,
 	notAuthorizedSpy,
 } from '@/tests/mocks/policies.mock';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 let app: Express;
 
@@ -68,8 +69,8 @@ describe(`${controller} - create`, () => {
 		adminSpy(permissionPolicy);
 
 		jest.spyOn(userPermissionService, 'create').mockResolvedValue([
-			{ permission_id: 1, message: 'created' },
-			{ permission_id: 2, message: 'created' },
+			{ permission_id: mockId(1), message: 'created' },
+			{ permission_id: mockId(2), message: 'created' },
 		]);
 
 		const response = await request(app)

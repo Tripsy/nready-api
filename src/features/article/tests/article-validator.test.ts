@@ -2,6 +2,7 @@ import { jest } from '@jest/globals';
 import { articleInputPayloads } from '@/features/article/article.mock';
 import { ArticleValidator } from '@/features/article/article.validator';
 import { withDebugValidated } from '@/tests/jest-validator.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 beforeEach(() => {
 	jest.restoreAllMocks();
@@ -65,14 +66,14 @@ describe(validator, () => {
 	});
 
 	it('update() rejects a payload carrying only the id', () => {
-		const validated = articleValidator.update.safeParse({ id: 1 });
+		const validated = articleValidator.update.safeParse({ id: mockId(1) });
 
 		expect(validated.success).toBe(false);
 	});
 
 	it('update() ignores source_mode - it is create-only', () => {
 		const validated = articleValidator.update.safeParse({
-			id: 1,
+			id: mockId(1),
 			source_mode: 'parsed',
 		});
 

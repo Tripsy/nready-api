@@ -11,6 +11,7 @@ import {
 	cleanEntityCache,
 	cleanEntityCacheMany,
 } from '@/shared/abstracts/service.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * Keeps the payment request a checkout raised in step with the order it was raised for.
@@ -33,7 +34,7 @@ import {
  */
 export default function registerCartBootstrap() {
 	registerOrderPaymentSync(
-		async (manager: EntityManager, orderId: number) => {
+		async (manager: EntityManager, orderId: EntityId) => {
 			const payable = await shippingService.computeOrderPayable(
 				orderId,
 				manager,
@@ -52,7 +53,7 @@ export default function registerCartBootstrap() {
 	);
 
 	registerOrderPaymentCancel(
-		async (manager: EntityManager, orderId: number) => {
+		async (manager: EntityManager, orderId: EntityId) => {
 			const { hasProcessed, canceledIds } =
 				await cashFlowService.cancelPendingForOrder(manager, orderId);
 
@@ -70,7 +71,7 @@ export default function registerCartBootstrap() {
 		},
 	);
 
-	registerOrdersAwaitingPaymentResolver((orderIds: readonly number[]) =>
+	registerOrdersAwaitingPaymentResolver((orderIds: readonly EntityId[]) =>
 		cashFlowService.findOrdersWithOpenPayment(orderIds),
 	);
 }

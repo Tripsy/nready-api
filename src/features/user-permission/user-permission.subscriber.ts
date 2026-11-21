@@ -7,6 +7,7 @@ import {
 } from 'typeorm';
 import UserPermissionEntity from '@/features/user-permission/user-permission.entity';
 import SubscriberAbstract from '@/shared/abstracts/subscriber.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import { LogHistoryActionEnum } from '@/shared/types/log-history.type';
 
 /**
@@ -23,13 +24,13 @@ export class UserPermissionSubscriber extends SubscriberAbstract<UserPermissionE
 	protected readonly Entity = UserPermissionEntity;
 
 	beforeRemove(event: RemoveEvent<UserPermissionEntity>) {
-		const id: number = event.entity?.id || event.databaseEntity.id;
+		const id: EntityId = event.entity?.id || event.databaseEntity.id;
 
 		this.logHistory(id, LogHistoryActionEnum.DELETED);
 	}
 
 	afterSoftRemove(event: SoftRemoveEvent<UserPermissionEntity>) {
-		const id: number = event.entity?.id || event.databaseEntity.id;
+		const id: EntityId = event.entity?.id || event.databaseEntity.id;
 
 		this.logHistory(id, LogHistoryActionEnum.REMOVED);
 	}
@@ -42,7 +43,7 @@ export class UserPermissionSubscriber extends SubscriberAbstract<UserPermissionE
 
 	afterUpdate(event: UpdateEvent<UserPermissionEntity>) {
 		if (this.isRestore(event)) {
-			const id: number = event.entity?.id || event.databaseEntity.id;
+			const id: EntityId = event.entity?.id || event.databaseEntity.id;
 
 			this.logHistory(id, LogHistoryActionEnum.RESTORED);
 		}

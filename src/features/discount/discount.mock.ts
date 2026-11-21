@@ -14,12 +14,13 @@ import {
 	formatDate,
 } from '@/helpers/date.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 const discountValidator = new DiscountValidator('discount');
 
 export function getDiscountEntityMock(): DiscountEntity {
 	return {
-		id: 1,
+		id: mockId(1),
 		label: 'Black Friday Discount',
 		scope: DiscountScopeEnum.CATEGORY,
 		reason: DiscountReasonEnum.BIRTHDAY_DISCOUNT,
@@ -56,7 +57,7 @@ export const discountInputPayloads = {
 		notes: 'Applied to all orders during January',
 	},
 	update: {
-		id: 1,
+		id: mockId(1),
 		label: 'Black Friday Discount',
 		scope: DiscountScopeEnum.ORDER,
 		reason: DiscountReasonEnum.BIRTHDAY_DISCOUNT,

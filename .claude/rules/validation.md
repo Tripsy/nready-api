@@ -107,9 +107,9 @@ When the route contributes several params (`/:id/status/:status`) spread both ob
 
 ## 6. Route-Level Param Middleware
 
-For a cheap pre-check before a request even reaches the controller/validator (e.g. rejecting a non-numeric `:id` early), use the route middleware in `validate-params.middleware.ts`:
+For a cheap pre-check before a request even reaches the controller/validator (e.g. rejecting a malformed `:id` early), use the route middleware in `validate-params.middleware.ts`:
 
-- `validateParamsWhenId('id', ...)` - rejects non-positive-integer path params.
+- `validateParamsWhenId('id', ...)` - rejects path params that are not a UUID.
 - `validateParamsWhenEnum({ status: Object.values(StatusEnum) })` - rejects path params outside an allowed value set.
 
 These are a fast-fail layer only - they don't replace the full `*.validator.ts` schema validation in the controller.

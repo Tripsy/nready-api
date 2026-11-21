@@ -22,6 +22,7 @@ import {
 } from '@/features/vat-rate/vat-rate.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import type { StatusTransitions } from '@/shared/types/common.type';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export const ProductWorkflowEnum = {
 	DRAFT: 'draft', // Initial creation
@@ -268,9 +269,9 @@ export default class ProductEntity extends EntityAbstract {
 
 	// Nullable: plenty of catalogs sell unbranded items - a restaurant dish has no manufacturer,
 	// and inventing a placeholder brand row to satisfy the key is worse than an absent one
-	@Column('int', { nullable: true })
+	@Column('uuid', { nullable: true })
 	@Index('IDX_product_brand_id')
-	brand_id!: number | null;
+	brand_id!: EntityId | null;
 
 	// RELATIONS
 	// RESTRICT even though the column is nullable: an absent brand is a legitimate state, silently

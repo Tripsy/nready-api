@@ -18,6 +18,7 @@ import { CURRENCY_CODE_CHARS, roundMoney } from '@/helpers/shop.helper';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import { numericTransformer } from '@/shared/transformers/numeric.transformer';
 import type { StatusTransitions } from '@/shared/types/common.type';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export const CashFlowDirectionEnum = {
 	IN: 'in', // money received relative to company
@@ -329,12 +330,12 @@ export default class CashFlowEntity extends EntityAbstract {
 	@Index('IDX_cash_flow_external_reference')
 	external_reference!: string | null;
 
-	@Column('int', {
+	@Column('uuid', {
 		nullable: true,
 		comment: 'Parent payment ID (e.g.: for refunds)',
 	})
 	@Index('IDX_cash_flow_parent_id')
-	parent_id!: number | null;
+	parent_id!: EntityId | null;
 
 	// OTHER
 	@Column('text', { nullable: true })

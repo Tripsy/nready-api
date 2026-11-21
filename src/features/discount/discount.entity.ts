@@ -1,6 +1,7 @@
 import { Column, Entity, Index } from 'typeorm';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import { numericTransformer } from '@/shared/transformers/numeric.transformer';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * What a discount attaches to, which decides the link table its targets live in:
@@ -109,7 +110,7 @@ export type DiscountSnapshot = {
 	 * to a reader without the catalog behind it: the rest of the snapshot is what makes the
 	 * document readable on its own.
 	 */
-	discount_id?: number;
+	discount_id?: EntityId;
 	/**
 	 * Set when an operator typed this discount on a back-office document rather than a catalog
 	 * rule granting it - such a snapshot carries no `discount_id`. `type` and `value` are what the

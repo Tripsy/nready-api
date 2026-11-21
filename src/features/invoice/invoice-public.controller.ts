@@ -42,7 +42,7 @@ class InvoicePublicController extends BaseController {
 
 		await orderService.findOwnById(
 			data.order_id,
-			this.policy.getId(res.locals.auth) ?? 0,
+			this.policy.requireId(res.locals.auth),
 		);
 
 		const [invoices, payments] = await Promise.all([
@@ -73,7 +73,7 @@ class InvoicePublicController extends BaseController {
 
 		await orderService.findOwnById(
 			data.order_id,
-			this.policy.getId(res.locals.auth) ?? 0,
+			this.policy.requireId(res.locals.auth),
 		);
 
 		res.locals.output.data(

@@ -70,6 +70,10 @@ Every tested feature has a `<feature>.mock.ts` exporting:
 - `<feature>InputPayloads` - an object keyed by validator action (`create`, `update`, `find`, ...) with **raw request-shaped** payloads (what a client would send).
 - `<feature>OutputPayloads` - the same actions, but **validated/service-shaped** payloads (what the validator would produce, used to drive service-layer tests directly without going through validation).
 
+Ids in fixtures come from `mockId(n)` (`@/tests/mocks/uuid.mock`): the same `n` always gives the
+same UUID, and a larger `n` sorts later, as a newer row would. Never a bare number - the validators
+and `validateParamsWhenId` reject it, so the test fails for the wrong reason.
+
 ## 4. Controller Tests (Integration)
 
 Boot the real app once per file and hit it with `supertest`; only service and policy methods are mocked - routing, middleware, validation, and the response envelope all run for real.

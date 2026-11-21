@@ -5,12 +5,14 @@ import type { z } from 'zod';
 import { createApp } from '@/app';
 import { cacheProvider } from '@/providers/cache.provider';
 import type PolicyAbstract from '@/shared/abstracts/policy.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorInput, ValidatorOutput } from '@/shared/types/mock.type';
 import {
 	authorizedSpy,
 	notAuthenticatedSpy,
 	notAuthorizedSpy,
 } from '@/tests/mocks/policies.mock';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 let app: Express;
 
@@ -62,7 +64,7 @@ type ControllerCreateType<E, V extends CreateValidator> = {
 	controller: string;
 	route: string;
 	entityMock: E & {
-		id: number;
+		id: EntityId;
 	};
 	policy: PolicyAbstract;
 	service: CreateService<E, V>;
@@ -119,7 +121,7 @@ type ControllerReadType<E> = {
 	controller: string;
 	route: string;
 	entityMock: E & {
-		id: number;
+		id: EntityId;
 	};
 	policy: PolicyAbstract;
 };
@@ -179,7 +181,7 @@ type UpdateService<E, V extends UpdateValidator> = {
 	// Update actions load the entity before mutating it, so the builder has to stub
 	// `findById` too - otherwise it reaches the real repository, and the data source is
 	// never initialized under `test` ("No metadata for <Entity> was found").
-	findById(id: number, withDeleted?: boolean): Promise<E>;
+	findById(id: EntityId, withDeleted?: boolean): Promise<E>;
 	updateData(
 		entry: E,
 		data: ValidatorOutput<V, 'update'>,
@@ -190,7 +192,7 @@ type ControllerUpdateType<E, V extends UpdateValidator> = {
 	controller: string;
 	route: string;
 	entityMock: E & {
-		id: number;
+		id: EntityId;
 	};
 	policy: PolicyAbstract;
 	service: UpdateService<E, V>;
@@ -247,7 +249,7 @@ export function testControllerUpdate<E, V extends UpdateValidator>(
 }
 
 type UpdateWithContentService<E, V extends UpdateValidator> = {
-	findById(id: number, withDeleted?: boolean): Promise<E>;
+	findById(id: EntityId, withDeleted?: boolean): Promise<E>;
 	updateDataWithContent(
 		entry: E,
 		data: ValidatorOutput<V, 'update'>,
@@ -258,7 +260,7 @@ type ControllerUpdateWithContentType<E, V extends UpdateValidator> = {
 	controller: string;
 	route: string;
 	entityMock: E & {
-		id: number;
+		id: EntityId;
 	};
 	policy: PolicyAbstract;
 	service: UpdateWithContentService<E, V>;
@@ -347,7 +349,7 @@ export function testControllerDeleteMultiple<V extends DeleteValidator>(
 ) {
 	describe(`${config.controller} - delete`, () => {
 		const testData = {
-			ids: [3, 4],
+			ids: [mockId(3), mockId(4)],
 		};
 
 		it('should fail if not authenticated', async () => {
@@ -387,7 +389,7 @@ export function testControllerDeleteMultiple<V extends DeleteValidator>(
 }
 
 type DeleteSingleService = {
-	delete(id: number): Promise<void>;
+	delete(id: EntityId): Promise<void>;
 };
 
 type ControllerDeleteSingleType = {
@@ -436,7 +438,7 @@ export function testControllerDeleteSingle(config: ControllerDeleteSingleType) {
 
 // Controller test - Restore
 type RestoreSingleService = {
-	restore(id: number): Promise<void>;
+	restore(id: EntityId): Promise<void>;
 };
 
 type ControllerRestoreSingleType = {
@@ -501,7 +503,7 @@ type ControllerFindType<E, V extends FindValidator> = {
 	controller: string;
 	route: string;
 	entityMock: E & {
-		id: number;
+		id: EntityId;
 	};
 	policy: PolicyAbstract;
 	service: FindService<E, V>;
@@ -550,7 +552,7 @@ export function testControllerFind<E, V extends FindValidator>(
 
 // Controller test - Update
 type StatusUpdateService<E> = {
-	findById(id: number, withDeleted?: boolean): Promise<E>;
+	findById(id: EntityId, withDeleted?: boolean): Promise<E>;
 	updateStatus(entry: E, status: string): Promise<void>;
 };
 
@@ -558,7 +560,7 @@ type ControllerStatusUpdateType<E> = {
 	controller: string;
 	route: string;
 	entityMock: E & {
-		id: number;
+		id: EntityId;
 	};
 	policy: PolicyAbstract;
 	service: StatusUpdateService<E>;

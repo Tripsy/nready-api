@@ -13,6 +13,7 @@ import { ReviewValidator } from '@/features/review/review.validator';
 import asyncHandler from '@/helpers/async.handler';
 import { type CacheProvider, cacheProvider } from '@/providers/cache.provider';
 import { BaseController } from '@/shared/abstracts/controller.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * The storefront side. No permission is checked - reviewing is what a buyer does - but an account
@@ -32,15 +33,9 @@ class ReviewPublicController extends BaseController {
 		super();
 	}
 
-	/**
-	 * Who the request counts as. `requiredAuth` has already rejected a caller with no account, so
-	 * the id is present - the `?? 0` never fires and only satisfies the optional return type of
-	 * `getId`.
-	 */
-	private resolveAuthor(res: Response): number {
-		this.policy.requiredAuth(res.locals.auth);
-
-		return this.policy.getId(res.locals.auth) ?? 0;
+	/** Who the request counts as - 401 for a visitor. */
+	private resolveAuthor(res: Response): EntityId {
+		return this.policy.requireId(res.locals.auth);
 	}
 
 	public create = asyncHandler(async (req: Request, res: Response) => {

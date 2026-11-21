@@ -6,11 +6,12 @@ import {
 	Index,
 	JoinColumn,
 	ManyToOne,
-	PrimaryGeneratedColumn,
 } from 'typeorm';
 import type OrderEntity from '@/features/order/order.entity';
 import type ProductVariantEntity from '@/features/product/product-variant.entity';
+import { EntityIdAbstract } from '@/shared/abstracts/entity-id.abstract';
 import { numericTransformer } from '@/shared/transformers/numeric.transformer';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 const ENTITY_TABLE_NAME = 'stock_reservation';
 
@@ -44,23 +45,20 @@ const ENTITY_TABLE_NAME = 'stock_reservation';
 	unique: true,
 })
 @Check(`(quantity > 0)`)
-export default class StockReservationEntity {
+export default class StockReservationEntity extends EntityIdAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = false;
-
-	@PrimaryGeneratedColumn({ type: 'int' })
-	id!: number;
 
 	@CreateDateColumn({ type: 'timestamp', nullable: false })
 	created_at!: Date;
 
-	@Column('int', { nullable: false })
-	order_id!: number;
+	@Column('uuid', { nullable: false })
+	order_id!: EntityId;
 
 	// The availability sum groups by it
-	@Column('int', { nullable: false })
+	@Column('uuid', { nullable: false })
 	@Index('IDX_stock_reservation_variant_id')
-	variant_id!: number;
+	variant_id!: EntityId;
 
 	// `numeric` for the reason `order_line.quantity` is: a weighed product sells 0.75 kg
 	@Column('numeric', {

@@ -4,7 +4,6 @@ import {
 	CreateDateColumn,
 	Entity,
 	Index,
-	PrimaryGeneratedColumn,
 	UpdateDateColumn,
 } from 'typeorm';
 import { Configuration } from '@/config/settings.config';
@@ -13,6 +12,7 @@ import {
 	CURRENCY_CODE_PATTERN,
 	normalizeCurrency,
 } from '@/helpers/shop.helper';
+import { EntityIdAbstract } from '@/shared/abstracts/entity-id.abstract';
 import { numericTransformer } from '@/shared/transformers/numeric.transformer';
 
 /**
@@ -91,12 +91,9 @@ const ENTITY_TABLE_NAME = 'exchange_rate';
 	OR
 	(source = 'manual' AND provider IS NULL)
 `)
-export default class ExchangeRateEntity {
+export default class ExchangeRateEntity extends EntityIdAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
-
-	@PrimaryGeneratedColumn({ type: 'int' })
-	id!: number;
 
 	@CreateDateColumn({ type: 'timestamp', nullable: false })
 	created_at!: Date;

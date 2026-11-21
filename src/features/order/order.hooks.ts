@@ -1,5 +1,6 @@
 import type { EntityManager } from 'typeorm';
 import { createNotification, createQuery } from '@/helpers/hook.helper';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * What `order` announces about its own rows, and what it asks before and while rewriting one -
@@ -13,7 +14,7 @@ import { createNotification, createQuery } from '@/helpers/hook.helper';
 
 /** A checkout has just written an order, its shipping and the payment request for it. */
 export type OrderPlacedPayload = {
-	order_id: number;
+	order_id: EntityId;
 };
 
 /**
@@ -23,7 +24,7 @@ export type OrderPlacedPayload = {
  * a checkout nor the back office raises its documents before this.
  */
 export type OrderConfirmedPayload = {
-	order_id: number;
+	order_id: EntityId;
 };
 
 const orderPlaced = createNotification<OrderPlacedPayload>(
@@ -47,7 +48,7 @@ const orderFulfillmentReleased = createNotification<OrderConfirmedPayload>(
  * Unlike the notifications this one propagates a failure: it gates a write the caller has not
  * made yet, and answering `false` on an error would let lines be rewritten under an issued invoice.
  */
-const orderInvoiced = createQuery<[orderId: number], boolean>(() => false);
+const orderInvoiced = createQuery<[orderId: EntityId], boolean>(() => false);
 
 export const registerOrderPlacedHandler = orderPlaced.register;
 export const notifyOrderPlaced = orderPlaced.notify;
@@ -76,7 +77,9 @@ export const isOrderInvoiced = orderInvoiced.ask;
  * Propagates for the reason `orderInvoiced` does: it gates a write, and answering `false` on an
  * error would move an order away from the client its documents and money belong to.
  */
-const orderClientLocked = createQuery<[orderId: number], boolean>(() => false);
+const orderClientLocked = createQuery<[orderId: EntityId], boolean>(
+	() => false,
+);
 
 export const registerOrderClientLockedResolver = orderClientLocked.register;
 
@@ -99,7 +102,7 @@ export type AfterCommit = () => Promise<void>;
  * failure rolls the line edit back rather than leaving the request asking for the old total.
  */
 const orderPaymentSync = createQuery<
-	[manager: EntityManager, orderId: number],
+	[manager: EntityManager, orderId: EntityId],
 	AfterCommit | null
 >(() => null);
 
@@ -128,7 +131,7 @@ export type OrderPaymentCancelResult = {
  * arrives after the commit finds them canceled rather than capturable.
  */
 const orderPaymentCancel = createQuery<
-	[manager: EntityManager, orderId: number],
+	[manager: EntityManager, orderId: EntityId],
 	OrderPaymentCancelResult
 >(() => ({ hasProcessed: false, after: null }));
 
@@ -142,7 +145,7 @@ export const cancelOrderPayment = orderPaymentCancel.ask;
 
 /** An order has just been canceled, whoever canceled it - its buyer or an operator. */
 export type OrderCanceledPayload = {
-	order_id: number;
+	order_id: EntityId;
 };
 
 const orderCanceled = createNotification<OrderCanceledPayload>(
@@ -163,7 +166,7 @@ export const notifyOrderCanceled = orderCanceled.notify;
  * delivery never lists what the order no longer holds. Propagates for the same reason.
  */
 const orderDeliverySync = createQuery<
-	[manager: EntityManager, orderId: number],
+	[manager: EntityManager, orderId: EntityId],
 	AfterCommit | null
 >(() => null);
 
@@ -180,8 +183,8 @@ export const syncOrderDelivery = orderDeliverySync.ask;
  * says so, where a quiet `false` would show an order as pending while its buyer is mid-payment.
  */
 const ordersAwaitingPayment = createQuery<
-	[orderIds: readonly number[]],
-	Set<number>
+	[orderIds: readonly EntityId[]],
+	Set<EntityId>
 >(() => new Set());
 
 export const registerOrdersAwaitingPaymentResolver =
@@ -196,7 +199,7 @@ export const findOrdersAwaitingPayment = ordersAwaitingPayment.ask;
 
 /** How much of one variant an order's physical lines ask for - bundle headers already resolved. */
 export type StockDemand = {
-	variant_id: number;
+	variant_id: EntityId;
 	quantity: number;
 };
 
@@ -208,7 +211,7 @@ export type StockDemand = {
  * back with it.
  */
 const orderStockReserver = createQuery<
-	[manager: EntityManager, orderId: number, demands: StockDemand[]],
+	[manager: EntityManager, orderId: EntityId, demands: StockDemand[]],
 	void
 >(() => undefined);
 
@@ -222,7 +225,7 @@ export const reserveOrderStock = orderStockReserver.ask;
 
 /* Asked inside the transaction that cancels an order, so the units are released with it */
 const orderStockReleaser = createQuery<
-	[manager: EntityManager, orderId: number],
+	[manager: EntityManager, orderId: EntityId],
 	void
 >(() => undefined);
 

@@ -3,14 +3,18 @@ import {
 	type FulfillmentLine,
 	planDeliveries,
 } from '@/features/cart/cart-fulfillment';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
-const DEFAULT_SITE = 1;
+const DEFAULT_SITE = mockId(1);
 
 const line = (variantId: number, quantity = 1): FulfillmentLine => ({
-	variant_id: variantId,
-	product_id: variantId * 10,
+	variant_id: mockId(variantId),
+	product_id: mockId(variantId * 10),
 	quantity: quantity,
 });
+
+/** The fixture number a `mockId` was built from, so expectations stay readable. */
+const fixtureNumber = (id: string): number => Number(id.slice(-12));
 
 /** `{ variant: { site: stock } }` as the resolver's nested maps. */
 const stock = (
@@ -18,10 +22,10 @@ const stock = (
 ): WarehouseAvailability =>
 	new Map(
 		Object.entries(table).map(([variantId, sites]) => [
-			Number(variantId),
+			mockId(Number(variantId)),
 			new Map(
 				Object.entries(sites).map(([siteId, quantity]) => [
-					Number(siteId),
+					mockId(Number(siteId)),
 					quantity,
 				]),
 			),
@@ -34,7 +38,7 @@ const summarize = (groups: ReturnType<typeof planDeliveries>) =>
 		warehouse_id: group.warehouse_id,
 		lines: Object.fromEntries(
 			group.lines.map((groupLine) => [
-				groupLine.variant_id,
+				fixtureNumber(groupLine.variant_id),
 				groupLine.quantity,
 			]),
 		),
@@ -49,7 +53,7 @@ describe('planDeliveries', () => {
 		);
 
 		expect(summarize(groups)).toEqual([
-			{ warehouse_id: 1, lines: { 1: 2, 2: 1 } },
+			{ warehouse_id: mockId(1), lines: { 1: 2, 2: 1 } },
 		]);
 	});
 
@@ -66,7 +70,7 @@ describe('planDeliveries', () => {
 
 		// Sites 2 and 3 both qualify; 3 holds more of the order (5+5+9 against 5+5+2)
 		expect(summarize(groups)).toEqual([
-			{ warehouse_id: 3, lines: { 1: 1, 2: 1, 3: 1 } },
+			{ warehouse_id: mockId(3), lines: { 1: 1, 2: 1, 3: 1 } },
 		]);
 	});
 
@@ -83,8 +87,8 @@ describe('planDeliveries', () => {
 		);
 
 		expect(summarize(groups)).toEqual([
-			{ warehouse_id: 1, lines: { 1: 1, 2: 1 } },
-			{ warehouse_id: 3, lines: { 3: 2 } },
+			{ warehouse_id: mockId(1), lines: { 1: 1, 2: 1 } },
+			{ warehouse_id: mockId(3), lines: { 3: 2 } },
 		]);
 	});
 
@@ -107,7 +111,8 @@ describe('planDeliveries', () => {
 		);
 
 		expect(groups.map((group) => group.warehouse_id).sort()).toEqual([
-			2, 3,
+			mockId(2),
+			mockId(3),
 		]);
 	});
 
@@ -119,8 +124,8 @@ describe('planDeliveries', () => {
 		);
 
 		expect(summarize(groups)).toEqual([
-			{ warehouse_id: 1, lines: { 1: 2 } },
-			{ warehouse_id: 2, lines: { 1: 8 } },
+			{ warehouse_id: mockId(1), lines: { 1: 2 } },
+			{ warehouse_id: mockId(2), lines: { 1: 8 } },
 		]);
 	});
 
@@ -136,8 +141,8 @@ describe('planDeliveries', () => {
 		);
 
 		expect(summarize(groups)).toEqual([
-			{ warehouse_id: 1, lines: { 2: 1 } },
-			{ warehouse_id: 3, lines: { 1: 4 } },
+			{ warehouse_id: mockId(1), lines: { 2: 1 } },
+			{ warehouse_id: mockId(3), lines: { 1: 4 } },
 		]);
 	});
 
@@ -149,8 +154,8 @@ describe('planDeliveries', () => {
 		);
 
 		expect(summarize(groups)).toEqual([
-			{ warehouse_id: 1, lines: { 1: 1 } },
-			{ warehouse_id: 2, lines: { 2: 5 } },
+			{ warehouse_id: mockId(1), lines: { 1: 1 } },
+			{ warehouse_id: mockId(2), lines: { 2: 5 } },
 		]);
 	});
 
@@ -162,7 +167,7 @@ describe('planDeliveries', () => {
 		);
 
 		expect(summarize(groups)).toEqual([
-			{ warehouse_id: 2, lines: { 1: 1, 2: 1, 3: 1 } },
+			{ warehouse_id: mockId(2), lines: { 1: 1, 2: 1, 3: 1 } },
 		]);
 	});
 
@@ -182,7 +187,7 @@ describe('planDeliveries', () => {
 		);
 
 		expect(summarize(groups)).toEqual([
-			{ warehouse_id: 2, lines: { 1: 1 } },
+			{ warehouse_id: mockId(2), lines: { 1: 1 } },
 		]);
 	});
 
@@ -193,7 +198,10 @@ describe('planDeliveries', () => {
 			DEFAULT_SITE,
 		);
 
-		expect(withDefault.map((group) => group.warehouse_id)).toEqual([1, 2]);
+		expect(withDefault.map((group) => group.warehouse_id)).toEqual([
+			mockId(1),
+			mockId(2),
+		]);
 
 		const withoutDefault = planDeliveries(
 			[line(1), line(2), line(3)],
@@ -202,7 +210,8 @@ describe('planDeliveries', () => {
 		);
 
 		expect(withoutDefault.map((group) => group.warehouse_id)).toEqual([
-			3, 2,
+			mockId(3),
+			mockId(2),
 		]);
 	});
 });

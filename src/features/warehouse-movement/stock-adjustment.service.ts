@@ -23,6 +23,7 @@ import WarehouseMovementEntity, {
 } from '@/features/warehouse-movement/warehouse-movement.entity';
 import { roundMoney } from '@/helpers/shop.helper';
 import { assertValidStatusTransition } from '@/shared/abstracts/service.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 const ENTRY_COLUMNS = [
@@ -58,7 +59,7 @@ const LOSS_REASONS: ReadonlySet<StockAdjustmentReason> = new Set([
 
 /** Units moved in or out of one lot, signed - positive added, negative removed. */
 export type LotTopUp = {
-	grn_item_id: number;
+	grn_item_id: EntityId;
 	qty: number;
 	unit_cost_base: number;
 };
@@ -141,7 +142,7 @@ export class StockAdjustmentService {
 	public async createWithin(
 		manager: EntityManager,
 		data: ValidatorOutput<StockAdjustmentValidator, 'create'>,
-	): Promise<number> {
+	): Promise<EntityId> {
 		await this.assertTarget(manager, data.warehouse_id, data.variant_id);
 
 		const isRemoval =
@@ -180,7 +181,12 @@ export class StockAdjustmentService {
 		data: ValidatorOutput<StockAdjustmentValidator, 'create'>,
 	): Promise<LotTopUp[]> {
 		const drawn = await grnService.consumeLots(manager, data.warehouse_id, [
-			{ key: 0, variant_id: data.variant_id, quantity: data.qty },
+			// One demand, so the echoed key is never read back
+			{
+				key: data.variant_id,
+				variant_id: data.variant_id,
+				quantity: data.qty,
+			},
 		]);
 
 		return drawn.map((piece) => ({
@@ -237,7 +243,7 @@ export class StockAdjustmentService {
 	 * Locked on the adjustment row first, then the lots, so two reversals of the same row queue on
 	 * the row and the second finds it `reversed`.
 	 */
-	public async reverse(id: number): Promise<StockAdjustmentEntity> {
+	public async reverse(id: EntityId): Promise<StockAdjustmentEntity> {
 		await dataSource.transaction(async (manager) => {
 			const adjustment = await manager
 				.getRepository(StockAdjustmentEntity)
@@ -337,8 +343,8 @@ export class StockAdjustmentService {
 	 */
 	private async assertTarget(
 		manager: EntityManager,
-		warehouseId: number,
-		variantId: number,
+		warehouseId: EntityId,
+		variantId: EntityId,
 	): Promise<void> {
 		const [warehouse, variant] = await Promise.all([
 			manager.getRepository(WarehouseEntity).findOne({
@@ -436,7 +442,7 @@ export class StockAdjustmentService {
 	 * oldest first, so a reversal follows what it cancels.
 	 */
 	public async findById(
-		id: number,
+		id: EntityId,
 	): Promise<
 		StockAdjustmentEntity & { movements: WarehouseMovementEntity[] }
 	> {

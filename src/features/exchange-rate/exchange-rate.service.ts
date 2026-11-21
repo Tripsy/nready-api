@@ -24,6 +24,7 @@ import {
 	cleanEntityCache,
 	cleanEntityCacheMany,
 } from '@/shared/abstracts/service.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 /**
@@ -147,7 +148,7 @@ export class ExchangeRateService {
 	 * @description Update any data
 	 */
 	public async update(
-		data: DeepPartial<ExchangeRateEntity> & { id: number },
+		data: DeepPartial<ExchangeRateEntity> & { id: EntityId },
 	): Promise<ExchangeRateEntity> {
 		const saved = await this.repository.save(data);
 
@@ -203,11 +204,11 @@ export class ExchangeRateService {
 	 * (pair, day) key occupied while every query filters it out, so the same day could never
 	 * be entered again.
 	 */
-	public async delete(id: number) {
+	public async delete(id: EntityId) {
 		await this.repository.createQuery().filterById(id).delete(false);
 	}
 
-	public findById(id: number): Promise<ExchangeRateEntity> {
+	public findById(id: EntityId): Promise<ExchangeRateEntity> {
 		return this.repository.createQuery().filterById(id).firstOrFail();
 	}
 
@@ -253,7 +254,7 @@ export class ExchangeRateService {
 				stored.map((entry) => [pairKey(entry), entry]),
 			);
 
-			const updatedIds: number[] = [];
+			const updatedIds: EntityId[] = [];
 
 			for (const rate of rates) {
 				const existing = storedByPair.get(pairKey(rate));
@@ -338,7 +339,7 @@ export class ExchangeRateService {
 	/**
 	 * @description Used in `read` method from controller; this will return a custom shape
 	 */
-	public async getEntryData(data: { id: number }) {
+	public async getEntryData(data: { id: EntityId }) {
 		return await this.repository
 			.createQuery()
 			.select(SELECT_COLUMNS)

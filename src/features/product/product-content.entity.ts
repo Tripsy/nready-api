@@ -5,10 +5,11 @@ import {
 	Index,
 	JoinColumn,
 	ManyToOne,
-	PrimaryGeneratedColumn,
 	UpdateDateColumn,
 } from 'typeorm';
 import type { PageMeta } from '@/shared/abstracts/entity.abstract';
+import { EntityIdAbstract } from '@/shared/abstracts/entity-id.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type ProductEntity from './product.entity';
 
 const ENTITY_TABLE_NAME = 'product_content';
@@ -37,12 +38,9 @@ export const SLUG_UNIQUE_INDEX = 'IDX_product_content_slug_lang';
 @Index(SLUG_UNIQUE_INDEX, ['slug', 'language'], {
 	unique: true,
 })
-export default class ProductContentEntity {
+export default class ProductContentEntity extends EntityIdAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
-
-	@PrimaryGeneratedColumn({ type: 'int' })
-	id!: number;
 
 	@CreateDateColumn({ type: 'timestamp', nullable: false })
 	created_at!: Date;
@@ -50,8 +48,8 @@ export default class ProductContentEntity {
 	@UpdateDateColumn({ type: 'timestamp', nullable: true })
 	updated_at!: Date | null;
 
-	@Column('int', { nullable: false })
-	product_id!: number;
+	@Column('uuid', { nullable: false })
+	product_id!: EntityId;
 
 	@Column('varchar', {
 		length: 3,

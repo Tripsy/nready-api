@@ -18,19 +18,15 @@ export class TermQuery extends RepositoryAbstract<TermEntity> {
 	 */
 	filterByTerm(term?: string): this {
 		if (term) {
-			if (!Number.isNaN(Number(term)) && term.trim() !== '') {
-				this.filterBy('term.id', Number(term));
-			} else {
-				if (term.length >= Configuration.get('filter.termMinLength')) {
-					this.filterRaw(
-						`EXISTS (
-							SELECT 1 FROM "term_content" "search_content"
-							WHERE "search_content"."term_id" = "term"."id"
-								AND "search_content"."value" ILIKE :searchTermValue
-						)`,
-						{ searchTermValue: `%${term}%` },
-					);
-				}
+			if (term.length >= Configuration.get('filter.termMinLength')) {
+				this.filterRaw(
+					`EXISTS (
+						SELECT 1 FROM "term_content" "search_content"
+						WHERE "search_content"."term_id" = "term"."id"
+							AND "search_content"."value" ILIKE :searchTermValue
+					)`,
+					{ searchTermValue: `%${term}%` },
+				);
 			}
 		}
 

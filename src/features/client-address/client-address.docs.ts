@@ -60,9 +60,9 @@ export const docs: Record<
 		request: {
 			notes: 'The address must already exist - create it through `POST /address` first. Answers 404 for a client or an address that does not exist or was deleted',
 			body: {
-				client_id: { type: 'number', required: true },
+				client_id: { type: 'string', required: true },
 				address_id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 					condition: 'may already be filed against other clients',
 				},
@@ -85,7 +85,7 @@ export const docs: Record<
 		withErrors: [404],
 		request: {
 			params: {
-				id: { type: 'number', required: true },
+				id: { type: 'string', required: true },
 			},
 			query: {
 				language: languageParam,
@@ -104,12 +104,12 @@ export const docs: Record<
 		withErrors: [400, 404, 422],
 		request: {
 			params: {
-				id: { type: 'number', required: true },
+				id: { type: 'string', required: true },
 			},
 			notes: 'Provide at least one body parameter. The client cannot be changed, and the address itself is never edited here - sending another address_id points the row at that address instead. A field left unset keeps its stored value',
 			body: {
 				type: { type: 'enum', required: false, values: typeValues },
-				address_id: { type: 'number', required: false },
+				address_id: { type: 'string', required: false },
 				details: detailsParam,
 				notes: notesParam,
 			},
@@ -128,7 +128,7 @@ export const docs: Record<
 		withErrors: [404],
 		request: {
 			params: {
-				id: { type: 'number', required: true },
+				id: { type: 'string', required: true },
 			},
 		},
 	}),
@@ -179,9 +179,9 @@ export const docs: Record<
 					default: OrderDirectionEnum.DESC,
 				},
 				filter: {
-					id: { type: 'number', required: false },
-					client_id: { type: 'number', required: false },
-					address_id: { type: 'number', required: false },
+					id: { type: 'string', required: false },
+					client_id: { type: 'string', required: false },
+					address_id: { type: 'string', required: false },
 					type: { type: 'enum', required: false, values: typeValues },
 					term: {
 						type: 'string',

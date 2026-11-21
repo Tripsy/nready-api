@@ -16,6 +16,7 @@ import { UserService } from '@/features/user/user.service';
 import { createFutureDate } from '@/helpers/date.helper';
 import { encryptPassword } from '@/helpers/security.helper';
 import { createMockRepository } from '@/tests/jest-service.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 /**
  * These tests have been created by Cursor they may not be 100% sufficient
@@ -155,7 +156,7 @@ describe('AccountService', () => {
 
 	it('createConfirmationToken should throw when user has no id or email', () => {
 		expect(() =>
-			serviceAccount.createConfirmationToken({ id: 1 } as never),
+			serviceAccount.createConfirmationToken({ id: mockId(1) } as never),
 		).toThrow();
 		expect(() =>
 			serviceAccount.createConfirmationToken({
@@ -165,7 +166,7 @@ describe('AccountService', () => {
 	});
 
 	it('createConfirmationToken should return token and expire_at', () => {
-		const user = { id: 1, email: 'u@example.com' };
+		const user = { id: mockId(1), email: 'u@example.com' };
 
 		const result = serviceAccount.createConfirmationToken(user);
 
@@ -213,7 +214,7 @@ describe('AccountService', () => {
 
 	it('processRegistration should call processEmailConfirmCreate when status PENDING', () => {
 		const user = {
-			id: 1,
+			id: mockId(1),
 			name: 'John',
 			email: 'j@example.com',
 			language: 'en',

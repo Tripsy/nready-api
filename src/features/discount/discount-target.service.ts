@@ -10,9 +10,10 @@ import DiscountTargetEntity, {
 	type DiscountTargetType,
 	DiscountTargetTypeEnum,
 } from '@/features/discount/discount-target.entity';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /** `{ client: [3, 9], category: [12] }` - the shape the reconcile endpoint speaks. */
-export type DiscountTargetMap = Partial<Record<DiscountTargetType, number[]>>;
+export type DiscountTargetMap = Partial<Record<DiscountTargetType, EntityId[]>>;
 
 export const discountTargetTypes = Object.values(
 	DiscountTargetTypeEnum,
@@ -53,7 +54,7 @@ export class DiscountTargetService {
 	}
 
 	/** Entity ids currently linked to a discount, grouped by target type. */
-	public async listTargets(discountId: number): Promise<DiscountTargetMap> {
+	public async listTargets(discountId: EntityId): Promise<DiscountTargetMap> {
 		const rows = await this.repository.find({
 			where: { discount_id: discountId },
 			select: { target_type: true, entity_id: true },
@@ -84,7 +85,7 @@ export class DiscountTargetService {
 	 * actually charged lives in the order line's snapshot.
 	 */
 	public async replaceTargets(
-		discountId: number,
+		discountId: EntityId,
 		targets: DiscountTargetMap,
 	): Promise<DiscountTargetMap> {
 		await this.repository.manager.transaction(async (manager) => {

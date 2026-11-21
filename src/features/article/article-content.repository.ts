@@ -3,6 +3,7 @@ import dataSource from '@/config/data-source.config';
 import type { ArticleContentType } from '@/features/article/article.validator';
 import ArticleContentEntity from '@/features/article/article-content.entity';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export class ArticleContentQuery extends RepositoryAbstract<ArticleContentEntity> {
 	constructor(repository: Repository<ArticleContentEntity>) {
@@ -20,7 +21,7 @@ export const ArticleContentRepository = dataSource
 		async saveContent(
 			manager: EntityManager,
 			contents: ArticleContentType[],
-			article_id: number,
+			article_id: EntityId,
 		) {
 			if (!contents.length) {
 				return;
@@ -55,7 +56,7 @@ export const ArticleContentRepository = dataSource
 		 */
 		async findConflictingSlug(
 			contents: ArticleContentType[],
-			article_id?: number,
+			article_id?: EntityId,
 		): Promise<ArticleContentEntity | null> {
 			if (!contents.length) {
 				return null;

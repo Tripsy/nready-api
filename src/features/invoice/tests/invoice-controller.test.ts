@@ -26,6 +26,7 @@ import {
 	withDebugResponse,
 } from '@/tests/jest-controller.setup';
 import { authorizedSpy, notAuthorizedSpy } from '@/tests/mocks/policies.mock';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 let app: Express;
 
@@ -116,7 +117,7 @@ describe(`${controller} - reverse`, () => {
 		authorizedSpy(invoicePolicy);
 
 		const reversal = getInvoiceEntityMock({
-			id: 2,
+			id: mockId(2),
 			is_reversal: true,
 			parent_invoice_id: entityMock.id,
 		});
@@ -128,7 +129,7 @@ describe(`${controller} - reverse`, () => {
 
 		const response = await request(app)
 			.post(route)
-			.send({ lines: [{ invoice_line_id: 1, quantity: 1 }] });
+			.send({ lines: [{ invoice_line_id: mockId(1), quantity: 1 }] });
 
 		withDebugResponse(() => {
 			expect(response.status).toBe(201);
@@ -273,7 +274,7 @@ describe(`${controller} - paymentCreate`, () => {
 
 		const response = await request(app)
 			.post(route)
-			.send({ cash_flow_id: 1, amount: 100 });
+			.send({ cash_flow_id: mockId(1), amount: 100 });
 
 		withDebugResponse(() => {
 			expect(response.status).toBe(201);

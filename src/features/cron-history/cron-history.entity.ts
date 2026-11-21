@@ -1,4 +1,5 @@
-import { Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, Index } from 'typeorm';
+import { EntityIdAbstract } from '@/shared/abstracts/entity-id.abstract';
 
 export const CronHistoryStatusEnum = {
 	ERROR: 'error',
@@ -19,12 +20,9 @@ const ENTITY_TABLE_NAME = 'cron_history';
 	schema: 'logs',
 	comment: 'Stores cron usage',
 })
-export default class CronHistoryEntity {
+export default class CronHistoryEntity extends EntityIdAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
-
-	@PrimaryGeneratedColumn({ type: 'int' })
-	id!: number;
 
 	@Column('varchar', { nullable: false })
 	label!: string;

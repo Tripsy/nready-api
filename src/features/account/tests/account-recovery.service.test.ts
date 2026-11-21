@@ -8,6 +8,7 @@ import { AccountRecoveryService } from '@/features/account/account-recovery.serv
 import { createPastDate } from '@/helpers/date.helper';
 import type { TokenMetadata } from '@/helpers/meta-data.helper';
 import { createMockRepository } from '@/tests/jest-service.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 function getMetadataMock(): TokenMetadata {
 	return {
@@ -53,11 +54,13 @@ describe('AccountRecoveryService', () => {
 
 	describe('removeAccountRecoveryForUser', () => {
 		it('should remove every row for the user by default', async () => {
-			await serviceAccountRecovery.removeAccountRecoveryForUser(7);
+			await serviceAccountRecovery.removeAccountRecoveryForUser(
+				mockId(7),
+			);
 
 			expect(mockAccountRecovery.query.filterBy).toHaveBeenCalledWith(
 				'user_id',
-				7,
+				mockId(7),
 			);
 			expect(mockAccountRecovery.query.filterBy).toHaveBeenCalledTimes(1);
 			expect(mockAccountRecovery.query.delete).toHaveBeenCalledWith(
@@ -67,11 +70,14 @@ describe('AccountRecoveryService', () => {
 		});
 
 		it('should spare the redeemed row when `exceptId` is given', async () => {
-			await serviceAccountRecovery.removeAccountRecoveryForUser(7, 42);
+			await serviceAccountRecovery.removeAccountRecoveryForUser(
+				mockId(7),
+				mockId(42),
+			);
 
 			expect(mockAccountRecovery.query.filterBy).toHaveBeenCalledWith(
 				'id',
-				42,
+				mockId(42),
 				'!=',
 			);
 		});
@@ -79,7 +85,7 @@ describe('AccountRecoveryService', () => {
 
 	describe('setupRecovery', () => {
 		it('should persist a recovery row and return its ident and expiry', async () => {
-			const user = { id: 7 };
+			const user = { id: mockId(7) };
 			const metadata = getMetadataMock();
 
 			mockAccountRecovery.repository.save.mockResolvedValue(
@@ -124,11 +130,11 @@ describe('AccountRecoveryService', () => {
 			);
 
 			const [first] = await serviceAccountRecovery.setupRecovery(
-				{ id: 1 },
+				{ id: mockId(1) },
 				getMetadataMock(),
 			);
 			const [second] = await serviceAccountRecovery.setupRecovery(
-				{ id: 1 },
+				{ id: mockId(1) },
 				getMetadataMock(),
 			);
 
@@ -140,11 +146,13 @@ describe('AccountRecoveryService', () => {
 		it('should hard-delete every recovery row for the user', async () => {
 			mockAccountRecovery.query.delete.mockResolvedValue(2);
 
-			await serviceAccountRecovery.removeAccountRecoveryForUser(7);
+			await serviceAccountRecovery.removeAccountRecoveryForUser(
+				mockId(7),
+			);
 
 			expect(mockAccountRecovery.query.filterBy).toHaveBeenCalledWith(
 				'user_id',
-				7,
+				mockId(7),
 			);
 
 			// (isSoftDelete: false, multiple: true) - recovery rows are throwaway, and
@@ -166,7 +174,10 @@ describe('AccountRecoveryService', () => {
 			);
 
 			await expect(
-				serviceAccountRecovery.removeAccountRecoveryForUser(7, 42),
+				serviceAccountRecovery.removeAccountRecoveryForUser(
+					mockId(7),
+					mockId(42),
+				),
 			).resolves.toBeUndefined();
 		});
 
@@ -176,7 +187,7 @@ describe('AccountRecoveryService', () => {
 			);
 
 			await expect(
-				serviceAccountRecovery.removeAccountRecoveryForUser(7),
+				serviceAccountRecovery.removeAccountRecoveryForUser(mockId(7)),
 			).rejects.toThrow('connection lost');
 		});
 	});
@@ -188,13 +199,13 @@ describe('AccountRecoveryService', () => {
 			mockAccountRecovery.query.count.mockResolvedValue(3);
 
 			const result = await serviceAccountRecovery.countRecoveryAttempts(
-				7,
+				mockId(7),
 				sinceDate,
 			);
 
 			expect(mockAccountRecovery.query.filterBy).toHaveBeenCalledWith(
 				'user_id',
-				7,
+				mockId(7),
 			);
 			expect(
 				mockAccountRecovery.query.filterByRange,

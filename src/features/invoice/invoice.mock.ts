@@ -19,6 +19,7 @@ import {
 	formatDate,
 } from '@/helpers/date.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 const invoiceValidator = new InvoiceValidator('invoice');
 
@@ -26,9 +27,9 @@ export function getInvoiceEntityMock(
 	overrides?: Partial<InvoiceWithSources>,
 ): InvoiceWithSources {
 	return {
-		id: 1,
-		client_id: 1,
-		order_id: 1,
+		id: mockId(1),
+		client_id: mockId(1),
+		order_id: mockId(1),
 		subscription_id: null,
 		shipping_id: null,
 		ref_code: 'INV',
@@ -94,15 +95,15 @@ export function getInvoiceLineEntityMock(
 	overrides?: Partial<InvoiceLineEntity>,
 ): InvoiceLineEntity {
 	return {
-		id: 1,
-		invoice_id: 1,
+		id: mockId(1),
+		invoice_id: mockId(1),
 		kind: InvoiceLineKindEnum.PRODUCT,
-		order_line_id: 1,
+		order_line_id: mockId(1),
 		shipping_id: null,
 		parent_line_id: null,
 		is_value_reversal: false,
-		product_id: 1,
-		variant_id: 1,
+		product_id: mockId(1),
+		variant_id: mockId(1),
 		label: 'Test product, 500 ml',
 		quantity: 2,
 		unit_price: 110,
@@ -127,9 +128,9 @@ export function getInvoicePaymentEntityMock(
 	overrides?: Partial<InvoicePaymentEntity>,
 ): InvoicePaymentEntity {
 	return {
-		id: 1,
-		invoice_id: 1,
-		cash_flow_id: 1,
+		id: mockId(1),
+		invoice_id: mockId(1),
+		cash_flow_id: mockId(1),
 		amount: 100,
 		notes: null,
 		created_at: createPastDate(43200),
@@ -143,7 +144,7 @@ export function getInvoicePaymentEntityMock(
 
 export const invoiceInputPayloads = {
 	create: {
-		order_id: 1,
+		order_id: mockId(1),
 		scope: InvoiceScopeEnum.ORDER,
 		shipping_id: undefined,
 		subscription_id: undefined,
@@ -151,7 +152,7 @@ export const invoiceInputPayloads = {
 		notes: 'Test invoice',
 	},
 	update: {
-		id: 1,
+		id: mockId(1),
 		due_at: formatDate(createFutureDate(86400 * 21)),
 		notes: 'Updated invoice',
 	},
@@ -161,8 +162,8 @@ export const invoiceInputPayloads = {
 		order_by: OrderByEnum.ID,
 		direction: OrderDirectionEnum.DESC,
 		filter: {
-			id: 1,
-			order_id: 1,
+			id: mockId(1),
+			order_id: mockId(1),
 			status: InvoiceStatusEnum.ISSUED,
 			payment_status: InvoicePaymentStatusEnum.PARTIAL,
 			scope: InvoiceScopeEnum.ORDER,
@@ -171,7 +172,7 @@ export const invoiceInputPayloads = {
 		},
 	},
 	lineCreate: {
-		id: 1,
+		id: mockId(1),
 		label: 'Rounding adjustment',
 		quantity: 1,
 		unit_price: 10,
@@ -179,8 +180,8 @@ export const invoiceInputPayloads = {
 		discount_reduction: 0,
 	},
 	paymentCreate: {
-		id: 1,
-		cash_flow_id: 1,
+		id: mockId(1),
+		cash_flow_id: mockId(1),
 		amount: 100,
 	},
 };

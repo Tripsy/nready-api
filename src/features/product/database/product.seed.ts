@@ -43,6 +43,7 @@ import TermEntity, { TermTypeEnum } from '@/features/term/term.entity';
 import TermContentEntity from '@/features/term/term-content.entity';
 import { vatRateService } from '@/features/vat-rate/vat-rate.service';
 import { apportion, roundMoney } from '@/helpers/shop.helper';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import {
 	type MeasureUnit,
 	MeasureUnitEnum,
@@ -1489,22 +1490,22 @@ export const productSeed: SeedDefinition = {
 				]),
 		);
 
-		const labelId = (label: string): number | undefined =>
+		const labelId = (label: string): EntityId | undefined =>
 			termIdByKey.get(termKey(TermTypeEnum.ATTRIBUTE_LABEL, label));
 
-		const valueId = (value: string): number | undefined =>
+		const valueId = (value: string): EntityId | undefined =>
 			termIdByKey.get(termKey(TermTypeEnum.ATTRIBUTE_VALUE, value));
 
 		/** An order-time prompt or answer, which is free wording rather than vocabulary. */
-		const textId = (value: string): number | undefined =>
+		const textId = (value: string): EntityId | undefined =>
 			termIdByKey.get(termKey(TermTypeEnum.TEXT, value));
 
 		/** The question a bundle choice asks, from the terms seeded for exactly that. */
-		const promptId = (prompt: string): number | undefined =>
+		const promptId = (prompt: string): EntityId | undefined =>
 			termIdByKey.get(termKey(TermTypeEnum.BUNDLE_CHOICE, prompt));
 
 		/** A tag by its wording. Keyed folded, since a tag is stored lower-cased. */
-		const tagId = (tag: string): number | undefined =>
+		const tagId = (tag: string): EntityId | undefined =>
 			termIdByKey.get(termKey(TermTypeEnum.TAG, tag));
 
 		const tagIds = await loadIds(manager, TermEntity, {
@@ -1568,7 +1569,7 @@ export const productSeed: SeedDefinition = {
 					options.map((option) =>
 						definitionOptionRepository.create({
 							attribute_id: definition.id,
-							term_id: option.term_id as number,
+							term_id: option.term_id as EntityId,
 							sort_order: option.sort_order,
 						}),
 					),
@@ -1591,7 +1592,7 @@ export const productSeed: SeedDefinition = {
 		);
 
 		/** Every curated variant written in this run, so a bundle can name its components. */
-		const variantIdBySku = new Map<string, number>();
+		const variantIdBySku = new Map<string, EntityId>();
 
 		let alreadyPresent = 0;
 		let inserted = 0;
@@ -1602,7 +1603,7 @@ export const productSeed: SeedDefinition = {
 
 		/** One price row per market, from the sale price and whatever else the entry quotes. */
 		const savePrices = async (
-			variant_id: number,
+			variant_id: EntityId,
 			sku: string,
 		): Promise<void> => {
 			await priceRepository.save(
@@ -1627,7 +1628,7 @@ export const productSeed: SeedDefinition = {
 		 * same conversion the service applies on write, and what a range filter compares.
 		 */
 		const saveAttribute = async (
-			owner: { product_id: number } | { variant_id: number },
+			owner: { product_id: EntityId } | { variant_id: EntityId },
 			attribute: CuratedAttribute,
 		): Promise<void> => {
 			const attribute_label_id = labelId(attribute.label);
@@ -1759,7 +1760,7 @@ export const productSeed: SeedDefinition = {
 
 			const tagLinks = (entry.tags ?? [])
 				.map((tag) => tagId(tag))
-				.filter((tag_id): tag_id is number => tag_id !== undefined);
+				.filter((tag_id): tag_id is EntityId => tag_id !== undefined);
 
 			if (tagLinks.length) {
 				await tagLinkRepository.save(

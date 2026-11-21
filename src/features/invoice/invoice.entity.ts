@@ -14,6 +14,7 @@ import { OrderStatusEnum } from '@/features/order/order.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import { numericTransformer } from '@/shared/transformers/numeric.transformer';
 import type { StatusTransitions } from '@/shared/types/common.type';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export const InvoiceStatusEnum = {
 	DRAFT: 'draft', // Being assembled, holds no number yet, still editable
@@ -207,9 +208,9 @@ export type SellerDetails = PartySnapshot & {
  * Each is null when the document has no source of that kind - a `custom` document names none.
  */
 export type InvoiceSources = {
-	order_id: number | null;
-	shipping_id: number | null;
-	subscription_id: number | null;
+	order_id: EntityId | null;
+	shipping_id: EntityId | null;
+	subscription_id: EntityId | null;
 };
 
 export type InvoiceWithSources = InvoiceEntity & InvoiceSources;
@@ -266,8 +267,8 @@ export default class InvoiceEntity extends EntityAbstract {
 	 *
 	 * RESTRICT: a client with documents issued to them is a party to the books.
 	 */
-	@Column('int', { nullable: false })
-	client_id!: number;
+	@Column('uuid', { nullable: false })
+	client_id!: EntityId;
 
 	/**
 	 * Not unique: an order may carry several documents of each scope - a partly shipped order
@@ -329,11 +330,11 @@ export default class InvoiceEntity extends EntityAbstract {
 	 * RESTRICT: a reversal only means anything next to the invoice it corrects, so that invoice
 	 * has to stay reachable for as long as the reversal does.
 	 */
-	@Column('int', { nullable: true })
+	@Column('uuid', { nullable: true })
 	@Index('IDX_invoice_parent_invoice_id', {
 		where: 'parent_invoice_id IS NOT NULL',
 	})
-	parent_invoice_id!: number | null;
+	parent_invoice_id!: EntityId | null;
 
 	// COST RELATED
 	@Column('char', {

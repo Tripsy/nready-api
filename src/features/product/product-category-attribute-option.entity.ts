@@ -2,6 +2,7 @@ import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import type ProductCategoryAttributeEntity from '@/features/product/product-category-attribute.entity';
 import type TermEntity from '@/features/term/term.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 const ENTITY_TABLE_NAME = 'product_category_attribute_option';
 
@@ -47,13 +48,13 @@ export default class ProductCategoryAttributeOptionEntity extends EntityAbstract
 	static readonly HAS_CACHE: boolean = true;
 
 	// No index of its own: leftmost column of both indexes above
-	@Column('int', { nullable: false })
-	attribute_id!: number;
+	@Column('uuid', { nullable: false })
+	attribute_id!: EntityId;
 
 	// Indexed for the cascade `term` triggers on delete - it is not a prefix of either index
-	@Column('int', { nullable: false })
+	@Column('uuid', { nullable: false })
 	@Index('IDX_product_category_attribute_option_term_id')
-	term_id!: number;
+	term_id!: EntityId;
 
 	@Column('int', {
 		nullable: false,

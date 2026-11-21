@@ -4,6 +4,7 @@ import type WarehouseEntity from '@/features/warehouse/warehouse.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import { numericTransformer } from '@/shared/transformers/numeric.transformer';
 import type { StatusTransitions } from '@/shared/types/common.type';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /** Which way the units go - into the warehouse's lots or out of them. */
 export const StockAdjustmentDirectionEnum = {
@@ -145,12 +146,12 @@ export default class StockAdjustmentEntity extends EntityAbstract {
 	notes!: string | null;
 
 	// RELATIONS
-	@Column('int', { nullable: false })
-	warehouse_id!: number;
+	@Column('uuid', { nullable: false })
+	warehouse_id!: EntityId;
 
-	@Column('int', { nullable: false })
+	@Column('uuid', { nullable: false })
 	@Index('IDX_stock_adjustment_variant_id')
-	variant_id!: number;
+	variant_id!: EntityId;
 
 	@ManyToOne('WarehouseEntity', { onDelete: 'RESTRICT' })
 	@JoinColumn({ name: 'warehouse_id' })

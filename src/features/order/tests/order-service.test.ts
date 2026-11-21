@@ -11,13 +11,14 @@ import type { OrderValidator } from '@/features/order/order.validator';
 import { cacheProvider } from '@/providers/cache.provider';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 import { setupTransactionMock } from '@/tests/jest-service.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 type OrderUpdateData = ValidatorOutput<OrderValidator, 'update'>;
 
 const orderWith = (overrides: Partial<OrderEntity>): OrderEntity =>
 	({
-		id: 1,
-		client_id: 1,
+		id: mockId(1),
+		client_id: mockId(1),
 		status: OrderStatusEnum.PENDING,
 		discount: null,
 		billing_address: null,
@@ -133,7 +134,7 @@ describe('OrderService.updateStatus', () => {
 		).rejects.toMatchObject({ statusCode: 409 });
 
 		expect(findOneOrFail).toHaveBeenCalledWith({
-			where: { id: 1 },
+			where: { id: mockId(1) },
 			lock: { mode: 'pessimistic_write' },
 		});
 		expect(manager.save).not.toHaveBeenCalled();

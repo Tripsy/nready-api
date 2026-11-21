@@ -5,10 +5,11 @@ import {
 	Index,
 	JoinColumn,
 	ManyToOne,
-	PrimaryGeneratedColumn,
 	UpdateDateColumn,
 } from 'typeorm';
 import type PlaceEntity from '@/features/place/place.entity';
+import { EntityIdAbstract } from '@/shared/abstracts/entity-id.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export type PlaceContentType = {
 	language: string;
@@ -31,12 +32,9 @@ const ENTITY_TABLE_NAME = 'place_content';
 @Index('IDX_place_content_unique_per_lang', ['place_id', 'language'], {
 	unique: true,
 })
-export default class PlaceContentEntity {
+export default class PlaceContentEntity extends EntityIdAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
-
-	@PrimaryGeneratedColumn({ type: 'int' })
-	id!: number;
 
 	@CreateDateColumn({ type: 'timestamp', nullable: false })
 	created_at!: Date;
@@ -44,8 +42,8 @@ export default class PlaceContentEntity {
 	@UpdateDateColumn({ type: 'timestamp', nullable: true })
 	updated_at!: Date | null;
 
-	@Column('int', { nullable: false })
-	place_id!: number;
+	@Column('uuid', { nullable: false })
+	place_id!: EntityId;
 
 	@Column('varchar', {
 		length: 3,

@@ -19,6 +19,7 @@ import {
 	assertValidStatusTransition,
 	cleanEntityCache,
 } from '@/shared/abstracts/service.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 import { UserRoleEnum } from '@/shared/types/user-role.type';
 
@@ -73,7 +74,7 @@ export class UserService {
 	 * @description Update any data
 	 */
 	public async update(
-		data: DeepPartial<UserEntity> & { id: number },
+		data: DeepPartial<UserEntity> & { id: EntityId },
 	): Promise<UserEntity> {
 		const saved = await this.repository.save(data);
 
@@ -133,16 +134,16 @@ export class UserService {
 		await this.update(entry);
 	}
 
-	public async delete(id: number) {
+	public async delete(id: EntityId) {
 		await this.repository.createQuery().filterById(id).delete();
 	}
 
-	public async restore(id: number) {
+	public async restore(id: EntityId) {
 		await this.repository.createQuery().filterById(id).restore();
 	}
 
 	public findById(
-		id: number,
+		id: EntityId,
 		withDeleted: boolean = false,
 	): Promise<UserEntity> {
 		return this.repository
@@ -159,7 +160,7 @@ export class UserService {
 	 * caller that has to verify a password (or find out whether the account has one at all,
 	 * now that social sign-in accounts may not) must ask for the column explicitly.
 	 */
-	public findByIdWithPassword(id: number): Promise<UserEntity> {
+	public findByIdWithPassword(id: EntityId): Promise<UserEntity> {
 		return this.repository
 			.createQuery()
 			.select(['id', 'name', 'email', 'language', 'status', 'password'])
@@ -167,7 +168,7 @@ export class UserService {
 			.firstOrFail();
 	}
 
-	public findByEmail(email: string, withoutId?: number, select?: string[]) {
+	public findByEmail(email: string, withoutId?: EntityId, select?: string[]) {
 		const q = this.repository
 			.createQuery()
 			.filterByEmail(email)

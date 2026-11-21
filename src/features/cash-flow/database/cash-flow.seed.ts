@@ -28,6 +28,7 @@ import OperationalRecordEntity, {
 	OperationalRecordTypeEnum,
 } from '@/features/cash-flow/operational-record.entity';
 import { resolveBaseCurrency } from '@/features/exchange-rate/exchange-rate.entity';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 const TARGET = 150;
 
@@ -119,8 +120,8 @@ function createdAtForIndex(random: Random, index: number): Date {
  * failed shipment carried nothing and is not billed.
  */
 type PayableOrderRow = {
-	order_id: number;
-	client_id: number;
+	order_id: EntityId;
+	client_id: EntityId;
 	payment_method: string | null;
 	created_at: Date;
 	currency: string | null;
@@ -183,7 +184,7 @@ const METHOD_BY_PAYMENT_METHOD: Record<string, CashFlowMethod> = {
  * into a human-readable ordinal. This is an id, and shifting it would leave every reference naming
  * the order next to the one it settles.
  */
-const orderPaymentReference = (orderId: number): string => {
+const orderPaymentReference = (orderId: EntityId): string => {
 	return `SEED-CFO-${String(orderId).padStart(5, '0')}`;
 };
 
@@ -291,8 +292,8 @@ async function seedOrderPayments(
  * see `seedSaleCounterparties`.
  */
 type AcceptedOrderRow = {
-	order_id: number;
-	client_id: number;
+	order_id: EntityId;
+	client_id: EntityId;
 };
 
 const ACCEPTED_ORDERS_QUERY = `
@@ -345,9 +346,9 @@ const ORDER_SHARE = 3;
  * on a row never name a buyer and somebody else's document.
  */
 async function seedSaleCounterparties(manager: EntityManager): Promise<number> {
-	const clientIds: number[] = (
+	const clientIds: EntityId[] = (
 		await manager.query(BILLABLE_CLIENTS_QUERY)
-	).map((row: { id: number }) => row.id);
+	).map((row: { id: EntityId }) => row.id);
 
 	if (clientIds.length === 0) {
 		return 0;
@@ -360,10 +361,10 @@ async function seedSaleCounterparties(manager: EntityManager): Promise<number> {
 	 * inserting a duplicate the unique index would refuse.
 	 */
 	const unfiled: {
-		id: number;
+		id: EntityId;
 		status: string;
-		client_record_id: number | null;
-		linked_order_client_id: number | null;
+		client_record_id: EntityId | null;
+		linked_order_client_id: EntityId | null;
 	}[] = await manager.query(`
 		SELECT cf.id, cf.status, cl.id AS client_record_id, o.client_id AS linked_order_client_id
 		FROM cash_flow cf
@@ -419,12 +420,15 @@ async function seedSaleCounterparties(manager: EntityManager): Promise<number> {
 		 * draws from the billable pool.
 		 *
 		 * Keyed on the row's own id rather than on the shared PRNG: this pass runs after the
-		 * general one has consumed it, so an id keeps a re-run assigning the same buyer.
+		 * general one has consumed it, so an id keeps a re-run assigning the same buyer. The
+		 * id's last 8 hex digits are random bits of the uuid, fixed once the row exists.
 		 */
 		const clientId =
 			entry.linked_order_client_id ??
 			order?.client_id ??
-			clientIds[entry.id % clientIds.length];
+			clientIds[
+				Number.parseInt(entry.id.slice(-8), 16) % clientIds.length
+			];
 
 		records.push({
 			// Present when the row already names a buyer who cannot be billed, which makes this

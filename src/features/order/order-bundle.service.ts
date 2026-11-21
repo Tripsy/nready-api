@@ -16,11 +16,12 @@ import ProductPriceEntity from '@/features/product/product-price.entity';
 import ProductVariantEntity from '@/features/product/product-variant.entity';
 import type { VatResolver } from '@/features/vat-rate/vat-rate.service';
 import { roundMoney } from '@/helpers/shop.helper';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /** What the explosion needs from one line of the document being composed. */
 type BundleLine = {
-	variant_id: number;
-	product_id: number;
+	variant_id: EntityId;
+	product_id: EntityId;
 	quantity: number;
 	/** On a bundle, the price of **one** bundle excluding VAT - what the operator agreed. */
 	price: number;
@@ -30,14 +31,14 @@ type BundleLine = {
 
 /** One component line a bundle explodes into, ready to be written under its header. */
 export type BundleComponentLine = {
-	variant_id: number;
-	product_id: number;
+	variant_id: EntityId;
+	product_id: EntityId;
 	/** Absolute - the component's units per bundle times the bundle line's own quantity. */
 	quantity: number;
 	/** This component's share of the bundle price, per unit, excluding VAT. */
 	price: number;
 	vat_rate: number;
-	bundle_item_id: number;
+	bundle_item_id: EntityId;
 };
 
 /**
@@ -222,7 +223,7 @@ export class OrderBundleService {
 /** The cart's wording for a selection the bundle refuses, naming the line it is on. */
 function bundleProblemMessage(
 	problem: BundleSelectionProblem,
-	variantId: number,
+	variantId: EntityId,
 ): string {
 	const variant = String(variantId);
 

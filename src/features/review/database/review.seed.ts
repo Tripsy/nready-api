@@ -23,6 +23,7 @@ import ReviewEntity, {
 } from '@/features/review/review.entity';
 import { ReviewService } from '@/features/review/review.service';
 import UserEntity from '@/features/user/user.entity';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /** Products to spread reviews over; enough to give a listing something to page and sort. */
 const TARGET_PRODUCTS = 10;
@@ -66,16 +67,16 @@ const CLOSINGS: readonly string[] = [
  * pair is compared against what is stored - `withDeleted` included, since a withdrawn review still
  * holds nothing but its own row and a re-run should not write a second one beside it.
  */
-function reviewKey(productId: number, userId: number): string {
+function reviewKey(productId: EntityId, userId: EntityId): string {
 	return `${productId}:${userId}`;
 }
 
 /** The newest completed purchase of one product by one account - what a verified review names. */
 type Purchase = {
-	product_id: number;
-	variant_id: number;
-	user_id: number;
-	order_id: number;
+	product_id: EntityId;
+	variant_id: EntityId;
+	user_id: EntityId;
+	order_id: EntityId;
 };
 
 /**
@@ -109,16 +110,16 @@ async function loadPurchases(
 		])
 		.orderBy('purchase_order.created_at', 'DESC')
 		.addOrderBy('purchase_order.id', 'DESC')
-		.getRawMany<Record<keyof Purchase, string | number>>();
+		.getRawMany<Record<keyof Purchase, EntityId>>();
 
 	const purchases = new Map<string, Purchase>();
 
 	for (const row of rows) {
 		const purchase: Purchase = {
-			product_id: Number(row.product_id),
-			variant_id: Number(row.variant_id),
-			user_id: Number(row.user_id),
-			order_id: Number(row.order_id),
+			product_id: row.product_id,
+			variant_id: row.variant_id,
+			user_id: row.user_id,
+			order_id: row.order_id,
 		};
 
 		const key = reviewKey(purchase.product_id, purchase.user_id);
@@ -166,7 +167,7 @@ export const reviewSeed: SeedDefinition = {
 				order: { id: 'ASC' },
 			});
 
-		const variantsByProduct = new Map<number, number[]>();
+		const variantsByProduct = new Map<EntityId, EntityId[]>();
 
 		for (const row of variantRows) {
 			const bucket = variantsByProduct.get(row.product_id);
@@ -300,10 +301,10 @@ function buildRating(random: Random): ReviewRating {
 }
 
 function buildReview(
-	productId: number,
-	userId: number,
-	variantIds: readonly number[],
-	moderatorId: number,
+	productId: EntityId,
+	userId: EntityId,
+	variantIds: readonly EntityId[],
+	moderatorId: EntityId,
 	purchase: Purchase | undefined,
 	random: Random,
 ): Partial<ReviewEntity> {

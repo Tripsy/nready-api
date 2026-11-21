@@ -5,6 +5,7 @@ import LogHistoryEntity from '@/features/log-history/log-history.entity';
 import { createCurrentDate } from '@/helpers/date.helper';
 import { getSystemLogger } from '@/providers/logger.provider';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { LogHistoryAction } from '@/shared/types/log-history.type';
 
 export class LogHistoryQuery extends RepositoryAbstract<LogHistoryEntity> {
@@ -21,9 +22,9 @@ export const getLogHistoryRepository = () =>
 
 		createLogs(
 			entity: string,
-			entity_ids: number[],
+			entity_ids: EntityId[],
 			action: LogHistoryAction,
-			auth_id: number | null,
+			auth_id: EntityId | null,
 			performed_by: string,
 			request_id: string,
 			source: RequestContextSource,

@@ -17,6 +17,7 @@ import ProductOptionGroupEntity from '@/features/product/product-option-group.en
 import ProductVariantEntity from '@/features/product/product-variant.entity';
 import UserEntity from '@/features/user/user.entity';
 import { createFutureDate, createPastDate } from '@/helpers/date.helper';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 const TARGET_CARTS = 12;
 const MIN_LINES_PER_CART = 1;
@@ -83,7 +84,7 @@ export const cartSeed: SeedDefinition = {
 				order: { id: 'ASC', options: { id: 'ASC' } },
 			});
 
-		const groupsByProduct = new Map<number, ProductOptionGroupEntity[]>();
+		const groupsByProduct = new Map<EntityId, ProductOptionGroupEntity[]>();
 
 		for (const group of groupRows) {
 			group.options = group.options ?? [];
@@ -154,7 +155,7 @@ export const cartSeed: SeedDefinition = {
 				variantRows.length,
 			);
 
-			const usedVariants = new Set<number>();
+			const usedVariants = new Set<EntityId>();
 			const lines: Partial<CartItemEntity>[] = [];
 
 			for (let line = 0; line < lineCount; line++) {
@@ -217,8 +218,8 @@ export const cartSeed: SeedDefinition = {
 function chooseOptions(
 	groups: readonly ProductOptionGroupEntity[],
 	random: Random,
-): number[] {
-	const chosen: number[] = [];
+): EntityId[] {
+	const chosen: EntityId[] = [];
 
 	for (const group of groups) {
 		const available = (group.options ?? []).map((option) => option.id);

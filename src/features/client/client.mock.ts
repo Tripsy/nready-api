@@ -10,6 +10,7 @@ import {
 } from '@/features/client/client.validator';
 import { createPastDate, formatDate } from '@/helpers/date.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 const clientValidator = new ClientValidator('client');
 type CreateInput = z.input<typeof clientValidator.create>;
@@ -20,7 +21,7 @@ type CreateCompanyInput = Extract<
 
 export function getClientEntityMock(): ClientEntity {
 	return {
-		id: 1,
+		id: mockId(1),
 		client_type: ClientTypeEnum.COMPANY,
 		status: ClientStatusEnum.ACTIVE,
 		company_name: 'Acme Corp',
@@ -33,7 +34,7 @@ export function getClientEntityMock(): ClientEntity {
 		contact_name: 'John',
 		contact_email: 'contact@acme.com',
 		contact_phone: null,
-		user_id: 7,
+		user_id: mockId(7),
 		notes: null,
 		created_at: createPastDate(86400),
 		updated_at: null,
@@ -60,7 +61,7 @@ export const clientInputPayloads = {
 		contact_email: 'updated@acme.com',
 	},
 	updateAccount: {
-		user_id: 7,
+		user_id: mockId(7),
 	},
 	find: {
 		page: 1,

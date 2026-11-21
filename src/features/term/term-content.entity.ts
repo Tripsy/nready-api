@@ -5,10 +5,11 @@ import {
 	Index,
 	JoinColumn,
 	ManyToOne,
-	PrimaryGeneratedColumn,
 	UpdateDateColumn,
 } from 'typeorm';
 import type TermEntity from '@/features/term/term.entity';
+import { EntityIdAbstract } from '@/shared/abstracts/entity-id.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export type TermContentType = {
 	language: string;
@@ -30,12 +31,9 @@ const ENTITY_TABLE_NAME = 'term_content';
 @Index('IDX_term_content_unique_per_lang', ['term_id', 'language'], {
 	unique: true,
 })
-export default class TermContentEntity {
+export default class TermContentEntity extends EntityIdAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
-
-	@PrimaryGeneratedColumn({ type: 'int' })
-	id!: number;
 
 	@CreateDateColumn({ type: 'timestamp', nullable: false })
 	created_at!: Date;
@@ -43,8 +41,8 @@ export default class TermContentEntity {
 	@UpdateDateColumn({ type: 'timestamp', nullable: true })
 	updated_at!: Date | null;
 
-	@Column('int', { nullable: false })
-	term_id!: number;
+	@Column('uuid', { nullable: false })
+	term_id!: EntityId;
 
 	@Column('varchar', {
 		length: 3,

@@ -6,10 +6,11 @@ import {
 	Index,
 	JoinColumn,
 	ManyToOne,
-	PrimaryGeneratedColumn,
 	UpdateDateColumn,
 } from 'typeorm';
 import type UserEntity from '@/features/user/user.entity';
+import { EntityIdAbstract } from '@/shared/abstracts/entity-id.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export const RatingEntityTypeEnum = {
 	ARTICLE: 'article',
@@ -88,12 +89,9 @@ const ENTITY_TABLE_NAME = 'rating';
 @Check('CHK_rating_value', `(type = 'emoji') = (value IS NULL)`)
 @Check('CHK_rating_like_range', `type <> 'like' OR value IN (-1, 1)`)
 @Check('CHK_rating_stars_range', `type <> 'stars' OR value BETWEEN 1 AND 5`)
-export default class RatingEntity {
+export default class RatingEntity extends EntityIdAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = false;
-
-	@PrimaryGeneratedColumn({ type: 'int' })
-	id!: number;
 
 	@CreateDateColumn({ type: 'timestamp', nullable: false })
 	created_at!: Date;
@@ -117,16 +115,16 @@ export default class RatingEntity {
 	type!: RatingType;
 
 	@Column({
-		type: 'int',
+		type: 'uuid',
 		nullable: false,
 	})
-	entity_id!: number;
+	entity_id!: EntityId;
 
 	@Column({
-		type: 'int',
+		type: 'uuid',
 		nullable: true,
 	})
-	user_id?: number | null;
+	user_id?: EntityId | null;
 
 	@Column({
 		type: 'varchar',

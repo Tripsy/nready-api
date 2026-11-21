@@ -266,7 +266,7 @@ async function seedTemplates() {
 
 		await requestContext.run(
 			{
-				auth_id: 0,
+				auth_id: null,
 				performed_by: 'template.seed',
 				source: RequestContextSourceEnum.SEED,
 				request_id: uuid(),

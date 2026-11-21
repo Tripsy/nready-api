@@ -3,6 +3,7 @@ import type ProductEntity from '@/features/product/product.entity';
 import type TermEntity from '@/features/term/term.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import { numericTransformer } from '@/shared/transformers/numeric.transformer';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 const ENTITY_TABLE_NAME = 'product_attribute';
 
@@ -107,22 +108,22 @@ export default class ProductAttributeEntity extends EntityAbstract {
 	 * `WHERE deleted_at IS NULL` answers a query that does not say it. The foreign key's cascade
 	 * looks the children up the same way.
 	 */
-	@Column('int', { nullable: false })
+	@Column('uuid', { nullable: false })
 	@Index('IDX_product_attribute_product_id')
-	product_id!: number;
+	product_id!: EntityId;
 
 	// Indexed for the cascade `term` triggers on delete - Postgres looks the children up by this
 	// key on its own, and it is not a prefix of the unique index
-	@Column('int', { nullable: false })
+	@Column('uuid', { nullable: false })
 	@Index('IDX_product_attribute_attribute_label_id')
-	attribute_label_id!: number;
+	attribute_label_id!: EntityId;
 
 	// Nullable since a value may instead be a literal in one of the three columns below. Keeps its
 	// own index for the same cascade reason as the label - the facet index leads on the label, so
 	// it does not answer "which rows point at this term"
-	@Column('int', { nullable: true })
+	@Column('uuid', { nullable: true })
 	@Index('IDX_product_attribute_attribute_value_id')
-	value_term_id!: number | null;
+	value_term_id!: EntityId | null;
 
 	@Column('decimal', {
 		precision: 14,

@@ -23,6 +23,7 @@ import {
 	testServiceRestore,
 	testServiceUpdateStatus,
 } from '@/tests/jest-service.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 describe('BrandService', () => {
 	beforeEach(() => {
@@ -76,8 +77,8 @@ describe('BrandService', () => {
 		// for this brand_type; `updateOrder` loads those rows and saves them
 		// via the repository so each write is audited, then drops their cache.
 		const activeBrands = [
-			{ id: 1, sort_order: 0 },
-			{ id: 2, sort_order: 0 },
+			{ id: mockId(1), sort_order: 0 },
+			{ id: mockId(2), sort_order: 0 },
 		];
 
 		const queryBuilder = {
@@ -97,7 +98,10 @@ describe('BrandService', () => {
 
 		manager.getRepository.mockReturnValue(brandRepository);
 
-		await serviceBrand.updateOrder(BrandTypeEnum.PRODUCT, [1, 2]);
+		await serviceBrand.updateOrder(BrandTypeEnum.PRODUCT, [
+			mockId(1),
+			mockId(2),
+		]);
 
 		expect(transaction).toHaveBeenCalled();
 		expect(brandRepository.createQueryBuilder).toHaveBeenCalledWith(

@@ -6,13 +6,14 @@ import type {
 	UpdateEvent,
 } from 'typeorm';
 import { eventEmitter } from '@/config/event.config';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import {
 	type LogHistoryAction,
 	LogHistoryActionEnum,
 } from '@/shared/types/log-history.type';
 
 interface BaseEntity {
-	id: number;
+	id: EntityId;
 	deleted_at?: Date | null;
 }
 
@@ -68,7 +69,7 @@ abstract class SubscriberAbstract<T extends BaseEntity>
 	}
 
 	logHistory(
-		id: number,
+		id: EntityId,
 		action: LogHistoryAction,
 		data?: Record<string, string | number>,
 	) {
@@ -90,9 +91,9 @@ abstract class SubscriberAbstract<T extends BaseEntity>
 	 * unidentifiable row has no cache key to clear and nothing meaningful to log.
 	 */
 	private resolveEventId(event: {
-		entity?: { id?: number } | null;
-		databaseEntity?: { id?: number } | null;
-	}): number | undefined {
+		entity?: { id?: EntityId } | null;
+		databaseEntity?: { id?: EntityId } | null;
+	}): EntityId | undefined {
 		return event.entity?.id ?? event.databaseEntity?.id;
 	}
 

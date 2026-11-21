@@ -3,6 +3,7 @@ import type CashFlowEntity from '@/features/cash-flow/cash-flow.entity';
 import type ClientEntity from '@/features/client/client.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import { numericTransformer } from '@/shared/transformers/numeric.transformer';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * Which way the money went.
@@ -59,8 +60,8 @@ export default class ClientLedgerEntity extends EntityAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = false;
 
-	@Column('int', { nullable: false })
-	client_id!: number;
+	@Column('uuid', { nullable: false })
+	client_id!: EntityId;
 
 	@Column({
 		type: 'enum',
@@ -69,8 +70,8 @@ export default class ClientLedgerEntity extends EntityAbstract {
 	})
 	entry_type!: ClientLedgerEntryType;
 
-	@Column('int', { nullable: false })
-	cash_flow_id!: number;
+	@Column('uuid', { nullable: false })
+	cash_flow_id!: EntityId;
 
 	@Column('char', {
 		length: 3,

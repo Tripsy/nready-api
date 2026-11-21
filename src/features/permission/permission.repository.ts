@@ -11,23 +11,19 @@ export class PermissionQuery extends RepositoryAbstract<PermissionEntity> {
 
 	filterByTerm(term?: string): this {
 		if (term) {
-			if (!Number.isNaN(Number(term)) && term.trim() !== '') {
-				this.filterBy('id', Number(term));
-			} else {
-				if (term.length >= Configuration.get('filter.termMinLength')) {
-					this.filterAny([
-						{
-							column: 'entity',
-							value: term,
-							operator: 'ILIKE',
-						},
-						{
-							column: 'operation',
-							value: term,
-							operator: 'ILIKE',
-						},
-					]);
-				}
+			if (term.length >= Configuration.get('filter.termMinLength')) {
+				this.filterAny([
+					{
+						column: 'entity',
+						value: term,
+						operator: 'ILIKE',
+					},
+					{
+						column: 'operation',
+						value: term,
+						operator: 'ILIKE',
+					},
+				]);
 			}
 		}
 

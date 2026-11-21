@@ -17,6 +17,7 @@ import {
 import { VatCategoryEnum } from '@/features/vat-rate/vat-rate.entity';
 import { vatRateService } from '@/features/vat-rate/vat-rate.service';
 import { roundMoney } from '@/helpers/shop.helper';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /** What a movement costs before any discount. */
 export type ShippingQuote = {
@@ -130,7 +131,7 @@ export class ShippingRateService {
 	 * from. A relocation has none.
 	 */
 	public async resolveCountryCode(
-		clientAddressId: number | null | undefined,
+		clientAddressId: EntityId | null | undefined,
 	): Promise<string | null> {
 		return clientAddressId
 			? this.clientAddressService.getCountryCodeById(clientAddressId)
@@ -148,7 +149,7 @@ export class ShippingRateService {
 	public async priceForBuyer(
 		input: ShippingQuoteInput,
 		buyer: {
-			clientId: number | null;
+			clientId: EntityId | null;
 			countryCode: string | null;
 			orderValue: number;
 			now?: Date;

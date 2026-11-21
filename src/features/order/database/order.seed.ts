@@ -35,7 +35,9 @@ import ProductEntity from '@/features/product/product.entity';
 import ProductPriceEntity from '@/features/product/product-price.entity';
 import ProductVariantEntity from '@/features/product/product-variant.entity';
 import { vatRateService } from '@/features/vat-rate/vat-rate.service';
+import { compareIds } from '@/helpers/id.helper';
 import { roundMoney } from '@/helpers/shop.helper';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 const TARGET = 24;
 const MIN_LINES_PER_ORDER = 1;
@@ -79,8 +81,8 @@ const PAYMENT_METHODS: readonly OrderPaymentMethod[] = [
 ];
 
 type SellableVariant = {
-	variant_id: number;
-	product_id: number;
+	variant_id: EntityId;
+	product_id: EntityId;
 	price: number;
 	vat_rate: number;
 };
@@ -170,7 +172,7 @@ export const orderSeed: SeedDefinition = {
 			});
 
 		// Copied onto each order the way checkout copies it - the order keeps its own snapshot
-		const billingAddressByClient = new Map<number, OrderBillingAddress>();
+		const billingAddressByClient = new Map<EntityId, OrderBillingAddress>();
 
 		for (const address of billingAddresses) {
 			if (!billingAddressByClient.has(address.client_id)) {
@@ -216,8 +218,8 @@ export const orderSeed: SeedDefinition = {
 			])
 			.orderBy('variant.id', 'ASC')
 			.getRawMany<{
-				variant_id: number;
-				product_id: number;
+				variant_id: EntityId;
+				product_id: EntityId;
 				sale_price: string;
 				vat_category: ProductEntity['vat_category'];
 			}>();
@@ -225,8 +227,8 @@ export const orderSeed: SeedDefinition = {
 		const vatRate = await vatRateService.resolverFor();
 
 		const sellable: SellableVariant[] = priced.map((row) => ({
-			variant_id: Number(row.variant_id),
-			product_id: Number(row.product_id),
+			variant_id: row.variant_id,
+			product_id: row.product_id,
 			price: Number(row.sale_price),
 			vat_rate: vatRate(row.vat_category),
 		}));
@@ -270,7 +272,7 @@ export const orderSeed: SeedDefinition = {
 							[...variants.values()].some((qty) => qty >= 1),
 						)
 						.map(([warehouseId]) => warehouseId)
-						.sort((a, b) => a - b)
+						.sort(compareIds)
 				: [];
 			const site =
 				stock && isLive && sites.length > 0
@@ -321,7 +323,7 @@ export const orderSeed: SeedDefinition = {
 				candidates.length,
 			);
 
-			const usedVariants = new Set<number>();
+			const usedVariants = new Set<EntityId>();
 			const lines: Partial<OrderLineEntity>[] = [];
 
 			/*

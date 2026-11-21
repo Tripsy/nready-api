@@ -13,6 +13,7 @@ import {
 	assertValidStatusTransition,
 	cleanEntityCache,
 } from '@/shared/abstracts/service.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 export class VendorService {
@@ -36,7 +37,7 @@ export class VendorService {
 	 * @description Update any data
 	 */
 	public async update(
-		data: DeepPartial<VendorEntity> & { id: number },
+		data: DeepPartial<VendorEntity> & { id: EntityId },
 	): Promise<VendorEntity> {
 		const saved = await this.repository.save(data);
 
@@ -72,15 +73,15 @@ export class VendorService {
 		await this.update(entry);
 	}
 
-	public async delete(id: number) {
+	public async delete(id: EntityId) {
 		await this.repository.createQuery().filterById(id).delete();
 	}
 
-	public async restore(id: number) {
+	public async restore(id: EntityId) {
 		await this.repository.createQuery().filterById(id).restore();
 	}
 
-	public findById(id: number, withDeleted: boolean): Promise<VendorEntity> {
+	public findById(id: EntityId, withDeleted: boolean): Promise<VendorEntity> {
 		return this.repository
 			.createQuery()
 			.filterById(id)
@@ -91,7 +92,7 @@ export class VendorService {
 	/**
 	 * @description Used in `read` method from controller; this will return a custom shape
 	 */
-	public async getEntryData(data: { id: number; withDeleted: boolean }) {
+	public async getEntryData(data: { id: EntityId; withDeleted: boolean }) {
 		return await this.repository
 			.createQuery()
 			.select([

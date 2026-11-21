@@ -4,11 +4,14 @@ import type GrnEntity from '@/features/grn/grn.entity';
 import type { GrnQuery } from '@/features/grn/grn.repository';
 import { GrnService } from '@/features/grn/grn.service';
 import GrnItemEntity from '@/features/grn/grn-item.entity';
+import { compareIds } from '@/helpers/id.helper';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import { createMockRepository } from '@/tests/jest-service.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 type Lot = {
-	id: number;
-	variant_id: number;
+	id: EntityId;
+	variant_id: EntityId;
 	qty_remaining: number;
 	unit_cost_base: number;
 	/** The receiving day of the lot's receipt - what FIFO orders by. */
@@ -20,7 +23,7 @@ type Lot = {
  * returns them - and which records the `qty_remaining` each lot is left with.
  */
 function fakeManager(lots: Lot[]) {
-	const updates: { id: number; qty_remaining: number }[] = [];
+	const updates: { id: EntityId; qty_remaining: number }[] = [];
 
 	const builder = {
 		innerJoin: jest.fn(() => builder),
@@ -31,7 +34,7 @@ function fakeManager(lots: Lot[]) {
 		orderBy: jest.fn(() => builder),
 		setLock: jest.fn(() => builder),
 		getRawAndEntities: jest.fn(async () => {
-			const ordered = [...lots].sort((a, b) => a.id - b.id);
+			const ordered = [...lots].sort((a, b) => compareIds(a.id, b.id));
 
 			return {
 				entities: ordered.map((lot) => ({
@@ -59,7 +62,7 @@ function fakeManager(lots: Lot[]) {
 		update: jest.fn(
 			async (
 				_target: unknown,
-				criteria: { id: number },
+				criteria: { id: EntityId },
 				values: { qty_remaining: number },
 			) => {
 				updates.push({
@@ -90,29 +93,29 @@ describe('GrnService - consumeLots', () => {
 	// Lot 30 has the lowest id but arrived last; FIFO goes by the receiving day, not the id
 	const lots: Lot[] = [
 		{
-			id: 30,
-			variant_id: 7,
+			id: mockId(30),
+			variant_id: mockId(7),
 			qty_remaining: 10,
 			unit_cost_base: 55,
 			received_at: '2026-10-20',
 		},
 		{
-			id: 31,
-			variant_id: 7,
+			id: mockId(31),
+			variant_id: mockId(7),
 			qty_remaining: 10,
 			unit_cost_base: 40,
 			received_at: '2026-09-01',
 		},
 		{
-			id: 32,
-			variant_id: 7,
+			id: mockId(32),
+			variant_id: mockId(7),
 			qty_remaining: 10,
 			unit_cost_base: 48,
 			received_at: '2026-10-01',
 		},
 		{
-			id: 33,
-			variant_id: 9,
+			id: mockId(33),
+			variant_id: mockId(9),
 			qty_remaining: 4,
 			unit_cost_base: 12,
 			received_at: '2026-08-01',
@@ -122,57 +125,57 @@ describe('GrnService - consumeLots', () => {
 	it('draws oldest first, spanning lots at their own costs', async () => {
 		const { manager, updates } = fakeManager(lots);
 
-		const pieces = await service.consumeLots(manager, 1, [
-			{ key: 500, variant_id: 7, quantity: 14 },
+		const pieces = await service.consumeLots(manager, mockId(1), [
+			{ key: mockId(500), variant_id: mockId(7), quantity: 14 },
 		]);
 
 		expect(pieces).toEqual([
 			{
-				key: 500,
-				grn_item_id: 31,
-				variant_id: 7,
+				key: mockId(500),
+				grn_item_id: mockId(31),
+				variant_id: mockId(7),
 				qty: 10,
 				unit_cost_base: 40,
 			},
 			{
-				key: 500,
-				grn_item_id: 32,
-				variant_id: 7,
+				key: mockId(500),
+				grn_item_id: mockId(32),
+				variant_id: mockId(7),
 				qty: 4,
 				unit_cost_base: 48,
 			},
 		]);
 		expect(updates).toEqual([
-			{ id: 31, qty_remaining: 0 },
-			{ id: 32, qty_remaining: 6 },
+			{ id: mockId(31), qty_remaining: 0 },
+			{ id: mockId(32), qty_remaining: 6 },
 		]);
 	});
 
 	it('breaks a receiving-day tie by lot id', async () => {
 		const { manager } = fakeManager([
 			{
-				id: 41,
-				variant_id: 7,
+				id: mockId(41),
+				variant_id: mockId(7),
 				qty_remaining: 5,
 				unit_cost_base: 20,
 				received_at: '2026-10-01',
 			},
 			{
-				id: 40,
-				variant_id: 7,
+				id: mockId(40),
+				variant_id: mockId(7),
 				qty_remaining: 5,
 				unit_cost_base: 30,
 				received_at: '2026-10-01',
 			},
 		]);
 
-		const pieces = await service.consumeLots(manager, 1, [
-			{ key: 1, variant_id: 7, quantity: 6 },
+		const pieces = await service.consumeLots(manager, mockId(1), [
+			{ key: mockId(1), variant_id: mockId(7), quantity: 6 },
 		]);
 
 		expect(pieces.map((piece) => [piece.grn_item_id, piece.qty])).toEqual([
-			[40, 5],
-			[41, 1],
+			[mockId(40), 5],
+			[mockId(41), 1],
 		]);
 	});
 
@@ -180,27 +183,27 @@ describe('GrnService - consumeLots', () => {
 	it('lets later demands draw from what earlier ones left', async () => {
 		const { manager, updates } = fakeManager(lots);
 
-		const pieces = await service.consumeLots(manager, 1, [
-			{ key: 500, variant_id: 7, quantity: 8 },
-			{ key: 501, variant_id: 7, quantity: 5 },
-			{ key: 502, variant_id: 9, quantity: 4 },
+		const pieces = await service.consumeLots(manager, mockId(1), [
+			{ key: mockId(500), variant_id: mockId(7), quantity: 8 },
+			{ key: mockId(501), variant_id: mockId(7), quantity: 5 },
+			{ key: mockId(502), variant_id: mockId(9), quantity: 4 },
 		]);
 
 		expect(
 			pieces.map((piece) => [piece.key, piece.grn_item_id, piece.qty]),
 		).toEqual([
-			[500, 31, 8],
-			[501, 31, 2],
-			[501, 32, 3],
-			[502, 33, 4],
+			[mockId(500), mockId(31), 8],
+			[mockId(501), mockId(31), 2],
+			[mockId(501), mockId(32), 3],
+			[mockId(502), mockId(33), 4],
 		]);
 		// Written in FIFO order; the row locks were taken in id order by the read already
 		expect(updates).toHaveLength(3);
 		expect(updates).toEqual(
 			expect.arrayContaining([
-				{ id: 31, qty_remaining: 0 },
-				{ id: 32, qty_remaining: 7 },
-				{ id: 33, qty_remaining: 0 },
+				{ id: mockId(31), qty_remaining: 0 },
+				{ id: mockId(32), qty_remaining: 7 },
+				{ id: mockId(33), qty_remaining: 0 },
 			]),
 		);
 	});
@@ -209,8 +212,8 @@ describe('GrnService - consumeLots', () => {
 		const { manager, updates } = fakeManager(lots);
 
 		await expect(
-			service.consumeLots(manager, 1, [
-				{ key: 500, variant_id: 7, quantity: 31 },
+			service.consumeLots(manager, mockId(1), [
+				{ key: mockId(500), variant_id: mockId(7), quantity: 31 },
 			]),
 		).rejects.toMatchObject({ statusCode: 409 });
 		expect(updates).toEqual([]);
@@ -222,49 +225,49 @@ describe('GrnService - consumeLots', () => {
 
 		const pieces = await service.consumeLots(
 			manager,
-			1,
-			[{ key: 502, variant_id: 9, quantity: 6 }],
+			mockId(1),
+			[{ key: mockId(502), variant_id: mockId(9), quantity: 6 }],
 			{ allowShort: true },
 		);
 
 		expect(pieces).toEqual([
 			{
-				key: 502,
-				grn_item_id: 33,
-				variant_id: 9,
+				key: mockId(502),
+				grn_item_id: mockId(33),
+				variant_id: mockId(9),
 				qty: 4,
 				unit_cost_base: 12,
 			},
 		]);
-		expect(updates).toEqual([{ id: 33, qty_remaining: 0 }]);
+		expect(updates).toEqual([{ id: mockId(33), qty_remaining: 0 }]);
 	});
 
 	it('keeps fractional quantities to the cent', async () => {
 		const { manager, updates } = fakeManager([
 			{
-				id: 50,
-				variant_id: 7,
+				id: mockId(50),
+				variant_id: mockId(7),
 				qty_remaining: 1.1,
 				unit_cost_base: 9,
 				received_at: '2026-09-01',
 			},
 			{
-				id: 51,
-				variant_id: 7,
+				id: mockId(51),
+				variant_id: mockId(7),
 				qty_remaining: 2.2,
 				unit_cost_base: 9,
 				received_at: '2026-10-01',
 			},
 		]);
 
-		const pieces = await service.consumeLots(manager, 1, [
-			{ key: 1, variant_id: 7, quantity: 3.3 },
+		const pieces = await service.consumeLots(manager, mockId(1), [
+			{ key: mockId(1), variant_id: mockId(7), quantity: 3.3 },
 		]);
 
 		expect(pieces.map((piece) => piece.qty)).toEqual([1.1, 2.2]);
 		expect(updates).toEqual([
-			{ id: 50, qty_remaining: 0 },
-			{ id: 51, qty_remaining: 0 },
+			{ id: mockId(50), qty_remaining: 0 },
+			{ id: mockId(51), qty_remaining: 0 },
 		]);
 	});
 
@@ -272,8 +275,8 @@ describe('GrnService - consumeLots', () => {
 		const { manager } = fakeManager(lots);
 
 		await expect(
-			service.consumeLots(manager, 1, [
-				{ key: 1, variant_id: 7, quantity: 0 },
+			service.consumeLots(manager, mockId(1), [
+				{ key: mockId(1), variant_id: mockId(7), quantity: 0 },
 			]),
 		).resolves.toEqual([]);
 		expect(manager.getRepository).not.toHaveBeenCalled();

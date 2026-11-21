@@ -6,6 +6,7 @@ import OperationalRecordEntity, {
 	type OperationalRecordType,
 } from '@/features/cash-flow/operational-record.entity';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export class CashFlowQuery extends RepositoryAbstract<CashFlowEntity> {
 	constructor(repository: Repository<CashFlowEntity>) {
@@ -14,23 +15,19 @@ export class CashFlowQuery extends RepositoryAbstract<CashFlowEntity> {
 
 	filterByTerm(term?: string): this {
 		if (term) {
-			if (!Number.isNaN(Number(term)) && term.trim() !== '') {
-				this.filterBy('id', Number(term));
-			} else {
-				if (term.length >= Configuration.get('filter.termMinLength')) {
-					this.filterAny([
-						{
-							column: 'notes',
-							value: term,
-							operator: 'ILIKE',
-						},
-						{
-							column: 'external_reference',
-							value: term,
-							operator: 'ILIKE',
-						},
-					]);
-				}
+			if (term.length >= Configuration.get('filter.termMinLength')) {
+				this.filterAny([
+					{
+						column: 'notes',
+						value: term,
+						operator: 'ILIKE',
+					},
+					{
+						column: 'external_reference',
+						value: term,
+						operator: 'ILIKE',
+					},
+				]);
 			}
 		}
 
@@ -47,9 +44,9 @@ export const getCashFlowRepository = () =>
 		async setupOperationalRecord(
 			manager: EntityManager,
 			data: {
-				cash_flow_id: number;
+				cash_flow_id: EntityId;
 				operational_record_type: OperationalRecordType;
-				entity_id: number | undefined;
+				entity_id: EntityId | undefined;
 			},
 		) {
 			const existingEntry = await manager

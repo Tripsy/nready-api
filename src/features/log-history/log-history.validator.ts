@@ -29,13 +29,11 @@ export class LogHistoryValidator extends BaseValidator<
 
 	readonly delete = z.object({
 		ids: z.array(
-			z.coerce
-				.number({
-					message: lang('shared.validation.invalid_ids', {
-						name: 'ids',
-					}),
-				})
-				.positive(),
+			this.validateId(
+				lang('shared.validation.invalid_ids', {
+					name: 'ids',
+				}),
+			),
 			{
 				message: lang('shared.validation.invalid_ids', {
 					name: 'ids',

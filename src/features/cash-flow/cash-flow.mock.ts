@@ -12,6 +12,7 @@ import {
 import { CashFlowCategoryEnum } from '@/features/cash-flow/cash-flow-category.enum';
 import { createPastDate, formatDate } from '@/helpers/date.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 const cashFlowValidator = new CashFlowValidator('cash-flow');
 
@@ -19,7 +20,7 @@ export function getCashFlowEntityMock(
 	overrides?: Partial<CashFlowEntity>,
 ): CashFlowEntity {
 	return {
-		id: 1,
+		id: mockId(1),
 		direction: CashFlowDirectionEnum.IN,
 		category_type: CashFlowCategoryTypeEnum.REVENUE,
 		category: CashFlowCategoryEnum.SALE,
@@ -48,7 +49,7 @@ export function getCashFlowRefundEntityMock(
 	overrides?: Partial<CashFlowEntity>,
 ): CashFlowEntity {
 	return {
-		id: 2,
+		id: mockId(2),
 		direction: CashFlowDirectionEnum.OUT,
 		category_type: CashFlowCategoryTypeEnum.CORRECTION,
 		category: CashFlowCategoryEnum.REFUND,
@@ -61,7 +62,7 @@ export function getCashFlowRefundEntityMock(
 		currency: 'RON',
 		exchange_rate: 1,
 		external_reference: 'REF-12345-REFUND',
-		parent_id: 1,
+		parent_id: mockId(1),
 		notes: 'Refund for transaction #1',
 		created_at: createPastDate(1000),
 		updated_at: null,
@@ -86,13 +87,13 @@ export const cashFlowInputPayloads = {
 		parent_id: null,
 		notes: 'Test cash flow entry',
 		operational_records: {
-			client: 1,
+			client: mockId(1),
 			vendor: null,
 			order: null,
 		},
 	},
 	update: {
-		id: 1,
+		id: mockId(1),
 		direction: CashFlowDirectionEnum.IN,
 		category_type: CashFlowCategoryTypeEnum.REVENUE,
 		category: CashFlowCategoryEnum.SALE,
@@ -112,7 +113,7 @@ export const cashFlowInputPayloads = {
 		order_by: OrderByEnum.ID,
 		direction: OrderDirectionEnum.DESC,
 		filter: {
-			id: 1,
+			id: mockId(1),
 			direction: CashFlowDirectionEnum.IN,
 			category_type: CashFlowCategoryTypeEnum.REVENUE,
 			category: CashFlowCategoryEnum.SALE,

@@ -6,12 +6,13 @@ import {
 } from '@/features/document-series/document-series.validator';
 import { createPastDate } from '@/helpers/date.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 const documentSeriesValidator = new DocumentSeriesValidator('document-series');
 
 export function getDocumentSeriesEntityMock(): DocumentSeriesEntity {
 	return {
-		id: 1,
+		id: mockId(1),
 		document_type: DocumentTypeEnum.INVOICE,
 		code: 'INV',
 		start_number: 1,
@@ -30,7 +31,7 @@ export const documentSeriesInputPayloads = {
 		notes: 'Fiscal invoice series',
 	},
 	update: {
-		id: 1,
+		id: mockId(1),
 		code: 'INV',
 		notes: 'Fiscal invoice series',
 	},

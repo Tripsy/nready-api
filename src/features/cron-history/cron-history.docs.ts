@@ -42,7 +42,7 @@ export const docs: Record<
 			notes: `${writeNote}. \`content\` is whatever the job returned, or the error message when it threw`,
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -122,7 +122,7 @@ export const docs: Record<
 					default: OrderDirectionEnum.ASC,
 				},
 				filter: {
-					id: { type: 'number', required: false },
+					id: { type: 'string', required: false },
 					term: {
 						type: 'string',
 						required: false,

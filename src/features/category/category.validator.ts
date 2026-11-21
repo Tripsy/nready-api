@@ -218,11 +218,7 @@ export class CategoryValidator extends BaseValidator<typeof validatorMessages> {
 			required: false,
 		}),
 		positions: z
-			.array(
-				z.number({
-					message: this.getMessage('invalid_number'),
-				}),
-			)
+			.array(this.validateId(this.getMessage('invalid_number')))
 			.min(2, {
 				message: this.getMessage('array_min', {
 					length: '2',

@@ -33,7 +33,9 @@ import ShippingEntity, {
 import type { ShippingService } from '@/features/shipping/shipping.service';
 import ShippingLineEntity from '@/features/shipping/shipping-line.entity';
 import { cacheProvider } from '@/providers/cache.provider';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import { createMockRepository } from '@/tests/jest-service.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 /** A TypeORM query builder stand-in: every filter chains, the terminals are configured per test. */
 function fakeQueryBuilder() {
@@ -97,32 +99,32 @@ describe('OrderReturnService', () => {
 	};
 	const orders = {
 		findOwnById:
-			jest.fn<(id: number, userId: number) => Promise<unknown>>(),
+			jest.fn<(id: EntityId, userId: EntityId) => Promise<unknown>>(),
 	};
 	const shipping = {
-		getReturnableByVariant: jest.fn<() => Promise<Map<number, number>>>(),
+		getReturnableByVariant: jest.fn<() => Promise<Map<EntityId, number>>>(),
 		prepareCreate: jest.fn<(input: unknown) => Promise<unknown>>(),
 		createWithin:
 			jest.fn<
-				(manager: unknown, input: unknown) => Promise<{ id: number }>
+				(manager: unknown, input: unknown) => Promise<{ id: EntityId }>
 			>(),
 		findById: jest.fn<() => Promise<unknown>>(),
 		updateStatus:
 			jest.fn<(movement: unknown, status: string) => Promise<unknown>>(),
 	};
 	const invoices = {
-		findIdsBySource: jest.fn<() => Promise<number[]>>(),
-		getLines: jest.fn<(id: number) => Promise<unknown[]>>(),
+		findIdsBySource: jest.fn<() => Promise<EntityId[]>>(),
+		getLines: jest.fn<(id: EntityId) => Promise<unknown[]>>(),
 		getReversedPerLine:
 			jest.fn<
 				(
-					id: number,
-				) => Promise<Map<number, { quantity: number; net: number }>>
+					id: EntityId,
+				) => Promise<Map<EntityId, { quantity: number; net: number }>>
 			>(),
-		findById: jest.fn<(id: number) => Promise<unknown>>(),
+		findById: jest.fn<(id: EntityId) => Promise<unknown>>(),
 		createReversal:
 			jest.fn<
-				(parent: unknown, data: unknown) => Promise<{ id: number }>
+				(parent: unknown, data: unknown) => Promise<{ id: EntityId }>
 			>(),
 	};
 	const emails = {
@@ -187,7 +189,7 @@ describe('OrderReturnService', () => {
 
 		emails.send.mockResolvedValue();
 		invoices.getReversedPerLine.mockResolvedValue(new Map());
-		invoices.findById.mockImplementation(async (id: number) => ({ id }));
+		invoices.findById.mockImplementation(async (id: EntityId) => ({ id }));
 	});
 
 	/** The row lock reads the return back as stored; `entry` is what the caller last read. */
@@ -204,10 +206,10 @@ describe('OrderReturnService', () => {
 				status: OrderStatusEnum.CONFIRMED,
 			});
 			repo(OrderLineEntity).find.mockResolvedValue([
-				{ variant_id: 27, product_id: 12 },
+				{ variant_id: mockId(27), product_id: mockId(12) },
 			]);
 			shipping.getReturnableByVariant.mockResolvedValue(
-				new Map([[27, 2]]),
+				new Map([[mockId(27), 2]]),
 			);
 			documentSeries.allocate.mockResolvedValue({
 				code: 'RMA',
@@ -234,7 +236,10 @@ describe('OrderReturnService', () => {
 			});
 
 			await expect(
-				service.create(data, { userId: 42, enforceWindow: true }),
+				service.create(data, {
+					userId: mockId(42),
+					enforceWindow: true,
+				}),
 			).rejects.toMatchObject({ statusCode: 409 });
 		});
 
@@ -250,7 +255,7 @@ describe('OrderReturnService', () => {
 
 		it('answers 422 for a variant the order does not hold', async () => {
 			repo(OrderLineEntity).find.mockResolvedValue([
-				{ variant_id: 99, product_id: 40 },
+				{ variant_id: mockId(99), product_id: mockId(40) },
 			]);
 
 			await expect(
@@ -261,12 +266,15 @@ describe('OrderReturnService', () => {
 		it('takes off what pending requests already claim', async () => {
 			// 2 delivered, 1 claimed by another return still waiting - 1 left, 2 asked
 			repo(OrderReturnLineEntity).builder.getRawMany.mockResolvedValue([
-				{ variant_id: 27, quantity: '1' },
+				{ variant_id: mockId(27), quantity: '1' },
 			]);
 
 			await expect(
 				service.create(
-					{ ...data, lines: [{ variant_id: 27, quantity: 2 }] },
+					{
+						...data,
+						lines: [{ variant_id: mockId(27), quantity: 2 }],
+					},
 					{ userId: null, enforceWindow: false },
 				),
 			).rejects.toMatchObject({ statusCode: 409 });
@@ -274,7 +282,7 @@ describe('OrderReturnService', () => {
 
 		it('writes the request numbered from the series, lines keyed on the sold product', async () => {
 			const entry = await service.create(data, {
-				userId: 42,
+				userId: mockId(42),
 				enforceWindow: true,
 			});
 
@@ -286,13 +294,13 @@ describe('OrderReturnService', () => {
 				ref_code: 'RMA',
 				ref_number: 8,
 				status: OrderReturnStatusEnum.REQUESTED,
-				user_id: 42,
+				user_id: mockId(42),
 				order_id: data.order_id,
 			});
 			expect(manager.save).toHaveBeenLastCalledWith([
 				expect.objectContaining({
-					variant_id: 27,
-					product_id: 12,
+					variant_id: mockId(27),
+					product_id: mockId(12),
 					quantity: 1,
 				}),
 			]);
@@ -308,7 +316,7 @@ describe('OrderReturnService', () => {
 					}),
 					{
 						...orderReturnOutputPayloads.update,
-						lines: [{ variant_id: 27, quantity: 1 }],
+						lines: [{ variant_id: mockId(27), quantity: 1 }],
 					},
 				),
 			).rejects.toMatchObject({ statusCode: 409 });
@@ -317,7 +325,7 @@ describe('OrderReturnService', () => {
 		it('refuses to change refund_shipping once the refund is drafted', async () => {
 			const entry = getOrderReturnEntityMock({
 				status: OrderReturnStatusEnum.RECEIVED,
-				reversal_invoice_ids: [212],
+				reversal_invoice_ids: [mockId(212)],
 			});
 
 			lockReturns(entry);
@@ -364,7 +372,7 @@ describe('OrderReturnService', () => {
 		it('lets an unchanged refund_shipping through after the draft', async () => {
 			const entry = getOrderReturnEntityMock({
 				status: OrderReturnStatusEnum.CLOSED,
-				reversal_invoice_ids: [212],
+				reversal_invoice_ids: [mockId(212)],
 				refund_shipping: true,
 			});
 
@@ -388,42 +396,54 @@ describe('OrderReturnService', () => {
 			repo(OrderReturnLineEntity).find.mockResolvedValue([
 				{
 					order_return_id: entry.id,
-					variant_id: 27,
-					product_id: 12,
+					variant_id: mockId(27),
+					product_id: mockId(12),
 					quantity: '1',
 				},
 				{
 					order_return_id: entry.id,
-					variant_id: 28,
-					product_id: 12,
+					variant_id: mockId(28),
+					product_id: mockId(12),
 					quantity: '2',
 				},
 			]);
 			repo(ShippingEntity).findOne.mockResolvedValue({
-				id: 50,
-				destination_client_address_id: 5,
+				id: mockId(50),
+				destination_client_address_id: mockId(5),
 				currency: 'RON',
 			});
 			// Warehouse 1 sent the shirt, warehouse 2 both shirts' colors - 2 sent most of what returns
 			repo(ShippingLineEntity).builder.getRawMany.mockResolvedValue([
-				{ warehouse_id: 1, variant_id: 27, quantity: '1' },
-				{ warehouse_id: 2, variant_id: 27, quantity: '1' },
-				{ warehouse_id: 2, variant_id: 28, quantity: '2' },
+				{
+					warehouse_id: mockId(1),
+					variant_id: mockId(27),
+					quantity: '1',
+				},
+				{
+					warehouse_id: mockId(2),
+					variant_id: mockId(27),
+					quantity: '1',
+				},
+				{
+					warehouse_id: mockId(2),
+					variant_id: mockId(28),
+					quantity: '2',
+				},
 			]);
 			repo(ProductVariantEntity).find.mockResolvedValue([
-				{ id: 27 },
-				{ id: 28 },
+				{ id: mockId(27) },
+				{ id: mockId(28) },
 			]);
 
 			shipping.prepareCreate.mockImplementation(async (input) => input);
-			shipping.createWithin.mockResolvedValue({ id: 64 });
+			shipping.createWithin.mockResolvedValue({ id: mockId(64) });
 			mockOrderReturn.query.firstOrFail.mockResolvedValue({
 				...entry,
 				order: {
-					id: 118,
+					id: mockId(118),
 					ref_code: 'ORD',
 					ref_number: 118,
-					client_id: 9,
+					client_id: mockId(9),
 				},
 			} as never);
 		});
@@ -438,17 +458,17 @@ describe('OrderReturnService', () => {
 				expect.objectContaining({
 					scope: 'return',
 					order_id: entry.order_id,
-					destination_warehouse_id: 2,
-					pickup_client_address_id: 5,
+					destination_warehouse_id: mockId(2),
+					pickup_client_address_id: mockId(5),
 					currency: 'RON',
 					price: 0,
 					lines: [
 						expect.objectContaining({
-							variant_id: 27,
+							variant_id: mockId(27),
 							quantity: 1,
 						}),
 						expect.objectContaining({
-							variant_id: 28,
+							variant_id: mockId(28),
 							quantity: 2,
 						}),
 					],
@@ -468,7 +488,7 @@ describe('OrderReturnService', () => {
 			);
 			expect(saved).toMatchObject({
 				status: OrderReturnStatusEnum.APPROVED,
-				shipping_id: 64,
+				shipping_id: mockId(64),
 				refund_shipping: true,
 				response: 'Approved - the courier will collect it',
 			});
@@ -479,7 +499,7 @@ describe('OrderReturnService', () => {
 			await expect(
 				service.approve(entry, {
 					...orderReturnOutputPayloads.approve,
-					destination_warehouse_id: 1,
+					destination_warehouse_id: mockId(1),
 				}),
 			).rejects.toMatchObject({ statusCode: 409 });
 
@@ -493,12 +513,18 @@ describe('OrderReturnService', () => {
 					(options as { where: { track_stock?: boolean } }).where
 						.track_stock
 						? []
-						: [{ id: 27, sku: 'OXF-M', product_id: 12 }],
+						: [
+								{
+									id: mockId(27),
+									sku: 'OXF-M',
+									product_id: mockId(12),
+								},
+							],
 			);
 
 			await service.approve(entry, {
 				...orderReturnOutputPayloads.approve,
-				destination_warehouse_id: 1,
+				destination_warehouse_id: mockId(1),
 			});
 
 			expect(shipping.createWithin).toHaveBeenCalled();
@@ -506,10 +532,10 @@ describe('OrderReturnService', () => {
 
 		it('emails the buyer once approved', async () => {
 			repo(ClientEntity).findOne.mockResolvedValue({
-				id: 9,
+				id: mockId(9),
 				contact_email: 'billing@example.com',
 				user: {
-					id: 42,
+					id: mockId(42),
 					name: 'Ana',
 					email: 'ana@example.com',
 					language: 'ro',
@@ -531,11 +557,11 @@ describe('OrderReturnService', () => {
 		it('refuses to cancel once the goods are on their way back', async () => {
 			const entry = getOrderReturnEntityMock({
 				status: OrderReturnStatusEnum.APPROVED,
-				shipping_id: 64,
+				shipping_id: mockId(64),
 			});
 
 			shipping.findById.mockResolvedValue({
-				id: 64,
+				id: mockId(64),
 				status: ShippingStatusEnum.SHIPPED,
 			});
 
@@ -549,9 +575,12 @@ describe('OrderReturnService', () => {
 		it('withdraws the movement when canceling before it left', async () => {
 			const entry = getOrderReturnEntityMock({
 				status: OrderReturnStatusEnum.APPROVED,
-				shipping_id: 64,
+				shipping_id: mockId(64),
 			});
-			const movement = { id: 64, status: ShippingStatusEnum.PENDING };
+			const movement = {
+				id: mockId(64),
+				status: ShippingStatusEnum.PENDING,
+			};
 
 			lockReturns(entry);
 			shipping.findById.mockResolvedValue(movement);
@@ -586,14 +615,14 @@ describe('OrderReturnService', () => {
 				...entry,
 				status: OrderReturnStatusEnum.REJECTED,
 				order: {
-					id: 118,
+					id: mockId(118),
 					ref_code: 'ORD',
 					ref_number: 118,
-					client_id: 9,
+					client_id: mockId(9),
 				},
 			} as never);
 			repo(ClientEntity).findOne.mockResolvedValue({
-				id: 9,
+				id: mockId(9),
 				company_name: 'Test Company SRL',
 				person_name: null,
 				contact_name: null,
@@ -625,14 +654,14 @@ describe('OrderReturnService', () => {
 			mockOrderReturn.query.firstOrFail.mockResolvedValue({
 				...entry,
 				order: {
-					id: 118,
+					id: mockId(118),
 					ref_code: 'ORD',
 					ref_number: 118,
-					client_id: 9,
+					client_id: mockId(9),
 				},
 			} as never);
 			repo(ClientEntity).findOne.mockResolvedValue({
-				id: 9,
+				id: mockId(9),
 				contact_email: null,
 				user: null,
 			});
@@ -659,7 +688,7 @@ describe('OrderReturnService', () => {
 		it('ignores a movement no approved return stands behind', async () => {
 			mockOrderReturn.query.first.mockResolvedValue(null);
 
-			await service.receiveForMovement(64);
+			await service.receiveForMovement(mockId(64));
 
 			expect(dataSource.transaction).not.toHaveBeenCalled();
 		});
@@ -668,11 +697,11 @@ describe('OrderReturnService', () => {
 			mockOrderReturn.query.first.mockResolvedValue(
 				getOrderReturnEntityMock({
 					status: OrderReturnStatusEnum.RECEIVED,
-					shipping_id: 64,
+					shipping_id: mockId(64),
 				}),
 			);
 
-			await service.receiveForMovement(64);
+			await service.receiveForMovement(mockId(64));
 
 			expect(dataSource.transaction).not.toHaveBeenCalled();
 		});
@@ -680,7 +709,7 @@ describe('OrderReturnService', () => {
 		it('moves the return to received, emails the buyer and drafts the refund', async () => {
 			const approved = getOrderReturnEntityMock({
 				status: OrderReturnStatusEnum.APPROVED,
-				shipping_id: 64,
+				shipping_id: mockId(64),
 			});
 
 			mockOrderReturn.query.first.mockResolvedValue(approved);
@@ -689,16 +718,16 @@ describe('OrderReturnService', () => {
 				...approved,
 				status: OrderReturnStatusEnum.RECEIVED,
 				order: {
-					id: 118,
+					id: mockId(118),
 					ref_code: 'ORD',
 					ref_number: 118,
-					client_id: 9,
+					client_id: mockId(9),
 				},
 			} as never);
 			repo(ClientEntity).findOne.mockResolvedValue({
-				id: 9,
+				id: mockId(9),
 				user: {
-					id: 42,
+					id: mockId(42),
 					name: 'Ana',
 					email: 'ana@example.com',
 					language: 'en',
@@ -708,7 +737,7 @@ describe('OrderReturnService', () => {
 				.spyOn(service, 'draftRefund')
 				.mockResolvedValue([]);
 
-			await service.receiveForMovement(64);
+			await service.receiveForMovement(mockId(64));
 			await flushBackground();
 
 			expect(manager.save).toHaveBeenCalledWith(
@@ -729,12 +758,12 @@ describe('OrderReturnService', () => {
 	describe('draftRefund', () => {
 		const received = getOrderReturnEntityMock({
 			status: OrderReturnStatusEnum.RECEIVED,
-			shipping_id: 64,
+			shipping_id: mockId(64),
 		});
 
 		const productLine = (
-			id: number,
-			orderLineId: number,
+			id: EntityId,
+			orderLineId: EntityId,
 			quantity: number,
 			lineNet: number,
 		) =>
@@ -753,19 +782,25 @@ describe('OrderReturnService', () => {
 
 			// What the movement actually carried: 3 of variant 27
 			repo(ShippingLineEntity).find.mockResolvedValue([
-				{ variant_id: 27, quantity: '3' },
+				{ variant_id: mockId(27), quantity: '3' },
 			]);
 			repo(OrderLineEntity).find.mockResolvedValue([
-				{ id: 501, variant_id: 27 },
-				{ id: 502, variant_id: 28 },
+				{ id: mockId(501), variant_id: mockId(27) },
+				{ id: mockId(502), variant_id: mockId(28) },
 			]);
-			invoices.findIdsBySource.mockResolvedValue([10, 11]);
+			invoices.findIdsBySource.mockResolvedValue([
+				mockId(10),
+				mockId(11),
+			]);
 			repo(InvoiceEntity).find.mockResolvedValue([
-				{ id: 10 },
-				{ id: 11 },
+				{ id: mockId(10) },
+				{ id: mockId(11) },
 			]);
 			invoices.createReversal.mockImplementation(async (parent) => ({
-				id: 900 + (parent as { id: number }).id,
+				// The reversal of document n is document 900 + n
+				id: mockId(
+					900 + Number((parent as { id: EntityId }).id.slice(-12)),
+				),
 			}));
 		});
 
@@ -785,7 +820,7 @@ describe('OrderReturnService', () => {
 			mockOrderReturn.query.firstOrFail.mockResolvedValue(
 				getOrderReturnEntityMock({
 					status: OrderReturnStatusEnum.RECEIVED,
-					reversal_invoice_ids: [910],
+					reversal_invoice_ids: [mockId(910)],
 				}),
 			);
 
@@ -796,42 +831,53 @@ describe('OrderReturnService', () => {
 
 		it('spreads the returned quantity over the documents oldest first, past earlier reversals', async () => {
 			// Document 10 billed 2 of the variant, 1 already reversed - 1 left; document 11 billed 5
-			invoices.getLines.mockImplementation(async (id: number) =>
-				id === 10
-					? [productLine(1, 501, 2, 200), productLine(2, 502, 1, 50)]
-					: [productLine(3, 501, 5, 500)],
+			invoices.getLines.mockImplementation(async (id: EntityId) =>
+				id === mockId(10)
+					? [
+							productLine(mockId(1), mockId(501), 2, 200),
+							productLine(mockId(2), mockId(502), 1, 50),
+						]
+					: [productLine(mockId(3), mockId(501), 5, 500)],
 			);
 			invoices.getReversedPerLine.mockImplementation(
-				async (id: number) =>
-					id === 10
-						? new Map([[1, { quantity: 1, net: 100 }]])
+				async (id: EntityId) =>
+					id === mockId(10)
+						? new Map([[mockId(1), { quantity: 1, net: 100 }]])
 						: new Map(),
 			);
 
 			const raised = await service.draftRefund(received.id);
 
-			expect(raised).toEqual([910, 911]);
+			expect(raised).toEqual([mockId(910), mockId(911)]);
 			expect(invoices.createReversal).toHaveBeenNthCalledWith(
 				1,
-				{ id: 10 },
+				{ id: mockId(10) },
 				expect.objectContaining({
 					lines: [
-						{ invoice_line_id: 1, quantity: 1, amount: undefined },
+						{
+							invoice_line_id: mockId(1),
+							quantity: 1,
+							amount: undefined,
+						},
 					],
 				}),
 			);
 			expect(invoices.createReversal).toHaveBeenNthCalledWith(
 				2,
-				{ id: 11 },
+				{ id: mockId(11) },
 				expect.objectContaining({
 					lines: [
-						{ invoice_line_id: 3, quantity: 2, amount: undefined },
+						{
+							invoice_line_id: mockId(3),
+							quantity: 2,
+							amount: undefined,
+						},
 					],
 				}),
 			);
 			expect(mockOrderReturn.repository.update).toHaveBeenCalledWith(
 				received.id,
-				{ reversal_invoice_ids: [910, 911] },
+				{ reversal_invoice_ids: [mockId(910), mockId(911)] },
 			);
 		});
 
@@ -846,7 +892,9 @@ describe('OrderReturnService', () => {
 		});
 
 		it('leaves the delivery fee alone unless asked', async () => {
-			invoices.getLines.mockResolvedValue([productLine(1, 501, 3, 300)]);
+			invoices.getLines.mockResolvedValue([
+				productLine(mockId(1), mockId(501), 3, 300),
+			]);
 
 			await service.draftRefund(received.id);
 
@@ -855,10 +903,10 @@ describe('OrderReturnService', () => {
 
 		describe('with refund_shipping', () => {
 			const feeLine = getInvoiceLineEntityMock({
-				id: 40,
+				id: mockId(40),
 				kind: InvoiceLineKindEnum.SHIPPING,
 				order_line_id: null,
-				shipping_id: 50,
+				shipping_id: mockId(50),
 				quantity: 1,
 				line_net: 16.53,
 			});
@@ -867,16 +915,18 @@ describe('OrderReturnService', () => {
 				mockOrderReturn.query.firstOrFail.mockResolvedValue(
 					getOrderReturnEntityMock({
 						status: OrderReturnStatusEnum.RECEIVED,
-						shipping_id: 64,
+						shipping_id: mockId(64),
 						refund_shipping: true,
 					}),
 				);
 
 				// Goods on document 10, the delivery's fee on document 20
-				invoices.findIdsBySource.mockResolvedValue([10]);
-				repo(ShippingEntity).find.mockResolvedValue([{ id: 50 }]);
+				invoices.findIdsBySource.mockResolvedValue([mockId(10)]);
+				repo(ShippingEntity).find.mockResolvedValue([
+					{ id: mockId(50) },
+				]);
 				repo(InvoiceSourceEntity).find.mockResolvedValue([
-					{ invoice_id: 20 },
+					{ invoice_id: mockId(20) },
 				]);
 				repo(InvoiceEntity).find.mockImplementation(async (options) => {
 					const ids = (
@@ -885,8 +935,10 @@ describe('OrderReturnService', () => {
 
 					return ids.map((id) => ({ id }));
 				});
-				invoices.getLines.mockImplementation(async (id: number) =>
-					id === 10 ? [productLine(1, 501, 3, 300)] : [feeLine],
+				invoices.getLines.mockImplementation(async (id: EntityId) =>
+					id === mockId(10)
+						? [productLine(mockId(1), mockId(501), 3, 300)]
+						: [feeLine],
 				);
 			});
 
@@ -894,13 +946,13 @@ describe('OrderReturnService', () => {
 			it('pays the fee back by value alongside the goods', async () => {
 				const raised = await service.draftRefund(received.id);
 
-				expect(raised).toEqual([910, 920]);
+				expect(raised).toEqual([mockId(910), mockId(920)]);
 				expect(invoices.createReversal).toHaveBeenLastCalledWith(
-					{ id: 20 },
+					{ id: mockId(20) },
 					expect.objectContaining({
 						lines: [
 							{
-								invoice_line_id: 40,
+								invoice_line_id: mockId(40),
 								quantity: undefined,
 								amount: 16.53,
 							},
@@ -911,16 +963,18 @@ describe('OrderReturnService', () => {
 
 			it('takes back only what earlier reversals left of the fee', async () => {
 				invoices.getReversedPerLine.mockImplementation(
-					async (id: number) =>
-						id === 20
-							? new Map([[40, { quantity: 0, net: 6.53 }]])
+					async (id: EntityId) =>
+						id === mockId(20)
+							? new Map([
+									[mockId(40), { quantity: 0, net: 6.53 }],
+								])
 							: new Map(),
 				);
 
 				await service.draftRefund(received.id);
 
 				expect(invoices.createReversal).toHaveBeenLastCalledWith(
-					{ id: 20 },
+					{ id: mockId(20) },
 					expect.objectContaining({
 						lines: [expect.objectContaining({ amount: 10 })],
 					}),
@@ -929,15 +983,17 @@ describe('OrderReturnService', () => {
 
 			it('skips a fee already paid back in full', async () => {
 				invoices.getReversedPerLine.mockImplementation(
-					async (id: number) =>
-						id === 20
-							? new Map([[40, { quantity: 0, net: 16.53 }]])
+					async (id: EntityId) =>
+						id === mockId(20)
+							? new Map([
+									[mockId(40), { quantity: 0, net: 16.53 }],
+								])
 							: new Map(),
 				);
 
 				const raised = await service.draftRefund(received.id);
 
-				expect(raised).toEqual([910]);
+				expect(raised).toEqual([mockId(910)]);
 				expect(invoices.createReversal).toHaveBeenCalledTimes(1);
 			});
 		});
@@ -951,7 +1007,7 @@ describe('OrderReturnService', () => {
 				}),
 			);
 
-			await expect(service.delete(7)).rejects.toMatchObject({
+			await expect(service.delete(mockId(7))).rejects.toMatchObject({
 				statusCode: 409,
 			});
 			expect(mockOrderReturn.query.delete).not.toHaveBeenCalled();
@@ -962,7 +1018,7 @@ describe('OrderReturnService', () => {
 				getOrderReturnEntityMock(),
 			);
 
-			await service.delete(7);
+			await service.delete(mockId(7));
 
 			expect(mockOrderReturn.query.delete).toHaveBeenCalled();
 		});
@@ -970,31 +1026,36 @@ describe('OrderReturnService', () => {
 
 	describe('cancelOwn', () => {
 		it('refuses to withdraw a decided request', async () => {
-			orders.findOwnById.mockResolvedValue({ id: 118 });
+			orders.findOwnById.mockResolvedValue({ id: mockId(118) });
 			mockOrderReturn.query.firstOrFail.mockResolvedValue(
 				getOrderReturnEntityMock({
 					status: OrderReturnStatusEnum.APPROVED,
 				}),
 			);
 
-			await expect(service.cancelOwn(118, 7, 42)).rejects.toMatchObject({
+			await expect(
+				service.cancelOwn(mockId(118), mockId(7), mockId(42)),
+			).rejects.toMatchObject({
 				statusCode: 409,
 			});
 		});
 
 		it('resolves the return through an order the caller owns', async () => {
-			orders.findOwnById.mockResolvedValue({ id: 118 });
+			orders.findOwnById.mockResolvedValue({ id: mockId(118) });
 			mockOrderReturn.query.firstOrFail.mockResolvedValue(
 				getOrderReturnEntityMock(),
 			);
 			lockReturns(getOrderReturnEntityMock());
 
-			await service.cancelOwn(118, 7, 42);
+			await service.cancelOwn(mockId(118), mockId(7), mockId(42));
 
-			expect(orders.findOwnById).toHaveBeenCalledWith(118, 42);
+			expect(orders.findOwnById).toHaveBeenCalledWith(
+				mockId(118),
+				mockId(42),
+			);
 			expect(mockOrderReturn.query.filterBy).toHaveBeenCalledWith(
 				'order_id',
-				118,
+				mockId(118),
 			);
 		});
 	});
@@ -1002,23 +1063,30 @@ describe('OrderReturnService', () => {
 	// Labels are looked up for the email and the reads; a product name in the default language
 	it('names lines by product label, falling back to nothing', async () => {
 		repo(OrderReturnLineEntity).find.mockResolvedValue([
-			{ order_return_id: 7, variant_id: 27, quantity: '1' },
+			{
+				order_return_id: mockId(7),
+				variant_id: mockId(27),
+				quantity: '1',
+			},
 		]);
 		repo(ProductVariantEntity).find.mockResolvedValue([
-			{ id: 27, sku: 'OXF-M', product_id: 12 },
+			{ id: mockId(27), sku: 'OXF-M', product_id: mockId(12) },
 		]);
 		repo(ProductContentEntity).find.mockResolvedValue([
-			{ product_id: 12, label: 'Oxford shirt' },
+			{ product_id: mockId(12), label: 'Oxford shirt' },
 		]);
 		mockOrderReturn.query.firstOrFail.mockResolvedValue(
 			getOrderReturnEntityMock() as never,
 		);
 
-		const entry = await service.getEntryData({ id: 7, withDeleted: false });
+		const entry = await service.getEntryData({
+			id: mockId(7),
+			withDeleted: false,
+		});
 
 		expect(entry.lines).toEqual([
 			expect.objectContaining({
-				variant_id: 27,
+				variant_id: mockId(27),
 				sku: 'OXF-M',
 				label: 'Oxford shirt',
 			}),

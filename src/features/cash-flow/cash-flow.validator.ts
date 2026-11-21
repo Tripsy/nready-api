@@ -211,7 +211,7 @@ export class CashFlowValidator extends BaseValidator<typeof validatorMessages> {
 		defaultPage: 1,
 
 		filterSchema: {
-			id: this.validateNumber(this.getMessage('invalid_number'), {
+			id: this.validateId(this.getMessage('invalid_id', { name: 'id' }), {
 				required: false,
 			}),
 			parent_id: this.validateId(this.getMessage('invalid_parent_id'), {

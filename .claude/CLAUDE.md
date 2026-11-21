@@ -240,6 +240,9 @@ normalized by `error-handler.middleware.ts`. User-facing strings come from `lang
   `documentSeriesService.allocate(manager, document_type)`, called with the caller's
   `EntityManager` so the counter moves and rolls back with the document itself. One series per
   document type, counting continuously - there is no yearly reset.
+- **Ids are UUID v7** (`EntityId`, native `uuid` columns) - never parse, compare or sort them as
+  numbers. A visitor's `res.locals.auth.id` is `null`; fixtures use `mockId(n)`. Conventions in
+  `rules/database.md` §2.1.
 - Soft deletes are pervasive (`deleted_at`); policies gate visibility of deleted records via
   `allowDeleted`.
 - Status changes go through `assertValidStatusTransition(STATUS_TRANSITIONS, current, next)` -

@@ -6,10 +6,11 @@ import {
 } from '@/features/cron-history/cron-history.validator';
 import { createPastDate, formatDate } from '@/helpers/date.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 export function getCronHistoryEntityMock(): CronHistoryEntity {
 	return {
-		id: 1,
+		id: mockId(1),
 		label: 'cronErrorCount',
 		start_at: createPastDate(28800),
 		end_at: createPastDate(28900),
@@ -26,14 +27,14 @@ export const cronHistoryInputPayloads = {
 		order_by: OrderByEnum.ID,
 		direction: OrderDirectionEnum.DESC,
 		filter: {
-			id: 1,
+			id: mockId(1),
 			term: 'test',
 			status: CronHistoryStatusEnum.ERROR,
 			start_date_start: formatDate(createPastDate(14400)),
 			start_date_end: formatDate(createPastDate(7200)),
 		},
 	},
-	delete: { ids: [1, 2, 3] },
+	delete: { ids: [mockId(1), mockId(2), mockId(3)] },
 };
 
 export const cronHistoryOutputPayloads = {

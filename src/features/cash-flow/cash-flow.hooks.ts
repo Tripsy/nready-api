@@ -1,6 +1,7 @@
 import type { EntityManager } from 'typeorm';
 import type CashFlowEntity from '@/features/cash-flow/cash-flow.entity';
 import { createNotification, createQuery } from '@/helpers/hook.helper';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * What `cash-flow` announces when a movement completes, at the two moments it can be heard.
@@ -28,7 +29,7 @@ import { createNotification, createQuery } from '@/helpers/hook.helper';
  * the same way a checkout payment does.
  */
 export type CashFlowCompletedPayload = {
-	cash_flow_id: number;
+	cash_flow_id: EntityId;
 };
 
 /** What the ledger reads of a movement; only a completed one, filed under a client, is booked. */
@@ -68,13 +69,13 @@ export const recordLedgerMovement = ledgerRecorder.ask;
  * a total here would go stale the first time the order changed.
  */
 export type OperationalRecordOrder = {
-	id: number;
+	id: EntityId;
 	ref_code: string;
 	ref_number: number;
 };
 
 const operationalRecordOrderResolver = createQuery<
-	[orderId: number],
+	[orderId: EntityId],
 	OperationalRecordOrder | null
 >(() => null);
 

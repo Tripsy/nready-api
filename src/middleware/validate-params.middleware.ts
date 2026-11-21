@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
+import { validate as isUuid } from 'uuid';
 import { lang } from '@/config/message.setup';
 import { BadRequestError } from '@/exceptions';
 import { getRouteParam } from '@/helpers/request.helper';
@@ -9,18 +10,13 @@ export const validateParamsWhenId = (...args: string[]) => {
 
 		for (const name of args) {
 			/*
-			 * A plain run of digits, checked by regex because neither numeric parser is
-			 * strict enough on its own: `parseInt` stops at the first non-digit and reads
-			 * `5abc` as 5, while `Number` accepts `5.0`, `5e2` and `0x10`. Controllers may
-			 * read the param straight off the route, so this is the only check it gets.
+			 * Controllers may read the param straight off the route, so this is the only check it
+			 * gets before reaching a query - and a malformed value would otherwise surface as a
+			 * Postgres `invalid input syntax for type uuid` 500 rather than a 400.
 			 */
 			const param = getRouteParam(req, name);
-			const value =
-				param !== undefined && /^\d+$/.test(param)
-					? Number(param)
-					: Number.NaN;
 
-			if (Number.isNaN(value) || value <= 0) {
+			if (param === undefined || !isUuid(param.trim().toLowerCase())) {
 				errors.push({
 					[name]: lang('shared.validation.invalid_id', { name }),
 				});

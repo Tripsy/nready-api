@@ -9,6 +9,7 @@ import ProductBundleGroupEntity from '@/features/product/product-bundle-group.en
 import ProductBundleItemEntity from '@/features/product/product-bundle-item.entity';
 import ProductBundleItemPriceEntity from '@/features/product/product-bundle-item-price.entity';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export class ProductBundleItemQuery extends RepositoryAbstract<ProductBundleItemEntity> {
 	constructor(repository: Repository<ProductBundleItemEntity>) {
@@ -22,7 +23,7 @@ export class ProductBundleItemQuery extends RepositoryAbstract<ProductBundleItem
  * which is most of them.
  */
 export type ResolvedBundleItem = ProductBundleItemType & {
-	group_id: number | null;
+	group_id: EntityId | null;
 };
 
 /**
@@ -55,7 +56,7 @@ export const ProductBundleRepository = dataSource
 		 */
 		async syncGroups(
 			manager: EntityManager,
-			product_id: number,
+			product_id: EntityId,
 			groups: ProductBundleGroupType[],
 		): Promise<void> {
 			const repository = manager.getRepository(ProductBundleGroupEntity);
@@ -106,7 +107,7 @@ export const ProductBundleRepository = dataSource
 		 */
 		async syncItems(
 			manager: EntityManager,
-			product_id: number,
+			product_id: EntityId,
 			items: ResolvedBundleItem[],
 		): Promise<void> {
 			const repository = manager.getRepository(ProductBundleItemEntity);
@@ -166,7 +167,7 @@ export const ProductBundleRepository = dataSource
 		 */
 		async syncPrices(
 			manager: EntityManager,
-			item_id: number,
+			item_id: EntityId,
 			prices: ProductPriceDeltaType[],
 		): Promise<void> {
 			const repository = manager.getRepository(

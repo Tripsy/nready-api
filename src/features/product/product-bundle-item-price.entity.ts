@@ -2,6 +2,7 @@ import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import type ProductBundleItemEntity from '@/features/product/product-bundle-item.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import { numericTransformer } from '@/shared/transformers/numeric.transformer';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 const ENTITY_TABLE_NAME = 'product_bundle_item_price';
 
@@ -40,9 +41,9 @@ export default class ProductBundleItemPriceEntity extends EntityAbstract {
 	 * `WHERE deleted_at IS NULL` answers a query that does not say it. The foreign key's cascade
 	 * looks the children up the same way.
 	 */
-	@Column('int', { nullable: false })
+	@Column('uuid', { nullable: false })
 	@Index('IDX_product_bundle_item_price_item_id')
-	item_id!: number;
+	item_id!: EntityId;
 
 	@Column('char', {
 		length: 3,

@@ -2,7 +2,9 @@ import { expect, jest } from '@jest/globals';
 import type { EntityManager, ObjectLiteral, Repository } from 'typeorm';
 import dataSource from '@/config/data-source.config';
 import type RepositoryAbstract from '@/shared/abstracts/repository.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 export function createMockQuery() {
 	return {
@@ -173,13 +175,13 @@ export function setupTransactionMock(repository?: unknown) {
 }
 
 interface IUpdateService<E> {
-	update(data: Partial<E> & { id: number }): Promise<Partial<E>>;
+	update(data: Partial<E> & { id: EntityId }): Promise<Partial<E>>;
 }
 
 export function testServiceUpdate<E extends ObjectLiteral>(
 	service: IUpdateService<E>,
 	repository: jest.Mocked<Repository<E>>,
-	saveData: E & { id: number },
+	saveData: E & { id: EntityId },
 ) {
 	it('should update', async () => {
 		repository.save.mockResolvedValue(saveData);
@@ -207,7 +209,7 @@ export function testServiceUpdateStatus<
 ) {
 	it('updateStatus - status_unchanged', async () => {
 		const entity = {
-			id: 1,
+			id: mockId(1),
 			status: statusTransitions.good.from,
 		} as unknown as E;
 
@@ -221,7 +223,7 @@ export function testServiceUpdateStatus<
 
 		it('updateStatus - status_update_not_allowed', async () => {
 			const entity = {
-				id: 1,
+				id: mockId(1),
 				status: badTransition.from,
 			} as unknown as E;
 
@@ -233,7 +235,7 @@ export function testServiceUpdateStatus<
 
 	it('updateStatus - success', async () => {
 		const entity = {
-			id: 1,
+			id: mockId(1),
 			status: statusTransitions.good.from,
 		} as unknown as E;
 
@@ -246,7 +248,7 @@ export function testServiceUpdateStatus<
 }
 
 interface IDeleteService {
-	delete(id: number): Promise<void>;
+	delete(id: EntityId): Promise<void>;
 }
 
 export function testServiceDelete<
@@ -263,15 +265,15 @@ export function testServiceDelete<
 	it('should delete by id', async () => {
 		query.delete.mockResolvedValue(1);
 
-		await service.delete(1);
+		await service.delete(mockId(1));
 
-		expect(query.filterById).toHaveBeenCalledWith(1);
+		expect(query.filterById).toHaveBeenCalledWith(mockId(1));
 		expect(query.delete).toHaveBeenCalledWith(...expectedDeleteArgs);
 	});
 }
 
 interface IDeleteMultipleService {
-	delete(data: { ids: number[] }): Promise<number>;
+	delete(data: { ids: EntityId[] }): Promise<number>;
 }
 
 export function testServiceDeleteMultiple<
@@ -280,7 +282,7 @@ export function testServiceDeleteMultiple<
 >(
 	query: jest.Mocked<Q>,
 	service: IDeleteMultipleService,
-	deleteData: { ids: number[] },
+	deleteData: { ids: EntityId[] },
 ) {
 	it('should delete by ids', async () => {
 		query.delete.mockResolvedValue(3);
@@ -293,7 +295,7 @@ export function testServiceDeleteMultiple<
 }
 
 interface IRestoreService {
-	restore(id: number): Promise<void>;
+	restore(id: EntityId): Promise<void>;
 }
 
 export function testServiceRestore<
@@ -315,20 +317,20 @@ export function testServiceRestore<
 		 * alone. A service that checks nothing is unaffected by either line.
 		 */
 		query.firstOrFail.mockResolvedValue(
-			entry ?? ({ id: 1 } as unknown as E),
+			entry ?? ({ id: mockId(1) } as unknown as E),
 		);
 		query.first.mockResolvedValue(null);
 		query.restore.mockReturnThis();
 
-		await service.restore(1);
+		await service.restore(mockId(1));
 
-		expect(query.filterById).toHaveBeenCalledWith(1);
+		expect(query.filterById).toHaveBeenCalledWith(mockId(1));
 		expect(query.restore).toHaveBeenCalledWith();
 	});
 }
 
 interface IFindByIdService<E extends ObjectLiteral> {
-	findById(id: number, withDeleted: boolean): Promise<E>;
+	findById(id: EntityId, withDeleted: boolean): Promise<E>;
 }
 
 export function testServiceFindById<
@@ -336,7 +338,7 @@ export function testServiceFindById<
 	Q extends RepositoryAbstract<E>,
 >(query: jest.Mocked<Q>, service: IFindByIdService<E>) {
 	it('should find entity by id', async () => {
-		const entity = { id: 1 };
+		const entity = { id: mockId(1) };
 
 		query.firstOrFail.mockResolvedValue(entity);
 

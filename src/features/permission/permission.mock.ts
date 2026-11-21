@@ -4,12 +4,13 @@ import {
 	PermissionValidator,
 } from '@/features/permission/permission.validator';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 const permissionValidator = new PermissionValidator('permission');
 
 export function getPermissionEntityMock(): PermissionEntity {
 	return {
-		id: 1,
+		id: mockId(1),
 		entity: 'user',
 		operation: 'create',
 		deleted_at: null,
@@ -22,7 +23,7 @@ export const permissionInputPayloads = {
 		operation: 'create',
 	},
 	update: {
-		id: 1,
+		id: mockId(1),
 		entity: 'user',
 		operation: 'create',
 	},

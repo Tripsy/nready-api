@@ -15,6 +15,7 @@ import {
 	tokenMetaData,
 } from '@/helpers/meta-data.helper';
 import { cacheProvider } from '@/providers/cache.provider';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { AuthContextPermissions } from '@/shared/types/express';
 
 export const AuthFailureReason = {
@@ -31,7 +32,7 @@ export const AuthFailureReason = {
 export type AuthFailureReason =
 	(typeof AuthFailureReason)[keyof typeof AuthFailureReason];
 
-async function getUserPermissions(user_id: number) {
+async function getUserPermissions(user_id: EntityId) {
 	const cacheKey = cacheProvider.buildKey(
 		UserEntity.NAME,
 		user_id.toString(),
@@ -68,7 +69,7 @@ async function getUserPermissions(user_id: number) {
  * never reaches Redis either. The frontend needs the boolean to tell a social-only account (no
  * password to change, none to confirm on delete) from a normal one. A missing user is not cached; the session is discarded on that answer anyway.
  */
-async function getUserContext(user_id: number) {
+async function getUserContext(user_id: EntityId) {
 	const cacheKey = cacheProvider.buildKey(
 		UserEntity.NAME,
 		user_id.toString(),
@@ -133,7 +134,7 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
 	try {
 		// Initialize the user as a visitor
 		res.locals.auth = {
-			id: 0,
+			id: null,
 			email: '',
 			name: '',
 			language: Configuration.language(),

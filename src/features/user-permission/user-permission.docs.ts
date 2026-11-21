@@ -34,7 +34,7 @@ const entitySample = getUserPermissionEntityMock() as unknown as Record<
 const userIdParam = {
 	type: 'number' as const,
 	required: true,
-	condition: 'positive integer; a malformed value answers 400, not 422',
+	condition: 'uuid; a malformed value answers 400, not 422',
 };
 
 export const docs: Record<
@@ -61,7 +61,7 @@ export const docs: Record<
 			},
 			body: {
 				user_id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 					condition: 'the account the permissions are granted to',
 				},
@@ -69,7 +69,7 @@ export const docs: Record<
 					type: 'array',
 					required: true,
 					format: 'number[]',
-					condition: 'at least one id, each a positive integer',
+					condition: 'at least one id, each a uuid',
 				},
 			},
 			sample: userPermissionInputPayloads.create,
@@ -89,7 +89,7 @@ export const docs: Record<
 			params: {
 				user_id: userIdParam,
 				permission_id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 					condition:
 						'the permission being revoked, not the grant row',
@@ -111,7 +111,7 @@ export const docs: Record<
 			params: {
 				user_id: userIdParam,
 				permission_id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 					condition: 'the permission being restored',
 				},

@@ -15,6 +15,7 @@ import TermContentEntity, {
 import TermContentRepository from '@/features/term/term-content.repository';
 import { pickValuesFromObject } from '@/helpers/objects.helper';
 import { cleanEntityCache } from '@/shared/abstracts/service.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 /**
@@ -106,7 +107,7 @@ export class TermService {
 	 * @description Update any data
 	 */
 	public async update(
-		data: DeepPartial<TermEntity> & { id: number },
+		data: DeepPartial<TermEntity> & { id: EntityId },
 	): Promise<TermEntity> {
 		const saved = await this.repository.save(data);
 
@@ -162,15 +163,15 @@ export class TermService {
 		return updatedEntity;
 	}
 
-	public async delete(id: number) {
+	public async delete(id: EntityId) {
 		await this.repository.createQuery().filterById(id).delete();
 	}
 
-	public async restore(id: number) {
+	public async restore(id: EntityId) {
 		await this.repository.createQuery().filterById(id).restore();
 	}
 
-	public findById(id: number, withDeleted: boolean): Promise<TermEntity> {
+	public findById(id: EntityId, withDeleted: boolean): Promise<TermEntity> {
 		return this.repository
 			.createQuery()
 			.filterById(id)
@@ -191,7 +192,7 @@ export class TermService {
 	private async assertNotDuplicate(
 		type: TermType,
 		contents: TermContentType[],
-		withoutId?: number,
+		withoutId?: EntityId,
 	): Promise<void> {
 		if (!contents.length) {
 			return;
@@ -238,7 +239,7 @@ export class TermService {
 	 * @description Used in `read` method from controller; this will return a custom shape
 	 */
 	public async getEntryData(data: {
-		id: number;
+		id: EntityId;
 		language?: string;
 		withDeleted: boolean;
 	}) {

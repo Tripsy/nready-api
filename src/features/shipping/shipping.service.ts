@@ -75,6 +75,7 @@ import {
 	assertValidStatusTransition,
 	cleanEntityCache,
 } from '@/shared/abstracts/service.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 const ENTRY_COLUMNS = [
@@ -302,12 +303,12 @@ export class ShippingService {
 	 * address or a carrier somebody removed.
 	 */
 	private async checkReferences(data: {
-		order_id?: number | null;
-		pickup_warehouse_id?: number | null;
-		destination_warehouse_id?: number | null;
-		pickup_client_address_id?: number | null;
-		destination_client_address_id?: number | null;
-		carrier_id?: number | null;
+		order_id?: EntityId | null;
+		pickup_warehouse_id?: EntityId | null;
+		destination_warehouse_id?: EntityId | null;
+		pickup_client_address_id?: EntityId | null;
+		destination_client_address_id?: EntityId | null;
+		carrier_id?: EntityId | null;
 	}): Promise<void> {
 		if (data.order_id) {
 			await this.orderService.findById(data.order_id, false);
@@ -353,12 +354,12 @@ export class ShippingService {
 		scope: ShippingScope,
 		method: ShippingMethod,
 		data: {
-			order_id?: number | null;
-			document_ref?: number | null;
-			pickup_warehouse_id?: number | null;
-			pickup_client_address_id?: number | null;
-			destination_warehouse_id?: number | null;
-			destination_client_address_id?: number | null;
+			order_id?: EntityId | null;
+			document_ref?: EntityId | null;
+			pickup_warehouse_id?: EntityId | null;
+			pickup_client_address_id?: EntityId | null;
+			destination_warehouse_id?: EntityId | null;
+			destination_client_address_id?: EntityId | null;
 		},
 	): Pick<
 		ShippingEntity,
@@ -441,10 +442,10 @@ export class ShippingService {
 	 */
 	private async assertLinesAllocatable(
 		manager: EntityManager,
-		orderId: number | null,
+		orderId: EntityId | null,
 		scope: ShippingScope,
 		lines: ShippingLinePayload,
-		excludeShippingId?: number,
+		excludeShippingId?: EntityId,
 	): Promise<void> {
 		if (!lines || lines.length === 0 || !orderId) {
 			return;
@@ -455,7 +456,7 @@ export class ShippingService {
 			where: { order_id: orderId },
 		});
 
-		const orderedByVariant = new Map<number, number>();
+		const orderedByVariant = new Map<EntityId, number>();
 
 		for (const line of orderLines) {
 			orderedByVariant.set(
@@ -526,14 +527,14 @@ export class ShippingService {
 	 */
 	private async sumLinesByVariant(
 		manager: EntityManager,
-		orderId: number,
+		orderId: EntityId,
 		options: {
 			scopes: readonly ShippingScope[];
 			statuses?: readonly ShippingStatus[];
 			excludeStatuses?: readonly ShippingStatus[];
-			excludeShippingId?: number;
+			excludeShippingId?: EntityId;
 		},
-	): Promise<Map<number, number>> {
+	): Promise<Map<EntityId, number>> {
 		const query = manager
 			.getRepository(ShippingLineEntity)
 			.createQueryBuilder('line')
@@ -570,10 +571,10 @@ export class ShippingService {
 			.select('line.variant_id', 'variant_id')
 			.addSelect('SUM(line.quantity)', 'quantity')
 			.groupBy('line.variant_id')
-			.getRawMany<{ variant_id: number; quantity: string }>();
+			.getRawMany<{ variant_id: EntityId; quantity: string }>();
 
 		return new Map(
-			rows.map((row) => [Number(row.variant_id), Number(row.quantity)]),
+			rows.map((row) => [row.variant_id, Number(row.quantity)]),
 		);
 	}
 
@@ -584,9 +585,9 @@ export class ShippingService {
 	 * already carry - the same pool `assertLinesAllocatable` caps a return against.
 	 */
 	public async getReturnableByVariant(
-		orderId: number,
+		orderId: EntityId,
 		manager: EntityManager = dataSource.manager,
-	): Promise<Map<number, number>> {
+	): Promise<Map<EntityId, number>> {
 		const [delivered, returning] = await Promise.all([
 			this.sumLinesByVariant(manager, orderId, {
 				scopes: [ShippingScopeEnum.DELIVERY],
@@ -598,7 +599,7 @@ export class ShippingService {
 			}),
 		]);
 
-		const returnable = new Map<number, number>();
+		const returnable = new Map<EntityId, number>();
 
 		for (const [variantId, quantity] of delivered) {
 			const left = roundMoney(quantity - (returning.get(variantId) ?? 0));
@@ -620,7 +621,7 @@ export class ShippingService {
 	 */
 	private async writeLines(
 		manager: EntityManager,
-		shippingId: number,
+		shippingId: EntityId,
 		scope: ShippingScope,
 		lines: ShippingLinePayload,
 	): Promise<void> {
@@ -808,7 +809,7 @@ export class ShippingService {
 	 * @description Update any data
 	 */
 	public async update(
-		data: DeepPartial<ShippingEntity> & { id: number },
+		data: DeepPartial<ShippingEntity> & { id: EntityId },
 	): Promise<ShippingEntity> {
 		const saved = await this.repository.save(data);
 
@@ -913,8 +914,8 @@ export class ShippingService {
 	 * address through its own service, which folds in the flat/floor note a warehouse does not have.
 	 */
 	private async snapshotEnd(
-		warehouseId: number | null,
-		clientAddressId: number | null,
+		warehouseId: EntityId | null,
+		clientAddressId: EntityId | null,
 	): Promise<ShippingEntity['pickup_data']> {
 		if (clientAddressId) {
 			return this.clientAddressService.getSnapshotById(clientAddressId);
@@ -1090,7 +1091,7 @@ export class ShippingService {
 	 */
 	private async assertReturnInspected(
 		manager: EntityManager,
-		shippingId: number,
+		shippingId: EntityId,
 	): Promise<void> {
 		const uninspected = await manager
 			.getRepository(ShippingLineEntity)
@@ -1113,7 +1114,7 @@ export class ShippingService {
 	 * names the order too, but goods coming back are not prepared because the order was accepted.
 	 * Each goes through `updateStatus`, so it is announced like an operator's move.
 	 */
-	public async prepareForOrder(orderId: number): Promise<void> {
+	public async prepareForOrder(orderId: EntityId): Promise<void> {
 		const pending = await this.repository
 			.createQuery()
 			.filterBy('order_id', orderId)
@@ -1146,8 +1147,8 @@ export class ShippingService {
 	 */
 	public async syncLinesForOrder(
 		manager: EntityManager,
-		orderId: number,
-	): Promise<number | null> {
+		orderId: EntityId,
+	): Promise<EntityId | null> {
 		const live = (
 			await manager.getRepository(ShippingEntity).find({
 				select: { id: true, status: true },
@@ -1207,8 +1208,8 @@ export class ShippingService {
 		const physicalIds = new Set(physical.map((product) => product.id));
 
 		const byVariant = new Map<
-			number,
-			{ variant_id: number; product_id: number; quantity: number }
+			EntityId,
+			{ variant_id: EntityId; product_id: EntityId; quantity: number }
 		>();
 
 		for (const line of goods) {
@@ -1263,7 +1264,7 @@ export class ShippingService {
 	 * `return` is left alone for the reason `prepareForOrder` gives. Each goes through
 	 * `updateStatus`, so it is announced like an operator's move.
 	 */
-	public async cancelForOrder(orderId: number): Promise<void> {
+	public async cancelForOrder(orderId: EntityId): Promise<void> {
 		const open = await this.repository
 			.createQuery()
 			.filterBy('order_id', orderId)
@@ -1280,15 +1281,18 @@ export class ShippingService {
 		}
 	}
 
-	public async delete(id: number) {
+	public async delete(id: EntityId) {
 		await this.repository.createQuery().filterById(id).delete();
 	}
 
-	public async restore(id: number) {
+	public async restore(id: EntityId) {
 		await this.repository.createQuery().filterById(id).restore();
 	}
 
-	public findById(id: number, withDeleted: boolean): Promise<ShippingEntity> {
+	public findById(
+		id: EntityId,
+		withDeleted: boolean,
+	): Promise<ShippingEntity> {
 		return this.repository
 			.createQuery()
 			.filterById(id)
@@ -1303,8 +1307,8 @@ export class ShippingService {
 	 * movement, and only one carrying a price - a free movement has nothing to bill.
 	 */
 	public findBillable(filter: {
-		order_id?: number;
-		id?: number;
+		order_id?: EntityId;
+		id?: EntityId;
 	}): Promise<ShippingEntity[]> {
 		return this.repository
 			.createQuery()
@@ -1338,7 +1342,7 @@ export class ShippingService {
 	 * sees the new ones.
 	 */
 	public async computeOrderPayable(
-		orderId: number,
+		orderId: EntityId,
 		manager: EntityManager = dataSource.manager,
 	): Promise<number> {
 		const [lines, movements] = await Promise.all([
@@ -1383,8 +1387,8 @@ export class ShippingService {
 	 * its ceiling after the row goes.
 	 */
 	public async getPrices(
-		ids: readonly number[],
-	): Promise<Map<number, number>> {
+		ids: readonly EntityId[],
+	): Promise<Map<EntityId, number>> {
 		if (ids.length === 0) {
 			return new Map();
 		}
@@ -1409,7 +1413,7 @@ export class ShippingService {
 	 * gives - the `read` payload is cached per id alone.
 	 */
 	public async getLines(
-		shippingId: number,
+		shippingId: EntityId,
 	): Promise<ShippingLineWithLabel[]> {
 		const lines = await dataSource.getRepository(ShippingLineEntity).find({
 			where: { shipping_id: shippingId },
@@ -1458,7 +1462,7 @@ export class ShippingService {
 	 * @description Used in `read` method from controller; this will return a custom shape
 	 */
 	public async getEntryData(data: {
-		id: number;
+		id: EntityId;
 		withDeleted: boolean;
 	}): Promise<ShippingWithLines> {
 		const entry = await this.repository
@@ -1514,11 +1518,11 @@ export class ShippingService {
 				[
 					entry.pickup_client_address_id,
 					entry.destination_client_address_id,
-				].filter((id): id is number => id !== null),
+				].filter((id): id is EntityId => id !== null),
 			),
 		);
 
-		const labelOf = (id: number | null) =>
+		const labelOf = (id: EntityId | null) =>
 			id === null ? null : (labels.get(id) ?? null);
 
 		return entries.map((entry) =>
@@ -1544,8 +1548,8 @@ export class ShippingService {
 	 * checkout split it - and rarely more than a return beside them.
 	 */
 	public async findForOwnOrder(
-		orderId: number,
-		userId: number,
+		orderId: EntityId,
+		userId: EntityId,
 	): Promise<ShippingEntity[]> {
 		await this.orderService.findOwnById(orderId, userId);
 
@@ -1580,7 +1584,7 @@ export class ShippingService {
 	 * Names only, never codes or notes - the buyer reads this. Soft-deleted movements included: the
 	 * document stays valid whatever became of the row. Null when the id points at nothing.
 	 */
-	public async findDocumentDetails(id: number): Promise<
+	public async findDocumentDetails(id: EntityId): Promise<
 		| (ShippingEntity & {
 				pickup_client_address_label: string | null;
 				destination_client_address_label: string | null;
@@ -1638,8 +1642,8 @@ export class ShippingService {
 	 * stale, and one foreign or deleted id should not blank the rest.
 	 */
 	public findForOwnOrders(
-		orderIds: number[],
-		userId: number,
+		orderIds: EntityId[],
+		userId: EntityId,
 	): Promise<ShippingEntity[]> {
 		return (
 			this.repository

@@ -1,6 +1,7 @@
 import type { EntityManager } from 'typeorm';
 import type { ShippingScope } from '@/features/shipping/shipping.entity';
 import { createNotification, createQuery } from '@/helpers/hook.helper';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * What `shipping` announces about its own rows, and what it asks while moving one along.
@@ -24,8 +25,8 @@ import { createNotification, createQuery } from '@/helpers/hook.helper';
  * which bills nobody and is announced only so the payload never has to be filtered by the sender.
  */
 export type ShippingChangedPayload = {
-	shipping_id: number;
-	order_id: number | null;
+	shipping_id: EntityId;
+	order_id: EntityId | null;
 };
 
 const shippingChanged = createNotification<ShippingChangedPayload>(
@@ -37,11 +38,11 @@ export const notifyShippingChanged = shippingChanged.notify;
 
 /** The movement whose goods are leaving or coming back - its lines are read by id. */
 export type ShippingStockMove = {
-	shipping_id: number;
-	order_id: number | null;
+	shipping_id: EntityId;
+	order_id: EntityId | null;
 	scope: ShippingScope;
-	pickup_warehouse_id: number | null;
-	destination_warehouse_id: number | null;
+	pickup_warehouse_id: EntityId | null;
+	destination_warehouse_id: EntityId | null;
 };
 
 const shippedStockMover = createQuery<
@@ -95,8 +96,8 @@ export const receiveReturnedStock = returnedStockReceiver.ask;
 
 /** A `return` movement reached its warehouse. Always tied to an order - the scope requires one. */
 export type ReturnReceivedPayload = {
-	shipping_id: number;
-	order_id: number;
+	shipping_id: EntityId;
+	order_id: EntityId;
 };
 
 const returnReceived = createNotification<ReturnReceivedPayload>(

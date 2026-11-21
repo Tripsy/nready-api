@@ -68,7 +68,7 @@ export const docs: Record<
 			notes: `A new warehouse starts as \`${WarehouseStatusEnum.ACTIVE}\`. The code is unique among warehouses that are not deleted - a taken one answers 409. An \`address_id\` that resolves to nothing answers 404. ${defaultNote}`,
 			body: {
 				address_id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 					condition: 'must resolve to an address that is not deleted',
 				},
@@ -107,7 +107,7 @@ export const docs: Record<
 			notes: 'A deleted warehouse is only visible to a caller holding warehouse delete. The address is joined LEFT, so a warehouse whose address was removed still reads, with `address` null',
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -127,12 +127,12 @@ export const docs: Record<
 			notes: `Provide at least one of address_id, code, name, is_default or notes. A \`status\` in the body is ignored - it has its own route. ${defaultNote}`,
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
 			body: {
-				address_id: { type: 'number', required: false },
+				address_id: { type: 'string', required: false },
 				code: {
 					type: 'string',
 					required: false,
@@ -161,7 +161,7 @@ export const docs: Record<
 			notes: 'Soft delete, whatever the status. A deleted warehouse releases both its code and the default flag, so either can be claimed by another row',
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -180,7 +180,7 @@ export const docs: Record<
 			notes: 'Answers 409 when the code, or the default flag, was claimed by another warehouse while this one was deleted',
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -239,13 +239,13 @@ export const docs: Record<
 					default: OrderDirectionEnum.ASC,
 				},
 				filter: {
-					id: { type: 'number', required: false },
+					id: { type: 'string', required: false },
 					term: {
 						type: 'string',
 						required: false,
 						condition: `an all-digit term matches the id exactly; otherwise the name and the code, from ${Configuration.get('filter.termMinLength')} characters`,
 					},
-					address_id: { type: 'number', required: false },
+					address_id: { type: 'string', required: false },
 					status: {
 						type: 'enum',
 						required: false,
@@ -276,7 +276,7 @@ export const docs: Record<
 			notes: `Allowed moves: ${statusTransitionNote}. Anything else answers 422. Deactivating the default warehouse is allowed - it stays the default`,
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 				status: {

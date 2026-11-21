@@ -4,6 +4,7 @@ import TermContentEntity, {
 	type TermContentType,
 } from '@/features/term/term-content.entity';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export class TermContentQuery extends RepositoryAbstract<TermContentEntity> {
 	constructor(repository: Repository<TermContentEntity>) {
@@ -21,7 +22,7 @@ export const TermContentRepository = dataSource
 		async saveContent(
 			manager: EntityManager,
 			contents: TermContentType[],
-			term_id: number,
+			term_id: EntityId,
 		) {
 			if (!contents.length) {
 				return;

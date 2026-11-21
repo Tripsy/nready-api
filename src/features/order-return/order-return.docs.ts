@@ -83,7 +83,7 @@ const statusTransitionNote = Object.entries(STATUS_TRANSITIONS)
 const linesParam = {
 	type: 'array' as const,
 	required: true,
-	format: '[{ variant_id: number; quantity: number }]',
+	format: '[{ variant_id: EntityId; quantity: number }]',
 	condition: `1 to ${ORDER_RETURN_LINES_MAX} lines, one per variant; each variant must be on the order, and the quantity within what was delivered and is not already being returned (2 decimals). The product is taken from the order line`,
 };
 
@@ -94,7 +94,7 @@ const textParam = (what: string) => ({
 });
 
 const idParams = {
-	id: { type: 'number' as const, required: true },
+	id: { type: 'string' as const, required: true },
 };
 
 /**
@@ -121,7 +121,7 @@ export const docs: Record<
 		request: {
 			notes: `A new return is ${OrderReturnStatusEnum.REQUESTED} and moves nothing; its number is allocated from the RMA series. The order must be confirmed or completed (409). Unlike the storefront, the back office is not held to the ${Configuration.get('orderReturn.windowDays')}-day window after delivery`,
 			body: {
-				order_id: { type: 'number', required: true },
+				order_id: { type: 'string', required: true },
 				reason: {
 					type: 'enum',
 					required: true,
@@ -163,7 +163,7 @@ export const docs: Record<
 		withErrors: [422],
 		request: {
 			notes: 'Delivered = lines of the delivered deliveries of the order. Taken off: lines of live return movements, and of returns still requested. deadline is the last delivery plus the window - null while nothing has arrived',
-			params: { order_id: { type: 'number', required: true } },
+			params: { order_id: { type: 'string', required: true } },
 		},
 	}),
 	read: helperApiInputDocumentation({
@@ -281,8 +281,8 @@ export const docs: Record<
 					default: OrderDirectionEnum.DESC,
 				},
 				filter: {
-					id: { type: 'number', required: false },
-					order_id: { type: 'number', required: false },
+					id: { type: 'string', required: false },
+					order_id: { type: 'string', required: false },
 					status: {
 						type: 'enum',
 						required: false,
@@ -325,13 +325,13 @@ export const docs: Record<
 			params: idParams,
 			body: {
 				destination_warehouse_id: {
-					type: 'number',
+					type: 'string',
 					required: false,
 					condition:
 						'left out, the warehouse the delivered goods left from; a stated one must have sent every stock-tracked line (409)',
 				},
-				pickup_client_address_id: { type: 'number', required: false },
-				carrier_id: { type: 'number', required: false },
+				pickup_client_address_id: { type: 'string', required: false },
+				carrier_id: { type: 'string', required: false },
 				method: {
 					type: 'enum',
 					required: false,
@@ -382,7 +382,7 @@ export const docs: Record<
 		request: {
 			notes: `The route takes ${MANUAL_STATUSES.join(', ')}; ${OrderReturnStatusEnum.APPROVED} goes through /approve and ${OrderReturnStatusEnum.RECEIVED} follows the return movement. Allowed moves: ${statusTransitionNote}. Canceling an approved return withdraws its movement while it has not left the client - 409 once it has shipped`,
 			params: {
-				id: { type: 'number', required: true },
+				id: { type: 'string', required: true },
 				status: {
 					type: 'enum',
 					required: true,

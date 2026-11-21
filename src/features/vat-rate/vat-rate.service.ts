@@ -18,6 +18,7 @@ import { pickValuesFromObject } from '@/helpers/objects.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
 import { cleanEntityCache } from '@/shared/abstracts/service.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 /** The percentage one VAT class carries in the country and on the day the resolver was built for. */
@@ -186,7 +187,7 @@ export class VatRateService {
 	 * priced at, so a correction reaches carts and catalog quotes and nothing already written.
 	 */
 	public async update(
-		data: DeepPartial<VatRateEntity> & { id: number },
+		data: DeepPartial<VatRateEntity> & { id: EntityId },
 	): Promise<VatRateEntity> {
 		const saved = await this.repository.save(data);
 
@@ -211,12 +212,12 @@ export class VatRateService {
 	 * Hard delete: the table has no `deleted_at`, for the reason the entity gives. Removing a row
 	 * hands its period back to the row before it.
 	 */
-	public async delete(id: number) {
+	public async delete(id: EntityId) {
 		// `RepositoryAbstract.delete` cleans the cached read of every row it removes
 		await this.repository.createQuery().filterById(id).delete(false);
 	}
 
-	public findById(id: number): Promise<VatRateEntity> {
+	public findById(id: EntityId): Promise<VatRateEntity> {
 		return this.repository.createQuery().filterById(id).firstOrFail();
 	}
 
@@ -257,7 +258,7 @@ export class VatRateService {
 	/**
 	 * @description Used in `read` method from controller; this will return a custom shape
 	 */
-	public async getEntryData(data: { id: number }) {
+	public async getEntryData(data: { id: EntityId }) {
 		return await this.repository
 			.createQuery()
 			.select(SELECT_COLUMNS)

@@ -11,6 +11,7 @@ import CommentEntity, {
 import { commentService } from '@/features/comment/comment.service';
 import { commentSubscriptionService } from '@/features/comment/comment-subscription.service';
 import { runInBackground } from '@/helpers/background.helper';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * Follows the discussion on behalf of whoever just wrote in it.
@@ -47,7 +48,7 @@ function isCommentTarget(entityType: string): entityType is CommentEntityType {
  */
 async function clearTargets(
 	entityType: CommentEntityType,
-	entityIds: number[],
+	entityIds: EntityId[],
 ): Promise<void> {
 	for (const entityId of entityIds) {
 		await commentService.deleteByTarget(entityType, entityId);
@@ -57,7 +58,7 @@ async function clearTargets(
 }
 
 async function subscribeAuthor(
-	commentId: number,
+	commentId: EntityId,
 	language: string,
 ): Promise<void> {
 	const entry = await commentService.findById(commentId);

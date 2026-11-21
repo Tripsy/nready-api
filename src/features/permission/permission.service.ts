@@ -4,6 +4,7 @@ import PermissionEntity from '@/features/permission/permission.entity';
 import { getPermissionRepository } from '@/features/permission/permission.repository';
 import type { PermissionValidator } from '@/features/permission/permission.validator';
 import { cleanEntityCache } from '@/shared/abstracts/service.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 type PermissionCreateResult = {
@@ -103,16 +104,16 @@ export class PermissionService {
 		return saved;
 	}
 
-	public async delete(id: number) {
+	public async delete(id: EntityId) {
 		await this.repository.createQuery().filterById(id).delete();
 	}
 
-	public async restore(id: number) {
+	public async restore(id: EntityId) {
 		await this.repository.createQuery().filterById(id).restore();
 	}
 
 	public findById(
-		id: number,
+		id: EntityId,
 		withDeleted: boolean,
 	): Promise<PermissionEntity> {
 		return this.repository
@@ -126,7 +127,7 @@ export class PermissionService {
 		entity: string,
 		operation: string,
 		fields?: string[],
-		withoutId?: number,
+		withoutId?: EntityId,
 	) {
 		const q = this.repository
 			.createQuery()

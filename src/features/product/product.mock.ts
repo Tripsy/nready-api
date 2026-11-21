@@ -13,12 +13,13 @@ import {
 } from '@/features/product/product.validator';
 import { createPastDate } from '@/helpers/date.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 const productValidator = new ProductValidator('product');
 
 export function getProductEntityMock(): ProductEntity {
 	return {
-		id: 1,
+		id: mockId(1),
 		workflow: ProductWorkflowEnum.DRAFT,
 		sale_status: ProductSaleStatusEnum.AVAILABLE,
 		type: ProductTypeEnum.PHYSICAL,
@@ -61,7 +62,7 @@ export const productInputPayloads = {
 		availabilities: undefined,
 		option_groups: undefined,
 		bundle_items: undefined,
-		tags: [1, 2],
+		tags: [mockId(1), mockId(2)],
 		contents: [
 			{
 				language: 'en',
@@ -75,7 +76,7 @@ export const productInputPayloads = {
 				},
 			},
 		],
-		categories: [1],
+		categories: [mockId(1)],
 		// A single-variant product is the normal case: price and stock hang off the variant, so
 		// even a product with nothing to vary carries one
 		variants: [
@@ -101,7 +102,7 @@ export const productInputPayloads = {
 		],
 	},
 	update: {
-		id: 1,
+		id: mockId(1),
 		type: undefined,
 		composition: undefined,
 		unit: undefined,
@@ -116,7 +117,7 @@ export const productInputPayloads = {
 		bundle_items: undefined,
 		categories: undefined,
 		variants: undefined,
-		tags: [2],
+		tags: [mockId(2)],
 		contents: [
 			{
 				language: 'en',
@@ -132,7 +133,7 @@ export const productInputPayloads = {
 		],
 	},
 	publicStock: {
-		id: 1,
+		id: mockId(1),
 	},
 	publicRead: {
 		slug: 'pizza-margherita',

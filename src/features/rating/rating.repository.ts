@@ -6,6 +6,7 @@ import type {
 } from '@/features/rating/rating.entity';
 import RatingEntity from '@/features/rating/rating.entity';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export class RatingQuery extends RepositoryAbstract<RatingEntity> {
 	constructor(repository: Repository<RatingEntity>) {
@@ -19,7 +20,7 @@ export class RatingQuery extends RepositoryAbstract<RatingEntity> {
 	 */
 	filterByTarget(
 		entityType?: RatingEntityType | null,
-		entityId?: number | null,
+		entityId?: EntityId | null,
 		type?: RatingType | null,
 	): this {
 		this.filterBy('entity_type', entityType);
@@ -40,7 +41,7 @@ export class RatingQuery extends RepositoryAbstract<RatingEntity> {
 	 * let anyone sharing an address - a household, an office, a carrier's NAT - delete a signed-in
 	 * user's rating, since `UQ_rating_ip` allows both rows to exist under the same hash.
 	 */
-	filterByOwner(userId: number | null, userIpHash: string): this {
+	filterByOwner(userId: EntityId | null, userIpHash: string): this {
 		if (userId) {
 			this.filterBy('user_id', userId);
 

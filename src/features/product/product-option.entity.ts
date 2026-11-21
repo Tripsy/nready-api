@@ -6,12 +6,13 @@ import {
 	JoinColumn,
 	ManyToOne,
 	OneToMany,
-	PrimaryGeneratedColumn,
 	UpdateDateColumn,
 } from 'typeorm';
 import type ProductOptionGroupEntity from '@/features/product/product-option-group.entity';
 import type ProductOptionPriceEntity from '@/features/product/product-option-price.entity';
 import type TermEntity from '@/features/term/term.entity';
+import { EntityIdAbstract } from '@/shared/abstracts/entity-id.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * What an order line records about a chosen option. Frozen at the moment of ordering, like
@@ -23,7 +24,7 @@ export type ProductOptionSnapshot = {
 	 * The `product_option` the snapshot was taken from, so an editor can send the choice back as
 	 * an id. Optional: snapshots written before it was recorded carry only the wording.
 	 */
-	option_id?: number;
+	option_id?: EntityId;
 	label: string;
 	price_delta: number;
 	currency: string;
@@ -51,21 +52,18 @@ const ENTITY_TABLE_NAME = 'product_option';
 // Not `EntityAbstract`: this table carries no `deleted_at`. An option has no CRUD surface of its
 // own - it is written only through the product form's Options tab - and `syncOptions` deletes an
 // answer dropped from that form outright, so there is no soft-deleted state to read or restore
-export default class ProductOptionEntity {
+export default class ProductOptionEntity extends EntityIdAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
 
-	@PrimaryGeneratedColumn({ type: 'int' })
-	id!: number;
+	@Column('uuid', { nullable: false })
+	option_group_id!: EntityId;
 
-	@Column('int', { nullable: false })
-	option_group_id!: number;
-
-	@Column('int', {
+	@Column('uuid', {
 		nullable: false,
 		comment: 'Term holding the multilingual answer, e.g. "Extra bacon"',
 	})
-	label_id!: number;
+	label_id!: EntityId;
 
 	@Column('int', {
 		nullable: false,

@@ -24,6 +24,7 @@ import {
 	cleanEntityCache,
 	cleanEntityCacheMany,
 } from '@/shared/abstracts/service.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 /**
@@ -243,7 +244,7 @@ export class CategoryService {
 			 * subtree caches the old chain under `with_ancestors`. Each id is one Redis
 			 * SCAN, which is why the set is built only for an actual move.
 			 */
-			const staleIds = new Set<number>(descendants.map((d) => d.id));
+			const staleIds = new Set<EntityId>(descendants.map((d) => d.id));
 
 			for (const parentId of [currentParentId, newParentId]) {
 				if (parentId) {
@@ -270,7 +271,7 @@ export class CategoryService {
 			const repository = manager.getRepository(CategoryEntity); // We use the manager -> `getCategoryRepository` is not bound to the transaction
 
 			// Collected inside the transaction, cleaned after it commits.
-			const cascadedIds: number[] = [];
+			const cascadedIds: EntityId[] = [];
 
 			assertValidStatusTransition(
 				STATUS_TRANSITIONS,
@@ -288,7 +289,7 @@ export class CategoryService {
 					.where('category.status = :status', {
 						status: CategoryStatusEnum.ACTIVE,
 					})
-					.getRawMany<{ id: number }>();
+					.getRawMany<{ id: EntityId }>();
 
 				const activeDescendants = activeDescendantsData.filter(
 					(d) => d.id !== entry.id,
@@ -350,8 +351,8 @@ export class CategoryService {
 	 */
 	public async updateOrder(
 		type: CategoryType,
-		parent_id: number | undefined,
-		ids: number[], // Array of IDs in the desired order
+		parent_id: EntityId | undefined,
+		ids: EntityId[], // Array of IDs in the desired order
 	): Promise<void> {
 		await dataSource.transaction(async (manager) => {
 			const categoryRepository = manager.getRepository(CategoryEntity);
@@ -408,7 +409,7 @@ export class CategoryService {
 		await cleanEntityCacheMany(CategoryEntity, ids);
 	}
 
-	public async delete(id: number) {
+	public async delete(id: EntityId) {
 		const category = await this.findById(id, true);
 
 		if (category.deleted_at) {
@@ -431,7 +432,7 @@ export class CategoryService {
 		await this.repository.createQuery().filterById(id).delete();
 	}
 
-	public async restore(id: number) {
+	public async restore(id: EntityId) {
 		const category = await this.repository
 			.createQuery()
 			.joinAndSelect('category.parent', 'parent', 'LEFT')
@@ -523,7 +524,10 @@ export class CategoryService {
 		}
 	}
 
-	public findById(id: number, withDeleted: boolean): Promise<CategoryEntity> {
+	public findById(
+		id: EntityId,
+		withDeleted: boolean,
+	): Promise<CategoryEntity> {
 		return this.repository
 			.createQuery()
 			.filterById(id)
@@ -536,7 +540,7 @@ export class CategoryService {
 	 * cannot tell a root from an entry whose relation was simply left unloaded.
 	 */
 	public findByIdWithParent(
-		id: number,
+		id: EntityId,
 		withDeleted: boolean,
 	): Promise<CategoryEntity> {
 		return this.repository
@@ -577,7 +581,7 @@ export class CategoryService {
 	 * @description Used in `read` method from controller; this will return a custom shape
 	 */
 	public async getEntryData(data: {
-		id: number;
+		id: EntityId;
 		with_ancestors: boolean;
 		with_children: boolean;
 		language: string | undefined;

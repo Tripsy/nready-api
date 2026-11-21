@@ -5,11 +5,12 @@ import {
 	Index,
 	JoinColumn,
 	ManyToOne,
-	PrimaryGeneratedColumn,
 	UpdateDateColumn,
 } from 'typeorm';
 import type ProductOptionEntity from '@/features/product/product-option.entity';
+import { EntityIdAbstract } from '@/shared/abstracts/entity-id.abstract';
 import { numericTransformer } from '@/shared/transformers/numeric.transformer';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 const ENTITY_TABLE_NAME = 'product_option_price';
 
@@ -32,21 +33,18 @@ const ENTITY_TABLE_NAME = 'product_option_price';
 // Not `EntityAbstract`: this table carries no `deleted_at`, like the two levels above it. A delta
 // is written only through the product form's Options tab, and is deleted outright when its
 // currency is dropped from that form or its option goes
-export default class ProductOptionPriceEntity {
+export default class ProductOptionPriceEntity extends EntityIdAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
-
-	@PrimaryGeneratedColumn({ type: 'int' })
-	id!: number;
 
 	/*
 	 * Duplicates the leading column of `IDX_product_option_price_unique`, which is unconditional
 	 * and answers a lookup by `option_id` alone - so this one earns its place on nothing but the
 	 * `option_id` foreign key's cascade, and dropping it should be a decision of its own.
 	 */
-	@Column('int', { nullable: false })
+	@Column('uuid', { nullable: false })
 	@Index('IDX_product_option_price_option_id')
-	option_id!: number;
+	option_id!: EntityId;
 
 	@Column('char', {
 		length: 3,

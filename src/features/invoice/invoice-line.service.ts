@@ -11,6 +11,7 @@ import InvoiceLineEntity, {
 } from '@/features/invoice/invoice-line.entity';
 import { getInvoiceLineRepository } from '@/features/invoice/invoice-line.repository';
 import { cleanEntityCache } from '@/shared/abstracts/service.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 /**
@@ -170,7 +171,10 @@ export class InvoiceLineService {
 	 * A soft delete, like everywhere else - but the header is re-summed from the rows that are
 	 * still live, so a removed line stops counting the moment it goes.
 	 */
-	public async delete(invoice: InvoiceEntity, lineId: number): Promise<void> {
+	public async delete(
+		invoice: InvoiceEntity,
+		lineId: EntityId,
+	): Promise<void> {
 		invoiceService.assertMutable(invoice);
 
 		await this.findByInvoice(invoice.id, lineId);
@@ -190,8 +194,8 @@ export class InvoiceLineService {
 	 * step.
 	 */
 	private async findByInvoice(
-		invoiceId: number,
-		lineId: number,
+		invoiceId: EntityId,
+		lineId: EntityId,
 	): Promise<InvoiceLineEntity> {
 		const line = await this.repository
 			.createQuery()

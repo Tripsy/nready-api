@@ -5,9 +5,10 @@ import {
 	Index,
 	JoinColumn,
 	ManyToOne,
-	PrimaryGeneratedColumn,
 } from 'typeorm';
 import type UserEntity from '@/features/user/user.entity';
+import { EntityIdAbstract } from '@/shared/abstracts/entity-id.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 const ENTITY_TABLE_NAME = 'account_token';
 
@@ -16,16 +17,13 @@ const ENTITY_TABLE_NAME = 'account_token';
 	schema: 'system',
 	comment: 'Stores `ident` for account tokens to manage token revocation',
 })
-export default class AccountTokenEntity {
+export default class AccountTokenEntity extends EntityIdAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = false;
 
-	@PrimaryGeneratedColumn({ type: 'int' })
-	id!: number;
-
-	@Column('int', { unsigned: false, nullable: false })
+	@Column('uuid', { nullable: false })
 	@Index('IDX_account_token_user_id')
-	user_id!: number;
+	user_id!: EntityId;
 
 	@Column('char', { length: 36, nullable: false })
 	@Index('IDX_account_token_ident', { unique: true })

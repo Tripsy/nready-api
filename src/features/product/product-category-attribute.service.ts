@@ -20,12 +20,14 @@ import ProductCategoryAttributeRepository, {
 } from '@/features/product/product-category-attribute.repository';
 import type { ProductCategoryAttributeValidator } from '@/features/product/product-category-attribute.validator';
 import ProductVariantAttributeEntity from '@/features/product/product-variant-attribute.entity';
+import { compareIds } from '@/helpers/id.helper';
 import { pickValuesFromObject } from '@/helpers/objects.helper';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
 import {
 	cleanEntityCache,
 	cleanEntityCacheMany,
 } from '@/shared/abstracts/service.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import { type MeasureUnit, toBaseUnit } from '@/shared/types/measure-unit.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
@@ -280,7 +282,7 @@ export class ProductCategoryAttributeService {
 		manager: EntityManager,
 		entry: ProductCategoryAttributeEntity,
 	): Promise<number> {
-		const productRows: { product_id: number }[] = await manager.query(
+		const productRows: { product_id: EntityId }[] = await manager.query(
 			`SELECT DISTINCT link.product_id
 			FROM product_category link
 			JOIN category_closure closure ON closure.id_descendant = link.category_id
@@ -288,7 +290,7 @@ export class ProductCategoryAttributeService {
 			[entry.category_id],
 		);
 
-		const productIds = productRows.map((row) => Number(row.product_id));
+		const productIds = productRows.map((row) => row.product_id);
 
 		if (productIds.length === 0) {
 			return 0;
@@ -382,7 +384,7 @@ export class ProductCategoryAttributeService {
 	 * @description Update any data
 	 */
 	public async update(
-		data: DeepPartial<ProductCategoryAttributeEntity> & { id: number },
+		data: DeepPartial<ProductCategoryAttributeEntity> & { id: EntityId },
 	): Promise<ProductCategoryAttributeEntity> {
 		const saved = await this.repository.save(data);
 
@@ -462,7 +464,7 @@ export class ProductCategoryAttributeService {
 	private async assertScopeAgreement(
 		candidates: DefinitionWithDepth[],
 	): Promise<void> {
-		const byLabel = new Map<number, DefinitionWithDepth>();
+		const byLabel = new Map<EntityId, DefinitionWithDepth>();
 
 		for (const candidate of candidates) {
 			const seen = byLabel.get(candidate.definition.attribute_label_id);
@@ -488,7 +490,7 @@ export class ProductCategoryAttributeService {
 					},
 				});
 
-			const nameOf = (category_id: number): string =>
+			const nameOf = (category_id: EntityId): string =>
 				labels.find((row) => row.category_id === category_id)?.label ??
 				`#${category_id}`;
 
@@ -518,7 +520,7 @@ export class ProductCategoryAttributeService {
 	 * would leave the attributes section rendering as though the categories declared nothing.
 	 */
 	public async resolveForm(
-		categoryIds: number[],
+		categoryIds: EntityId[],
 		options: { assertScopeAgreement?: boolean } = {},
 	): Promise<ResolvedAttributeForm> {
 		const definitions =
@@ -528,7 +530,7 @@ export class ProductCategoryAttributeService {
 			await this.assertScopeAgreement(definitions);
 		}
 
-		const winners = new Map<number, DefinitionWithDepth>();
+		const winners = new Map<EntityId, DefinitionWithDepth>();
 
 		for (const candidate of definitions) {
 			const current = winners.get(
@@ -545,7 +547,10 @@ export class ProductCategoryAttributeService {
 			.sort(
 				(left, right) =>
 					left.sort_order - right.sort_order ||
-					left.attribute_label_id - right.attribute_label_id,
+					compareIds(
+						left.attribute_label_id,
+						right.attribute_label_id,
+					),
 			);
 
 		return {
@@ -564,10 +569,10 @@ export class ProductCategoryAttributeService {
 
 	/** The resolved form flattened to a lookup, which is what a value check needs. */
 	public async resolveDefinitionsByLabel(
-		categoryIds: number[],
+		categoryIds: EntityId[],
 		scope: ProductCategoryAttributeScope,
 		options: { assertScopeAgreement?: boolean } = {},
-	): Promise<Map<number, ProductCategoryAttributeEntity>> {
+	): Promise<Map<EntityId, ProductCategoryAttributeEntity>> {
 		const form = await this.resolveForm(categoryIds, options);
 
 		return new Map(
@@ -591,8 +596,8 @@ export class ProductCategoryAttributeService {
 	 * definition between two later without rewriting the set.
 	 */
 	public async updateOrder(
-		category_id: number,
-		ids: number[],
+		category_id: EntityId,
+		ids: EntityId[],
 	): Promise<void> {
 		await dataSource.transaction(async (manager) => {
 			const repository = manager.getRepository(
@@ -635,7 +640,7 @@ export class ProductCategoryAttributeService {
 	}
 
 	public findById(
-		id: number,
+		id: EntityId,
 		withDeleted: boolean,
 	): Promise<ProductCategoryAttributeEntity> {
 		return this.repository
@@ -645,7 +650,7 @@ export class ProductCategoryAttributeService {
 			.firstOrFail();
 	}
 
-	public getEntryData(id: number, withDeleted: boolean) {
+	public getEntryData(id: EntityId, withDeleted: boolean) {
 		return (
 			this.repository
 				.createQuery()
@@ -677,11 +682,11 @@ export class ProductCategoryAttributeService {
 		);
 	}
 
-	public async delete(id: number) {
+	public async delete(id: EntityId) {
 		await this.repository.createQuery().filterById(id).delete();
 	}
 
-	public async restore(id: number) {
+	public async restore(id: EntityId) {
 		await this.repository.createQuery().filterById(id).restore();
 	}
 

@@ -13,7 +13,7 @@ export class OrderReturnQuery extends RepositoryAbstract<OrderReturnEntity> {
 	}
 
 	/**
-	 * The list's one search box: a bare number is the return's number in its series or its id, a
+	 * The list's one search box: a bare number is the return's number in its series, a
 	 * written reference (`RMA-12`) matches through `IDX_order_return_ref`. Nothing else is
 	 * searchable - the text on a return is the buyer's and is not worth an index.
 	 */
@@ -25,10 +25,7 @@ export class OrderReturnQuery extends RepositoryAbstract<OrderReturnEntity> {
 		}
 
 		if (!Number.isNaN(Number(value))) {
-			return this.filterAny([
-				{ column: 'ref_number', value: Number(value), operator: '=' },
-				{ column: 'id', value: Number(value), operator: '=' },
-			]);
+			return this.filterBy('ref_number', Number(value));
 		}
 
 		if (value.length < Configuration.get('filter.termMinLength')) {

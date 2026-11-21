@@ -23,6 +23,7 @@ import {
 	isParticipationAllowed,
 	ParticipationEnum,
 } from '@/shared/registries/target-participation.registry';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 /**
@@ -34,7 +35,7 @@ import type { ValidatorOutput } from '@/shared/types/mock.type';
  * rendered with, so a visitor claiming it would be claiming to speak for the site.
  */
 export type CommentAuthor = {
-	user_id: number | null;
+	user_id: EntityId | null;
 	user_ip_hash: string;
 	is_staff: boolean;
 };
@@ -331,7 +332,7 @@ export class CommentService {
 	/**
 	 * @description Used in `delete` method from the dashboard controller
 	 */
-	public async delete(id: number): Promise<void> {
+	public async delete(id: EntityId): Promise<void> {
 		await this.removeSubtree(await this.findById(id));
 	}
 
@@ -389,9 +390,9 @@ export class CommentService {
 	 */
 	private async resolveSubtree(
 		manager: EntityManager,
-		rootId: number,
-	): Promise<number[]> {
-		const rows = await manager.query<{ id: number }[]>(
+		rootId: EntityId,
+	): Promise<EntityId[]> {
+		const rows = await manager.query<{ id: EntityId }[]>(
 			`WITH RECURSIVE subtree AS (
 				SELECT id FROM "${CommentEntity.NAME}" WHERE id = $1
 				UNION ALL
@@ -403,7 +404,7 @@ export class CommentService {
 			[rootId],
 		);
 
-		return rows.map((row) => Number(row.id));
+		return rows.map((row) => row.id);
 	}
 
 	/**
@@ -416,7 +417,7 @@ export class CommentService {
 	 */
 	public async deleteByTarget(
 		entityType: CommentEntityType,
-		entityId: number,
+		entityId: EntityId,
 	): Promise<void> {
 		const roots = await this.repository
 			.createQuery()
@@ -485,7 +486,7 @@ export class CommentService {
 	public async updateStatus(
 		entry: CommentEntity,
 		newStatus: CommentStatus,
-		moderatedBy: number | null,
+		moderatedBy: EntityId | null,
 		moderationReason?: string,
 	): Promise<CommentEntity> {
 		assertValidStatusTransition(
@@ -536,7 +537,7 @@ export class CommentService {
 	 * `moderatedBy` is null because nobody decided this - the threshold did.
 	 */
 	public async flagWhenReported(
-		id: number,
+		id: EntityId,
 		reporters: number,
 	): Promise<void> {
 		if (reporters < COMMENT_FLAG_REPORTER_THRESHOLD) {
@@ -569,7 +570,7 @@ export class CommentService {
 	 * there is no transition to validate, no cache to drop - the public read does not show
 	 * `notified_at` - and no audit entry worth writing. It is the run's own bookkeeping.
 	 */
-	public async markNotified(ids: number[]): Promise<void> {
+	public async markNotified(ids: EntityId[]): Promise<void> {
 		if (!ids.length) {
 			return;
 		}
@@ -587,7 +588,7 @@ export class CommentService {
 	 * link went out answers 404 rather than sending a reader to a page where it is not. The body
 	 * is not returned: this answers *where*, and whoever follows the link reads the thread itself.
 	 */
-	public findPublicLocation(id: number): Promise<CommentEntity> {
+	public findPublicLocation(id: EntityId): Promise<CommentEntity> {
 		return this.repository
 			.createQuery()
 			.select([
@@ -601,7 +602,7 @@ export class CommentService {
 			.firstOrFail() as Promise<CommentEntity>;
 	}
 
-	public findById(id: number): Promise<CommentEntity> {
+	public findById(id: EntityId): Promise<CommentEntity> {
 		return this.repository.createQuery().filterById(id).firstOrFail();
 	}
 
@@ -612,7 +613,7 @@ export class CommentService {
 	 * moderation trail. `user_ip_hash` stays out even here - it identifies a visitor across every
 	 * comment they ever left, and no moderation decision is made from it.
 	 */
-	public getEntryData(id: number): Promise<CommentEntity> {
+	public getEntryData(id: EntityId): Promise<CommentEntity> {
 		return this.repository
 			.createQuery()
 			.join('comment.user', 'user', 'LEFT')
@@ -703,12 +704,13 @@ export class CommentService {
 	 * cost one request per root on every page - the same shape the bulk rating read exists to
 	 * avoid. One query answers for the whole page instead.
 	 *
-	 * `MIN(id)` rather than the earliest `created_at`: ids are sequential here, so the two agree,
-	 * and a grouped subquery on the primary key is portable in a way `DISTINCT ON` is not.
+	 * The first by id rather than by `created_at`: a UUID v7 leads with its creation time, so the
+	 * two agree. `DISTINCT ON` rather than `MIN(id)`, which Postgres has no aggregate for over
+	 * `uuid`.
 	 */
 	public async findFirstReplies(
-		parentIds: number[],
-	): Promise<Record<number, CommentEntity>> {
+		parentIds: EntityId[],
+	): Promise<Record<EntityId, CommentEntity>> {
 		if (parentIds.length === 0) {
 			return {};
 		}
@@ -719,17 +721,17 @@ export class CommentService {
 			.select([...PUBLIC_COLUMNS, 'user.id', 'user.name'])
 			.filterRaw(
 				`${CommentEntity.NAME}.id IN (
-					SELECT MIN(reply.id)
+					SELECT DISTINCT ON (reply.parent_id) reply.id
 					FROM "${CommentEntity.NAME}" reply
 					WHERE reply.parent_id IN (:...parentIds)
 					  AND reply.status = :status
-					GROUP BY reply.parent_id
+					ORDER BY reply.parent_id, reply.id
 				)`,
 				{ parentIds, status: CommentStatusEnum.APPROVED },
 			)
 			.all();
 
-		const firstReplies: Record<number, CommentEntity> = {};
+		const firstReplies: Record<EntityId, CommentEntity> = {};
 
 		for (const entry of entries) {
 			if (entry.parent_id) {
@@ -788,7 +790,7 @@ export class CommentService {
 	 */
 	private async cleanThreadCache(
 		entityType: CommentEntityType,
-		entityId: number,
+		entityId: EntityId,
 	): Promise<void> {
 		if (!CommentEntity.HAS_CACHE) {
 			return;

@@ -2,6 +2,7 @@ import { In } from 'typeorm';
 import dataSource from '@/config/data-source.config';
 import ProductBundleGroupEntity from '@/features/product/product-bundle-group.entity';
 import ProductBundleItemEntity from '@/features/product/product-bundle-item.entity';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /** A bundle's components, sorted into the three cases `product.md` §8.1 defines. */
 export type LoadedComposition = {
@@ -10,14 +11,14 @@ export type LoadedComposition = {
 	/** Case 2 - no group, optional. An independent tick box taking 0..`quantity` units. */
 	optional: ProductBundleItemEntity[];
 	/** Case 3 - grouped candidates, keyed by `group_id`. Exactly one of each group is taken. */
-	candidatesByGroup: Map<number, ProductBundleItemEntity[]>;
+	candidatesByGroup: Map<EntityId, ProductBundleItemEntity[]>;
 	/** Every component row of the bundle, whichever case, by id. */
-	byId: Map<number, ProductBundleItemEntity>;
+	byId: Map<EntityId, ProductBundleItemEntity>;
 };
 
 /** What the shopper picked: a component row, and for a tick box how many units of it. */
 export type BundleChoice = {
-	item_id: number;
+	item_id: EntityId;
 	/** Units taken. Meaningful on a tick box only; a candidate contributes its own `quantity`. */
 	units?: number;
 };
@@ -34,10 +35,10 @@ export type ResolvedComponent = {
 /** Why a set of picks cannot stand against the bundle's composition. */
 export type BundleSelectionProblem =
 	| { reason: 'foreign_component' }
-	| { reason: 'included_component'; item_id: number }
-	| { reason: 'group_unanswered'; group_id: number }
-	| { reason: 'group_multiple'; group_id: number }
-	| { reason: 'over_ceiling'; item_id: number; max: number };
+	| { reason: 'included_component'; item_id: EntityId }
+	| { reason: 'group_unanswered'; group_id: EntityId }
+	| { reason: 'group_multiple'; group_id: EntityId }
+	| { reason: 'over_ceiling'; item_id: EntityId; max: number };
 
 /**
  * The bundle counterpart of `ProductOptionSelectionService`, and deliberately the same shape: a
@@ -67,9 +68,9 @@ export class ProductBundleSelectionService {
 	 * composition by `findProblem`.
 	 */
 	public async loadComposition(
-		productIds: readonly number[],
-	): Promise<Map<number, LoadedComposition>> {
-		const byProduct = new Map<number, LoadedComposition>();
+		productIds: readonly EntityId[],
+	): Promise<Map<EntityId, LoadedComposition>> {
+		const byProduct = new Map<EntityId, LoadedComposition>();
 
 		if (productIds.length === 0) {
 			return byProduct;
@@ -152,7 +153,7 @@ export class ProductBundleSelectionService {
 		composition: LoadedComposition,
 		chosen: readonly BundleChoice[],
 	): BundleSelectionProblem | null {
-		const units = new Map<number, number>();
+		const units = new Map<EntityId, number>();
 
 		for (const choice of chosen) {
 			units.set(choice.item_id, choice.units ?? 1);
@@ -213,7 +214,7 @@ export class ProductBundleSelectionService {
 		composition: LoadedComposition,
 		chosen: readonly BundleChoice[],
 	): ResolvedComponent[] {
-		const units = new Map<number, number>();
+		const units = new Map<EntityId, number>();
 
 		for (const choice of chosen) {
 			units.set(choice.item_id, choice.units ?? 1);

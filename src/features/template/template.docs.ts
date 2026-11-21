@@ -92,7 +92,7 @@ export const docs: Record<
 			notes: 'A deleted template is only visible to a caller holding template delete',
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -112,7 +112,7 @@ export const docs: Record<
 			notes: `Provide at least one of label, language or content - \`type\` alone does not count, since it is filled in from the stored row when the body omits it. ${identityNote}, so a renamed template is re-checked against the others`,
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -143,7 +143,7 @@ export const docs: Record<
 			notes: 'Soft delete. The label is free for reuse immediately, because the uniqueness rule ignores deleted rows',
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -162,7 +162,7 @@ export const docs: Record<
 			notes: 'Fails while another template holds the same label, language and type',
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -222,7 +222,7 @@ export const docs: Record<
 					default: OrderDirectionEnum.ASC,
 				},
 				filter: {
-					id: { type: 'number', required: false },
+					id: { type: 'string', required: false },
 					term: {
 						type: 'string',
 						required: false,

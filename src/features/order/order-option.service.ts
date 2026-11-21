@@ -8,12 +8,13 @@ import {
 	ProductOptionSelectionService,
 	productOptionSelectionService,
 } from '@/features/product/product-option-selection.service';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /** What the resolver needs from a line: which product it sells and which answers were chosen. */
 type OptionLine = {
-	variant_id: number;
-	product_id: number;
-	options?: readonly number[] | null;
+	variant_id: EntityId;
+	product_id: EntityId;
+	options?: readonly EntityId[] | null;
 };
 
 /**

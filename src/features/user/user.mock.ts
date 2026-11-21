@@ -4,10 +4,11 @@ import { OrderByEnum, userValidator } from '@/features/user/user.validator';
 import { createPastDate, formatDate } from '@/helpers/date.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
 import { UserRoleEnum } from '@/shared/types/user-role.type';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 export function getUserEntityMock(): UserEntity {
 	return {
-		id: 1,
+		id: mockId(1),
 		name: 'John Doe',
 		email: 'john.doe@example.com',
 		email_verified_at: null,
@@ -35,7 +36,7 @@ export const userInputPayloads = {
 		operator_type: null, // correct for non-operator
 	},
 	update: {
-		id: 1,
+		id: mockId(1),
 		name: 'Updated User',
 		email: 'updated.user@example.com',
 		password: 'Secure@123',

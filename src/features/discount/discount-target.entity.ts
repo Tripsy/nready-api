@@ -5,6 +5,7 @@ import type {
 	DiscountScopeEnum,
 } from '@/features/discount/discount.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * What a target row points at - every discount scope except `order`, which applies to the
@@ -79,8 +80,8 @@ export default class DiscountTargetEntity extends EntityAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
 
-	@Column('int', { nullable: false })
-	discount_id!: number;
+	@Column('uuid', { nullable: false })
+	discount_id!: EntityId;
 
 	@Column({
 		type: 'enum',
@@ -91,8 +92,8 @@ export default class DiscountTargetEntity extends EntityAbstract {
 
 	// No foreign key by design - see the class comment. The id is meaningful only together
 	// with `target_type`.
-	@Column('int', { nullable: false })
-	entity_id!: number;
+	@Column('uuid', { nullable: false })
+	entity_id!: EntityId;
 
 	// RELATIONS
 	// CASCADE: the link has no meaning once the discount is gone, and a discount already applied

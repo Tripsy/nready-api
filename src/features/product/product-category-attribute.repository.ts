@@ -4,6 +4,7 @@ import ProductCategoryAttributeEntity from '@/features/product/product-category-
 import type { ProductCategoryAttributeOptionType } from '@/features/product/product-category-attribute.validator';
 import ProductCategoryAttributeOptionEntity from '@/features/product/product-category-attribute-option.entity';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * A definition and the depth of the category it came from, which is what decides an override.
@@ -46,13 +47,13 @@ export const ProductCategoryAttributeRepository = dataSource
 		 * happen in the service, since both are about the resolved set rather than any one row.
 		 */
 		async findForCategories(
-			categoryIds: number[],
+			categoryIds: EntityId[],
 		): Promise<DefinitionWithDepth[]> {
 			if (categoryIds.length === 0) {
 				return [];
 			}
 
-			const ancestry: { category_id: number; depth: string }[] =
+			const ancestry: { category_id: EntityId; depth: string }[] =
 				await dataSource.query(
 					`SELECT DISTINCT closure.id_ancestor AS category_id,
 						(
@@ -66,10 +67,7 @@ export const ProductCategoryAttributeRepository = dataSource
 				);
 
 			const depthById = new Map(
-				ancestry.map((row) => [
-					Number(row.category_id),
-					Number(row.depth),
-				]),
+				ancestry.map((row) => [row.category_id, Number(row.depth)]),
 			);
 
 			if (depthById.size === 0) {
@@ -118,7 +116,7 @@ export const ProductCategoryAttributeRepository = dataSource
 		 */
 		async syncOptions(
 			manager: EntityManager,
-			attribute_id: number,
+			attribute_id: EntityId,
 			options: ProductCategoryAttributeOptionType[],
 		): Promise<void> {
 			const repository = manager.getRepository(

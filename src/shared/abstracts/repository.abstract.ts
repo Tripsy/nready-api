@@ -17,6 +17,7 @@ import {
 	cleanEntityCacheMany,
 	type EntityWithCache,
 } from '@/shared/abstracts/service.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 // `boolean` is here for flag columns (`is_default`, `is_active`): the driver binds it natively,
 // so a filter on one needs no string that Postgres has to cast back
@@ -432,7 +433,7 @@ abstract class RepositoryAbstract<TEntity extends ObjectLiteral> {
 	 * `EntityTarget<T>` - legitimately a string or a schema, not only a class - so the statics have
 	 * to be read defensively. Failing closed is right: something without them owns no keyspace.
 	 */
-	private async cleanCache(ids: number[]): Promise<void> {
+	private async cleanCache(ids: EntityId[]): Promise<void> {
 		const target = this.repository.target as Partial<EntityWithCache>;
 
 		if (!target?.NAME || !target.HAS_CACHE) {
@@ -634,7 +635,7 @@ abstract class RepositoryAbstract<TEntity extends ObjectLiteral> {
 	 * form marks the query as filtered, so a `delete`/`restore` scoped to a set of ids is
 	 * accepted where an unfiltered one is refused.
 	 */
-	filterById(id?: number | readonly number[] | null) {
+	filterById(id?: EntityId | readonly EntityId[] | null) {
 		if (Array.isArray(id)) {
 			if (id.length > 0) {
 				this.hasFilter = true;
@@ -646,7 +647,7 @@ abstract class RepositoryAbstract<TEntity extends ObjectLiteral> {
 
 		if (id) {
 			this.hasFilter = true;
-			this.filterBy('id', id as number);
+			this.filterBy('id', id as EntityId);
 		}
 
 		return this;

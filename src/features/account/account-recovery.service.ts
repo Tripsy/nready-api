@@ -10,6 +10,7 @@ import {
 import type UserEntity from '@/features/user/user.entity';
 import { createCurrentDate, createFutureDate } from '@/helpers/date.helper';
 import type { TokenMetadata } from '@/helpers/meta-data.helper';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export class AccountRecoveryService {
 	constructor(
@@ -26,7 +27,7 @@ export class AccountRecoveryService {
 	 * successful recovery once ended as a not-null violation on `user_id`. `update` issues
 	 * a plain `UPDATE ... WHERE id = ?` and is a no-op when the row is gone.
 	 */
-	public async markAsUsed(id: number): Promise<void> {
+	public async markAsUsed(id: EntityId): Promise<void> {
 		await this.accountRecoveryRepository.update(id, {
 			used_at: createCurrentDate(),
 		});
@@ -36,7 +37,7 @@ export class AccountRecoveryService {
 	 * @description Creates a new recovery token via repository
 	 */
 	public async setupRecovery(
-		user: Partial<UserEntity> & { id: number },
+		user: Partial<UserEntity> & { id: EntityId },
 		metadata: TokenMetadata,
 	): Promise<[string, Date]> {
 		const ident: string = uuid();
@@ -69,8 +70,8 @@ export class AccountRecoveryService {
 	 * wrong for a cleanup - so it is swallowed. Anything else propagates.
 	 */
 	public async removeAccountRecoveryForUser(
-		user_id: number,
-		exceptId?: number,
+		user_id: EntityId,
+		exceptId?: EntityId,
 	): Promise<void> {
 		const query = this.accountRecoveryRepository
 			.createQuery()
@@ -89,7 +90,7 @@ export class AccountRecoveryService {
 		}
 	}
 
-	public async countRecoveryAttempts(user_id: number, sinceDate: Date) {
+	public async countRecoveryAttempts(user_id: EntityId, sinceDate: Date) {
 		return this.accountRecoveryRepository
 			.createQuery()
 			.filterBy('user_id', user_id)

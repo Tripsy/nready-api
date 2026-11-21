@@ -75,7 +75,7 @@ export class VendorValidator extends BaseValidator<typeof validatorMessages> {
 		defaultPage: 1,
 
 		filterSchema: {
-			id: this.validateNumber(this.getMessage('invalid_number'), {
+			id: this.validateId(this.getMessage('invalid_id', { name: 'id' }), {
 				required: false,
 			}),
 			term: this.validateString(this.getMessage('invalid_string'), {

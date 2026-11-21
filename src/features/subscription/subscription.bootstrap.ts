@@ -1,6 +1,7 @@
 import dataSource from '@/config/data-source.config';
 import { registerBillableSourceProvider } from '@/features/invoice/invoice.hooks';
 import SubscriptionEntity from '@/features/subscription/subscription.entity';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * Registers a subscription as something billed on a document of its own, raised by hand: nothing
@@ -18,7 +19,7 @@ export default function registerSubscriptionBootstrap() {
 
 		listBillable: () => Promise.resolve([]),
 
-		findBillable: async (sourceId: number) => {
+		findBillable: async (sourceId: EntityId) => {
 			const subscription = await dataSource
 				.getRepository(SubscriptionEntity)
 				.findOne({

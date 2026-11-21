@@ -3,6 +3,7 @@ import UserEntity from '@/features/user/user.entity';
 import { getUserPermissionRepository } from '@/features/user-permission/user-permission.repository';
 import type { UserPermissionValidator } from '@/features/user-permission/user-permission.validator';
 import { cleanEntityCache } from '@/shared/abstracts/service.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 /**
@@ -71,7 +72,7 @@ export class UserPermissionService {
 		return results;
 	}
 
-	public async delete(user_id: number, permission_id: number) {
+	public async delete(user_id: EntityId, permission_id: EntityId) {
 		await this.repository
 			.createQuery()
 			.filterBy('user_id', user_id)
@@ -88,7 +89,7 @@ export class UserPermissionService {
 	 * live row and is restored to the state it is already in - the call is idempotent and only
 	 * a pair with no row at all answers 404.
 	 */
-	public async restore(user_id: number, permission_id: number) {
+	public async restore(user_id: EntityId, permission_id: EntityId) {
 		await this.repository
 			.createQuery()
 			.filterBy('user_id', user_id)
@@ -101,7 +102,7 @@ export class UserPermissionService {
 	public findByFilter(
 		data: ValidatorOutput<UserPermissionValidator, 'find'>,
 		withDeleted: boolean,
-		user_id: number,
+		user_id: EntityId,
 	) {
 		return this.repository
 			.createQuery()

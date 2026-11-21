@@ -2,6 +2,7 @@ import type { EntityManager, Repository } from 'typeorm';
 import dataSource from '@/config/data-source.config';
 import ProductTagEntity from '@/features/product/product-tag.entity';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export class ProductTagQuery extends RepositoryAbstract<ProductTagEntity> {
 	constructor(repository: Repository<ProductTagEntity>) {
@@ -18,8 +19,8 @@ export const ProductTagRepository = dataSource
 
 		async syncLinks(
 			manager: EntityManager,
-			product_id: number,
-			tagIds: number[],
+			product_id: EntityId,
+			tagIds: EntityId[],
 		): Promise<void> {
 			const repository = manager.getRepository(ProductTagEntity);
 

@@ -11,28 +11,24 @@ export class PlaceQuery extends RepositoryAbstract<PlaceEntity> {
 
 	filterByTerm(term?: string): this {
 		if (term) {
-			if (!Number.isNaN(Number(term)) && term.trim() !== '') {
-				this.filterBy('place.id', Number(term));
-			} else {
-				if (term.length >= Configuration.get('filter.termMinLength')) {
-					const tsTerm = this.prepareTsTerm(term);
+			if (term.length >= Configuration.get('filter.termMinLength')) {
+				const tsTerm = this.prepareTsTerm(term);
 
-					/*
-					 * Skipped when the input carried no searchable text: `:*` on its own is
-					 * a tsquery syntax error, which Postgres raises rather than treating as
-					 * an empty match.
-					 *
-					 * The expression is repeated verbatim from
-					 * `IDX_place_content_name_search`; a GIN expression index is only used
-					 * when the query's expression matches it exactly, so editing one without
-					 * the other silently drops back to a sequential scan.
-					 */
-					if (tsTerm !== '') {
-						this.filterRaw(
-							`to_tsvector('simple', COALESCE(content.name, '')) @@ to_tsquery('simple', :term || ':*')`,
-							{ term: tsTerm },
-						);
-					}
+				/*
+				 * Skipped when the input carried no searchable text: `:*` on its own is
+				 * a tsquery syntax error, which Postgres raises rather than treating as
+				 * an empty match.
+				 *
+				 * The expression is repeated verbatim from
+				 * `IDX_place_content_name_search`; a GIN expression index is only used
+				 * when the query's expression matches it exactly, so editing one without
+				 * the other silently drops back to a sequential scan.
+				 */
+				if (tsTerm !== '') {
+					this.filterRaw(
+						`to_tsvector('simple', COALESCE(content.name, '')) @@ to_tsquery('simple', :term || ':*')`,
+						{ term: tsTerm },
+					);
 				}
 			}
 		}

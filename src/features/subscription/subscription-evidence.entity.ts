@@ -5,10 +5,11 @@ import {
 	Index,
 	JoinColumn,
 	ManyToOne,
-	PrimaryGeneratedColumn,
 } from 'typeorm';
 import type InvoiceEntity from '@/features/invoice/invoice.entity';
 import type SubscriptionEntity from '@/features/subscription/subscription.entity';
+import { EntityIdAbstract } from '@/shared/abstracts/entity-id.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export const SubscriptionEvidenceStatusEnum = {
 	SUCCESS: 'success',
@@ -25,20 +26,17 @@ const ENTITY_TABLE_NAME = 'subscription_evidence';
 	schema: 'public',
 	comment: 'Used to track renewal attempts for subscriptions.',
 })
-export default class SubscriptionEvidenceEntity {
+export default class SubscriptionEvidenceEntity extends EntityIdAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
 
-	@PrimaryGeneratedColumn({ type: 'int' })
-	id!: number;
-
-	@Column('int', { nullable: false })
+	@Column('uuid', { nullable: false })
 	@Index('IDX_subscription_evidence_subscription_id')
-	subscription_id!: number;
+	subscription_id!: EntityId;
 
-	@Column('int', { nullable: false })
+	@Column('uuid', { nullable: false })
 	@Index('IDX_subscription_evidence_invoice_id')
-	invoice_id!: number;
+	invoice_id!: EntityId;
 
 	@Column({
 		type: 'enum',

@@ -146,7 +146,7 @@ export const docs: Record<
 		request: {
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -165,7 +165,7 @@ export const docs: Record<
 		request: {
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -186,7 +186,7 @@ export const docs: Record<
 		request: {
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -204,7 +204,7 @@ export const docs: Record<
 		request: {
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -224,7 +224,7 @@ export const docs: Record<
 			notes: `Only these transitions are allowed: ${statusTransitionNote}`,
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 				status: {
@@ -255,7 +255,7 @@ export const docs: Record<
 			},
 			body: {
 				category_id: {
-					type: 'number',
+					type: 'string',
 					required: false,
 					condition: 'required when featured_status is category',
 				},
@@ -320,7 +320,7 @@ export const docs: Record<
 					default: OrderDirectionEnum.ASC,
 				},
 				filter: {
-					id: { type: 'number', required: false },
+					id: { type: 'string', required: false },
 					term: {
 						type: 'string',
 						required: false,
@@ -353,9 +353,9 @@ export const docs: Record<
 						condition:
 							'also decides which translation the rows carry',
 					},
-					author_id: { type: 'number', required: false },
-					category_id: { type: 'number', required: false },
-					tag_id: { type: 'number', required: false },
+					author_id: { type: 'string', required: false },
+					category_id: { type: 'string', required: false },
+					tag_id: { type: 'string', required: false },
 					is_published: {
 						type: 'boolean',
 						required: false,

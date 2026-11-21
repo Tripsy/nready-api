@@ -12,6 +12,7 @@ import type WarehouseEntity from '@/features/warehouse/warehouse.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import { numericTransformer } from '@/shared/transformers/numeric.transformer';
 import type { StatusTransitions } from '@/shared/types/common.type';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export const GrnStatusEnum = {
 	DRAFT: 'draft', // Being entered; nothing has moved
@@ -139,13 +140,13 @@ export default class GrnEntity extends EntityAbstract {
 	notes!: string | null;
 
 	// RELATIONS
-	@Column('int', { nullable: false })
+	@Column('uuid', { nullable: false })
 	@Index('IDX_grn_warehouse_id')
-	warehouse_id!: number;
+	warehouse_id!: EntityId;
 
-	@Column('int', { nullable: false })
+	@Column('uuid', { nullable: false })
 	@Index('IDX_grn_vendor_id')
-	vendor_id!: number;
+	vendor_id!: EntityId;
 
 	@ManyToOne('WarehouseEntity', {
 		onDelete: 'RESTRICT',

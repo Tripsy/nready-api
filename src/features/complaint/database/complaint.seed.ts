@@ -19,6 +19,7 @@ import ComplaintEntity, {
 	ComplaintReasonEnum,
 } from '@/features/complaint/complaint.entity';
 import UserEntity from '@/features/user/user.entity';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /** Targets to spread complaints over; enough to give the moderation queue something to page. */
 const TARGET_ARTICLES = 4;
@@ -37,8 +38,8 @@ const REASONS: readonly ComplaintReason[] = Object.values(ComplaintReasonEnum);
  */
 function complaintKey(
 	entityType: ComplaintEntityType,
-	entityId: number,
-	userId: number,
+	entityId: EntityId,
+	userId: EntityId,
 ): string {
 	return `${entityType}:${entityId}:${userId}`;
 }
@@ -93,7 +94,7 @@ export const complaintSeed: SeedDefinition = {
 			),
 		);
 
-		const targets: { type: ComplaintEntityType; ids: number[] }[] = [
+		const targets: { type: ComplaintEntityType; ids: EntityId[] }[] = [
 			{ type: ComplaintEntityTypeEnum.ARTICLE, ids: articleIds },
 			{ type: ComplaintEntityTypeEnum.COMMENT, ids: commentIds },
 		];
@@ -136,8 +137,8 @@ export const complaintSeed: SeedDefinition = {
 		const pending = candidates.filter((candidate) => {
 			const key = complaintKey(
 				candidate.entity_type as ComplaintEntityType,
-				candidate.entity_id as number,
-				candidate.user_id as number,
+				candidate.entity_id as EntityId,
+				candidate.user_id as EntityId,
 			);
 
 			return !existingKeys.has(key);
@@ -159,9 +160,9 @@ export const complaintSeed: SeedDefinition = {
 
 type BuildComplaintOptions = {
 	entityType: ComplaintEntityType;
-	entityId: number;
-	userId: number;
-	moderatorId: number;
+	entityId: EntityId;
+	userId: EntityId;
+	moderatorId: EntityId;
 	index: number;
 	random: Random;
 };

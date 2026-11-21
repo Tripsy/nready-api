@@ -38,6 +38,7 @@ import OrderLineEntity from '@/features/order/order-line.entity';
 import ProductContentEntity from '@/features/product/product-content.entity';
 import { createFutureDate, createPastDate } from '@/helpers/date.helper';
 import { roundMoney } from '@/helpers/shop.helper';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 const TARGET = 18;
 
@@ -48,13 +49,13 @@ const DRAFT_EVERY = 6;
 const DUE_DAYS = Configuration.get('invoice.dueDays');
 
 type OrderWithClient = {
-	id: number;
-	client_id: number;
+	id: EntityId;
+	client_id: EntityId;
 };
 
 type SettleableMovement = {
-	id: number;
-	client_id: number | null;
+	id: EntityId;
+	client_id: EntityId | null;
 	currency: string;
 	gross: number;
 };
@@ -169,7 +170,7 @@ export const invoiceSeed: SeedDefinition = {
 				withDeleted: true,
 			});
 
-		const labelByProduct = new Map<number, string>();
+		const labelByProduct = new Map<EntityId, string>();
 
 		for (const content of contents) {
 			const isPreferred = content.language === Configuration.language();
@@ -222,7 +223,7 @@ export const invoiceSeed: SeedDefinition = {
 			),
 		}));
 
-		const usedMovements = new Set<number>();
+		const usedMovements = new Set<EntityId>();
 		let inserted = 0;
 
 		for (let index = 0; index < missing; index++) {

@@ -51,7 +51,7 @@ export const docs: Record<
 			notes: `${writeNote}. The acting account is joined in, and \`performed_by\` keeps the name as it was at the time - a renamed or deleted account does not rewrite what the entry says`,
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -134,7 +134,7 @@ export const docs: Record<
 				filter: {
 					entity: entityParam,
 					entity_id: {
-						type: 'number',
+						type: 'string',
 						required: false,
 						condition:
 							'only meaningful together with entity - the same id exists in every table',

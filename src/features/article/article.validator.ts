@@ -193,13 +193,7 @@ export class ArticleValidator extends BaseValidator<typeof validatorMessages> {
 		message: string,
 		options: { required?: boolean; requiredMessage?: string } = {},
 	) => {
-		const schema = z.array(
-			z.coerce
-				.number({ message: message })
-				.int({ message: message })
-				.positive({ message: message }),
-			{ message: message },
-		);
+		const schema = z.array(this.validateId(message), { message: message });
 
 		if (!options.required) {
 			return schema.optional();
@@ -432,7 +426,7 @@ export class ArticleValidator extends BaseValidator<typeof validatorMessages> {
 		defaultPage: 1,
 
 		filterSchema: {
-			id: this.validateNumber(this.getMessage('invalid_number'), {
+			id: this.validateId(this.getMessage('invalid_id', { name: 'id' }), {
 				required: false,
 			}),
 			term: this.validateString(this.getMessage('invalid_string'), {
@@ -459,18 +453,24 @@ export class ArticleValidator extends BaseValidator<typeof validatorMessages> {
 				this.getMessage('invalid_source_mode'),
 				{ required: false },
 			),
-			author_id: this.validateNumber(this.getMessage('invalid_number'), {
-				required: false,
-			}),
-			category_id: this.validateNumber(
-				this.getMessage('invalid_number'),
+			author_id: this.validateId(
+				this.getMessage('invalid_id', { name: 'author_id' }),
 				{
 					required: false,
 				},
 			),
-			tag_id: this.validateNumber(this.getMessage('invalid_number'), {
-				required: false,
-			}),
+			category_id: this.validateId(
+				this.getMessage('invalid_id', { name: 'category_id' }),
+				{
+					required: false,
+				},
+			),
+			tag_id: this.validateId(
+				this.getMessage('invalid_id', { name: 'tag_id' }),
+				{
+					required: false,
+				},
+			),
 			language: this.validateLanguage(
 				this.getMessage('invalid_language'),
 				{
@@ -542,8 +542,8 @@ export class ArticleValidator extends BaseValidator<typeof validatorMessages> {
 				this.getMessage('invalid_featured_status'),
 				{ required: false },
 			),
-			category_id: this.validateNumber(
-				this.getMessage('invalid_number'),
+			category_id: this.validateId(
+				this.getMessage('invalid_id', { name: 'category_id' }),
 				{
 					required: false,
 				},
@@ -562,8 +562,10 @@ export class ArticleValidator extends BaseValidator<typeof validatorMessages> {
 							: [value],
 					z
 						.array(
-							this.validateNumber(
-								this.getMessage('invalid_number'),
+							this.validateId(
+								this.getMessage('invalid_id', {
+									name: 'tag_id',
+								}),
 							),
 						)
 						.nonempty(),
@@ -573,9 +575,12 @@ export class ArticleValidator extends BaseValidator<typeof validatorMessages> {
 			 * The one article a listing must not contain: the sidebar boxes are rendered on
 			 * an article page and would otherwise recommend the page the reader is on.
 			 */
-			exclude_id: this.validateNumber(this.getMessage('invalid_number'), {
-				required: false,
-			}),
+			exclude_id: this.validateId(
+				this.getMessage('invalid_id', { name: 'exclude_id' }),
+				{
+					required: false,
+				},
+			),
 			language: this.validateLanguage(
 				this.getMessage('invalid_language'),
 				{
@@ -602,11 +607,7 @@ export class ArticleValidator extends BaseValidator<typeof validatorMessages> {
 				{ required: false },
 			),
 			positions: z
-				.array(
-					z.number({
-						message: this.getMessage('invalid_number'),
-					}),
-				)
+				.array(this.validateId(this.getMessage('invalid_number')))
 				.min(2, {
 					message: this.getMessage('array_min', {
 						length: '2',

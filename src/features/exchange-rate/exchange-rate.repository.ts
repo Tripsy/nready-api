@@ -34,30 +34,26 @@ export class ExchangeRateQuery extends RepositoryAbstract<ExchangeRateEntity> {
 
 	filterByTerm(term?: string): this {
 		if (term) {
-			if (!Number.isNaN(Number(term)) && term.trim() !== '') {
-				this.filterBy('id', Number(term));
-			} else {
-				if (term.length >= Configuration.get('filter.termMinLength')) {
-					// A currency code is exactly three characters, so a term that is one
-					// matches a whole column rather than a fragment of it
-					this.filterAny([
-						{
-							column: 'currency',
-							value: normalizeCurrency(term),
-							operator: 'ILIKE',
-						},
-						{
-							column: 'base_currency',
-							value: normalizeCurrency(term),
-							operator: 'ILIKE',
-						},
-						{
-							column: 'provider',
-							value: term,
-							operator: 'ILIKE',
-						},
-					]);
-				}
+			if (term.length >= Configuration.get('filter.termMinLength')) {
+				// A currency code is exactly three characters, so a term that is one
+				// matches a whole column rather than a fragment of it
+				this.filterAny([
+					{
+						column: 'currency',
+						value: normalizeCurrency(term),
+						operator: 'ILIKE',
+					},
+					{
+						column: 'base_currency',
+						value: normalizeCurrency(term),
+						operator: 'ILIKE',
+					},
+					{
+						column: 'provider',
+						value: term,
+						operator: 'ILIKE',
+					},
+				]);
 			}
 		}
 

@@ -3,13 +3,14 @@ import { NotAllowedError, UnauthorizedError } from '@/exceptions';
 import { ApiDocsPolicy } from '@/features/api-docs/api-docs.policy';
 import type { AuthContext } from '@/shared/types/express';
 import type { UserRole } from '@/shared/types/user-role.type';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 function buildAuth(
 	role: UserRole,
 	permissions: AuthContext['permissions'] = {},
 ): AuthContext {
 	return {
-		id: 5,
+		id: mockId(5),
 		email: 'user@demo.test',
 		name: 'User',
 		language: 'en',

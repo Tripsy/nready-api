@@ -112,19 +112,25 @@ export class ClientAddressValidator extends BaseValidator<
 		defaultPage: 1,
 
 		filterSchema: {
-			id: this.validateNumber(this.getMessage('invalid_number'), {
+			id: this.validateId(this.getMessage('invalid_id', { name: 'id' }), {
 				required: false,
 			}),
 			term: this.validateString(this.getMessage('invalid_string'), {
 				required: false,
 				minChars: Configuration.get('filter.termMinLength'),
 			}),
-			client_id: this.validateNumber(this.getMessage('invalid_number'), {
-				required: false,
-			}),
-			address_id: this.validateNumber(this.getMessage('invalid_number'), {
-				required: false,
-			}),
+			client_id: this.validateId(
+				this.getMessage('invalid_id', { name: 'client_id' }),
+				{
+					required: false,
+				},
+			),
+			address_id: this.validateId(
+				this.getMessage('invalid_id', { name: 'address_id' }),
+				{
+					required: false,
+				},
+			),
 			type: this.validateEnum(
 				ClientAddressTypeEnum,
 				this.getMessage('invalid_type'),

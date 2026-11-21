@@ -15,6 +15,7 @@ import { getUserEntityMock } from '@/features/user/user.mock';
 import type { UserQuery } from '@/features/user/user.repository';
 import { UserService } from '@/features/user/user.service';
 import { createMockRepository } from '@/tests/jest-service.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 // Derived from the configured frontend origin - that is exactly what the guard accepts.
 const REDIRECT_URI = `${Configuration.get('frontend.url')}/auth/callback/google`;
@@ -33,8 +34,8 @@ function getOAuthProfileMock(
 
 function getAccountIdentityMock(): AccountIdentityEntity {
 	return {
-		id: 1,
-		user_id: 1,
+		id: mockId(1),
+		user_id: mockId(1),
 		provider: AccountIdentityProviderEnum.GOOGLE,
 		provider_user_id: 'google-subject-123',
 		email: 'user@example.com',

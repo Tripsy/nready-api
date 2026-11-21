@@ -37,7 +37,7 @@ const notesParam = {
 
 const idParams = {
 	id: {
-		type: 'number' as const,
+		type: 'string' as const,
 		required: true,
 	},
 };
@@ -178,7 +178,7 @@ export const docs: Record<
 					default: OrderDirectionEnum.DESC,
 				},
 				filter: {
-					id: { type: 'number', required: false },
+					id: { type: 'string', required: false },
 					country_code: { ...countryParam, required: false },
 					category: { ...categoryParam, required: false },
 					term: {

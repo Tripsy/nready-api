@@ -10,7 +10,9 @@ import type { UserPermissionQuery } from '@/features/user-permission/user-permis
 import { UserPermissionService } from '@/features/user-permission/user-permission.service';
 import { createCurrentDate } from '@/helpers/date.helper';
 import type RepositoryAbstract from '@/shared/abstracts/repository.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import { createMockQuery } from '@/tests/jest-service.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 function createMockRepositoryForUserPermission<
 	E extends ObjectLiteral,
@@ -30,7 +32,7 @@ function createMockRepositoryForUserPermission<
 		createQuery(): Q;
 		getUserPermissions: jest.MockedFunction<
 			// biome-ignore lint/suspicious/noExplicitAny: getUserPermissions return a [] of data which use join and is typed as any
-			(user_id: number) => Promise<any[]>
+			(user_id: EntityId) => Promise<any[]>
 		>;
 	};
 
@@ -71,7 +73,7 @@ describe('UserPermissionService', () => {
 	it('should restore when existing is deleted', async () => {
 		mockUserPermission.query.first
 			.mockResolvedValueOnce({
-				id: 1,
+				id: mockId(1),
 				deleted_at: createCurrentDate(),
 			} as UserPermissionEntity)
 			.mockResolvedValueOnce(null);
@@ -82,23 +84,25 @@ describe('UserPermissionService', () => {
 			userPermissionInputPayloads.create,
 		);
 
-		expect(mockUserPermission.repository.restore).toHaveBeenCalledWith(1);
+		expect(mockUserPermission.repository.restore).toHaveBeenCalledWith(
+			mockId(1),
+		);
 		expect(result).toHaveLength(2);
 	});
 
 	it('should delete by user_id and permission_id', async () => {
 		mockUserPermission.query.delete.mockResolvedValue(1);
 
-		await serviceUserPermission.delete(1, 2);
+		await serviceUserPermission.delete(mockId(1), mockId(2));
 
 		expect(mockUserPermission.query.filterBy).toHaveBeenCalledWith(
 			'user_id',
-			1,
+			mockId(1),
 		);
 
 		expect(mockUserPermission.query.filterBy).toHaveBeenCalledWith(
 			'permission_id',
-			2,
+			mockId(2),
 		);
 
 		expect(mockUserPermission.query.delete).toHaveBeenCalledWith(
@@ -111,15 +115,15 @@ describe('UserPermissionService', () => {
 	it('should restore by user_id and permission_id', async () => {
 		mockUserPermission.query.restore.mockReturnThis();
 
-		await serviceUserPermission.restore(1, 2);
+		await serviceUserPermission.restore(mockId(1), mockId(2));
 
 		expect(mockUserPermission.query.filterBy).toHaveBeenCalledWith(
 			'user_id',
-			1,
+			mockId(1),
 		);
 		expect(mockUserPermission.query.filterBy).toHaveBeenCalledWith(
 			'permission_id',
-			2,
+			mockId(2),
 		);
 		expect(mockUserPermission.query.restore).toHaveBeenCalledWith();
 	});
@@ -130,12 +134,12 @@ describe('UserPermissionService', () => {
 		const result = await serviceUserPermission.findByFilter(
 			userPermissionInputPayloads.find,
 			false,
-			1,
+			mockId(1),
 		);
 
 		expect(mockUserPermission.query.filterBy).toHaveBeenCalledWith(
 			'user_id',
-			1,
+			mockId(1),
 		);
 		expect(mockUserPermission.query.all).toHaveBeenCalledWith(true);
 		expect(result).toEqual([[], 0]);

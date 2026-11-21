@@ -95,7 +95,7 @@ export const docs: Record<
 		request: {
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -117,7 +117,7 @@ export const docs: Record<
 		request: {
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -178,7 +178,7 @@ export const docs: Record<
 		request: {
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -196,7 +196,7 @@ export const docs: Record<
 		request: {
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -216,7 +216,7 @@ export const docs: Record<
 		request: {
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -237,7 +237,7 @@ export const docs: Record<
 			notes: 'A discount with scope `shipping` accepts `client` targets only - any other non-empty type answers 400, judged against the set as it will stand after the call. With no targets a shipping discount applies to every buyer; with client targets, to those clients alone',
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -322,7 +322,7 @@ export const docs: Record<
 				},
 				filter: {
 					id: {
-						type: 'number',
+						type: 'string',
 						required: false,
 					},
 					term: {

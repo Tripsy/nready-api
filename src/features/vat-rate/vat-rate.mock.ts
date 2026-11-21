@@ -6,6 +6,7 @@ import {
 } from '@/features/vat-rate/vat-rate.validator';
 import { createPastDate } from '@/helpers/date.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 const vatRateValidator = new VatRateValidator('vat-rate');
 
@@ -13,7 +14,7 @@ const DAY_IN_SECONDS = 86400;
 
 export function getVatRateEntityMock(): VatRateEntity {
 	return {
-		id: 1,
+		id: mockId(1),
 		country_code: 'RO',
 		category: RatedVatCategoryEnum.REDUCED,
 		rate: 11,
@@ -33,7 +34,7 @@ export const vatRateInputPayloads = {
 		notes: 'Law 141/2025',
 	},
 	update: {
-		id: 1,
+		id: mockId(1),
 		rate: 11,
 		notes: 'Food and non-alcoholic restaurant service',
 	},

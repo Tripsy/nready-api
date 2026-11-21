@@ -3,12 +3,13 @@ import { PlaceTypeEnum } from '@/features/place/place.entity';
 import { OrderByEnum, PlaceValidator } from '@/features/place/place.validator';
 import { createPastDate } from '@/helpers/date.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 const placeValidator = new PlaceValidator('place');
 
 export function getPlaceEntityMock(): PlaceEntity {
 	return {
-		id: 1,
+		id: mockId(1),
 		place_type: PlaceTypeEnum.COUNTRY,
 		parent_id: null,
 		// `code` is the alpha-3 natural key; `alpha2_code` is what country rules match against
@@ -37,7 +38,7 @@ export const placeInputPayloads = {
 		],
 	},
 	update: {
-		id: 1,
+		id: mockId(1),
 		place_type: PlaceTypeEnum.COUNTRY,
 		code: 'ROU',
 		alpha2_code: 'RO',

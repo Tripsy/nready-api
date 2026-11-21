@@ -9,10 +9,11 @@ import {
 	LogDataCategoryEnum,
 	LogDataLevelEnum,
 } from '@/shared/types/log-data.type';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 export function getLogDataEntityMock(): LogDataEntity {
 	return {
-		id: 1,
+		id: mockId(1),
 		pid: 'yyy',
 		request_id: 'xxx',
 		category: 'system',
@@ -30,7 +31,7 @@ export const logDataInputPayloads = {
 		order_by: OrderByEnum.ID,
 		direction: OrderDirectionEnum.DESC,
 		filter: {
-			id: 1,
+			id: mockId(1),
 			category: LogDataCategoryEnum.SYSTEM,
 			level: LogDataLevelEnum.ERROR,
 			create_at_start: formatDate(createPastDate(14400)),
@@ -38,7 +39,7 @@ export const logDataInputPayloads = {
 			term: 'timeout',
 		},
 	},
-	delete: { ids: [1, 2, 3] },
+	delete: { ids: [mockId(1), mockId(2), mockId(3)] },
 };
 
 export const logDataOutputPayloads = {

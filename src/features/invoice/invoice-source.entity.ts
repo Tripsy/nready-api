@@ -1,6 +1,7 @@
 import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import type InvoiceEntity from '@/features/invoice/invoice.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * What a document was raised from. One link per kind, so a new billable feature adds a value here
@@ -57,8 +58,8 @@ export default class InvoiceSourceEntity extends EntityAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = false;
 
-	@Column('int', { nullable: false })
-	invoice_id!: number;
+	@Column('uuid', { nullable: false })
+	invoice_id!: EntityId;
 
 	@Column({
 		type: 'enum',
@@ -67,8 +68,8 @@ export default class InvoiceSourceEntity extends EntityAbstract {
 	})
 	source_type!: InvoiceSourceType;
 
-	@Column('int', { nullable: false })
-	source_id!: number;
+	@Column('uuid', { nullable: false })
+	source_id!: EntityId;
 
 	// RELATIONS
 	// CASCADE: a link means nothing without its document

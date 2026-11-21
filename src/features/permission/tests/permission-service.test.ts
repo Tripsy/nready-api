@@ -16,6 +16,7 @@ import {
 	testServiceFindById,
 	testServiceRestore,
 } from '@/tests/jest-service.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 describe('PermissionService', () => {
 	beforeEach(() => {
@@ -71,7 +72,7 @@ describe('PermissionService', () => {
 
 		expect(mockPermission.repository.save).toHaveBeenCalledWith(
 			expect.objectContaining({
-				id: 1,
+				id: mockId(1),
 				entity: 'user',
 				operation: 'create',
 			}),

@@ -10,6 +10,7 @@ import TermEntity, {
 } from '@/features/term/term.entity';
 import { CASE_PRESERVING_TYPES } from '@/features/term/term.service';
 import TermContentEntity from '@/features/term/term-content.entity';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 type TermRow = {
 	type: TermType;
@@ -190,7 +191,7 @@ export const termSeed: SeedDefinition = {
 			relations: { term: true },
 		});
 
-		const idByKey = new Map<string, number>(
+		const idByKey = new Map<string, EntityId>(
 			existingContents
 				.filter((content) => content.term && content.language === 'en')
 				.map((content) => [

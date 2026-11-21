@@ -7,12 +7,14 @@ import {
 	toStockStatus,
 } from '@/features/product/product-stock.service';
 import type { VariantAvailability } from '@/shared/registries/stock-availability.registry';
+import type { EntityId } from '@/shared/types/entity-id.type';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 function item(
-	id: number,
-	variantId: number,
+	id: EntityId,
+	variantId: EntityId,
 	quantity: number,
-	groupId: number | null = null,
+	groupId: EntityId | null = null,
 ): ProductBundleItemEntity {
 	return {
 		id,
@@ -32,7 +34,7 @@ function composition(
 		mandatory,
 		optional,
 		candidatesByGroup: new Map(
-			groups.map((candidates, index) => [index + 1, candidates]),
+			groups.map((candidates, index) => [mockId(index + 1), candidates]),
 		),
 		byId: new Map(),
 	};
@@ -87,15 +89,18 @@ describe('toStockStatus', () => {
 describe('bundleStatus', () => {
 	it('is null when no component tracks stock', () => {
 		expect(
-			bundleStatus(composition([item(1, 10, 1)]), new Map()),
+			bundleStatus(
+				composition([item(mockId(1), mockId(10), 1)]),
+				new Map(),
+			),
 		).toBeNull();
 	});
 
 	it('reads low in the component units against its own threshold', () => {
 		expect(
 			bundleStatus(
-				composition([item(1, 10, 2)]),
-				new Map([[10, stock(15, { low_stock_threshold: 20 })]]),
+				composition([item(mockId(1), mockId(10), 2)]),
+				new Map([[mockId(10), stock(15, { low_stock_threshold: 20 })]]),
 			),
 		).toBe(ProductStockStatusEnum.LOW_STOCK);
 	});
@@ -103,10 +108,13 @@ describe('bundleStatus', () => {
 	it('takes the worst always-included component', () => {
 		expect(
 			bundleStatus(
-				composition([item(1, 10, 1), item(2, 11, 1)]),
+				composition([
+					item(mockId(1), mockId(10), 1),
+					item(mockId(2), mockId(11), 1),
+				]),
 				new Map([
-					[10, stock(50)],
-					[11, stock(0)],
+					[mockId(10), stock(50)],
+					[mockId(11), stock(0)],
 				]),
 			),
 		).toBe(ProductStockStatusEnum.OUT_OF_STOCK);
@@ -116,13 +124,18 @@ describe('bundleStatus', () => {
 		expect(
 			bundleStatus(
 				composition(
-					[item(1, 10, 1)],
-					[[item(2, 11, 1, 1), item(3, 12, 1, 1)]],
+					[item(mockId(1), mockId(10), 1)],
+					[
+						[
+							item(mockId(2), mockId(11), 1, mockId(1)),
+							item(mockId(3), mockId(12), 1, mockId(1)),
+						],
+					],
 				),
 				new Map([
-					[10, stock(50)],
-					[11, stock(0)],
-					[12, stock(40)],
+					[mockId(10), stock(50)],
+					[mockId(11), stock(0)],
+					[mockId(12), stock(40)],
 				]),
 			),
 		).toBe(ProductStockStatusEnum.IN_STOCK);
@@ -132,13 +145,18 @@ describe('bundleStatus', () => {
 		expect(
 			bundleStatus(
 				composition(
-					[item(1, 10, 1)],
-					[[item(2, 11, 1, 1), item(3, 12, 1, 1)]],
+					[item(mockId(1), mockId(10), 1)],
+					[
+						[
+							item(mockId(2), mockId(11), 1, mockId(1)),
+							item(mockId(3), mockId(12), 1, mockId(1)),
+						],
+					],
 				),
 				new Map([
-					[10, stock(50)],
-					[11, stock(0)],
-					[12, stock(0)],
+					[mockId(10), stock(50)],
+					[mockId(11), stock(0)],
+					[mockId(12), stock(0)],
 				]),
 			),
 		).toBe(ProductStockStatusEnum.OUT_OF_STOCK);
@@ -147,8 +165,16 @@ describe('bundleStatus', () => {
 	it('lets an untracked candidate satisfy its choice', () => {
 		expect(
 			bundleStatus(
-				composition([], [[item(2, 11, 1, 1), item(3, 12, 1, 1)]]),
-				new Map([[11, stock(0)]]),
+				composition(
+					[],
+					[
+						[
+							item(mockId(2), mockId(11), 1, mockId(1)),
+							item(mockId(3), mockId(12), 1, mockId(1)),
+						],
+					],
+				),
+				new Map([[mockId(11), stock(0)]]),
 			),
 		).toBeNull();
 	});
@@ -156,10 +182,14 @@ describe('bundleStatus', () => {
 	it('never lets an optional component hold the bundle back', () => {
 		expect(
 			bundleStatus(
-				composition([item(1, 10, 1)], [], [item(4, 13, 1)]),
+				composition(
+					[item(mockId(1), mockId(10), 1)],
+					[],
+					[item(mockId(4), mockId(13), 1)],
+				),
 				new Map([
-					[10, stock(50)],
-					[13, stock(0)],
+					[mockId(10), stock(50)],
+					[mockId(13), stock(0)],
 				]),
 			),
 		).toBe(ProductStockStatusEnum.IN_STOCK);

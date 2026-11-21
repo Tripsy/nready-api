@@ -20,6 +20,7 @@ import {
 	notAuthenticatedSpy,
 	notAuthorizedSpy,
 } from '@/tests/mocks/policies.mock';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 let app: Express;
 
@@ -90,7 +91,7 @@ describe(`${controller} - create`, () => {
 				expect.objectContaining({
 					qty: 12,
 					direction: 'remove',
-					warehouse_id: 1,
+					warehouse_id: mockId(1),
 				}),
 			);
 		}, response);

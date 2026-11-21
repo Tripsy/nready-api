@@ -441,7 +441,7 @@ export class InvoiceValidator extends BaseValidator<typeof validatorMessages> {
 		defaultPage: 1,
 
 		filterSchema: {
-			id: this.validateNumber(this.getMessage('invalid_number'), {
+			id: this.validateId(this.getMessage('invalid_id', { name: 'id' }), {
 				required: false,
 			}),
 			client_id: this.validateId(this.getMessage('invalid_client_id'), {

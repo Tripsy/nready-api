@@ -1,6 +1,8 @@
+import { validate as isUuid } from 'uuid';
 import type MailQueueEntity from '@/features/mail-queue/mail-queue.entity';
 import { getMailQueueRepository } from '@/features/mail-queue/mail-queue.repository';
 import type { MailQueueValidator } from '@/features/mail-queue/mail-queue.validator';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 export class MailQueueService {
@@ -15,7 +17,7 @@ export class MailQueueService {
 			.delete(false, true, true);
 	}
 
-	public findById(id: number): Promise<MailQueueEntity> {
+	public findById(id: EntityId): Promise<MailQueueEntity> {
 		return this.repository.createQuery().filterById(id).firstOrFail();
 	}
 
@@ -47,9 +49,9 @@ export class MailQueueService {
 			)
 			.filterBy('status', data.filter.status);
 
-		// The filter accepts either side of the joined template: an id picks one exactly, a
-		// string searches the label
-		if (typeof data.filter.template === 'number') {
+		// The filter accepts either side of the joined template: an id picks one exactly, any
+		// other string searches the label
+		if (data.filter.template && isUuid(data.filter.template)) {
 			query.filterBy('template.id', data.filter.template);
 		} else {
 			query.filterBy('template.label', data.filter.template, 'LIKE');

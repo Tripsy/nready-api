@@ -45,7 +45,7 @@ export const docs: Record<
 			notes: `${writeNote}. \`pid\` names the process that wrote the line and \`request_id\` the request it belonged to, which is what ties the lines of one failure together; \`debug_stack\` carries the stack when there was one`,
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -125,7 +125,7 @@ export const docs: Record<
 					default: OrderDirectionEnum.ASC,
 				},
 				filter: {
-					id: { type: 'number', required: false },
+					id: { type: 'string', required: false },
 					category: {
 						type: 'enum',
 						required: false,

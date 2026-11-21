@@ -114,7 +114,7 @@ export const docs: Record<
 					values: Object.values(ShippingMethodEnum),
 				},
 				order_id: {
-					type: 'number',
+					type: 'string',
 					required: false,
 					condition: `required for ${ShippingScopeEnum.DELIVERY} and ${ShippingScopeEnum.RETURN}`,
 				},
@@ -124,26 +124,26 @@ export const docs: Record<
 					condition: `required for ${ShippingScopeEnum.RELOCATION}; no table behind it yet`,
 				},
 				pickup_warehouse_id: {
-					type: 'number',
+					type: 'string',
 					required: false,
 					condition: `required for ${ShippingScopeEnum.DELIVERY} and ${ShippingScopeEnum.RELOCATION}`,
 				},
 				pickup_client_address_id: {
-					type: 'number',
+					type: 'string',
 					required: false,
 					condition: `required for ${ShippingScopeEnum.RETURN}`,
 				},
 				destination_warehouse_id: {
-					type: 'number',
+					type: 'string',
 					required: false,
 					condition: `required for ${ShippingScopeEnum.RELOCATION} and ${ShippingScopeEnum.RETURN}`,
 				},
 				destination_client_address_id: {
-					type: 'number',
+					type: 'string',
 					required: false,
 					condition: `required for ${ShippingScopeEnum.DELIVERY}`,
 				},
-				carrier_id: { type: 'number', required: false },
+				carrier_id: { type: 'string', required: false },
 				tracking_number: { type: 'string', required: false },
 				tracking_url: { type: 'string', required: false },
 				price: {
@@ -210,7 +210,7 @@ export const docs: Record<
 			notes: 'A deleted movement is only visible to a caller holding shipping delete. The joins are LEFT, so a movement whose carrier was removed still reads',
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -230,7 +230,7 @@ export const docs: Record<
 			notes: `Provide at least one updatable field. scope, order_id and document_ref are not among them - the scope is fixed at creation, and moving a movement to another document would take its lines with it. A status in the body is ignored, it has its own route. ${endsNote}. ${allocationNote}`,
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -240,14 +240,14 @@ export const docs: Record<
 					required: false,
 					values: Object.values(ShippingMethodEnum),
 				},
-				pickup_warehouse_id: { type: 'number', required: false },
-				pickup_client_address_id: { type: 'number', required: false },
-				destination_warehouse_id: { type: 'number', required: false },
+				pickup_warehouse_id: { type: 'string', required: false },
+				pickup_client_address_id: { type: 'string', required: false },
+				destination_warehouse_id: { type: 'string', required: false },
 				destination_client_address_id: {
-					type: 'number',
+					type: 'string',
 					required: false,
 				},
-				carrier_id: { type: 'number', required: false },
+				carrier_id: { type: 'string', required: false },
 				tracking_number: { type: 'string', required: false },
 				tracking_url: { type: 'string', required: false },
 				price: { type: 'number', required: false },
@@ -284,7 +284,7 @@ export const docs: Record<
 			notes: "Soft delete, whatever the status. A deleted movement releases what it carried, so those quantities become available to the document's other movements",
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -303,7 +303,7 @@ export const docs: Record<
 			notes: 'The lines come back with it, which can leave a variant committed beyond what the order holds if another movement claimed it meanwhile - the figures are worth checking after a restore',
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -363,7 +363,7 @@ export const docs: Record<
 					default: OrderDirectionEnum.DESC,
 				},
 				filter: {
-					id: { type: 'number', required: false },
+					id: { type: 'string', required: false },
 					term: {
 						type: 'string',
 						required: false,
@@ -375,17 +375,17 @@ export const docs: Record<
 						values: Object.values(ShippingScopeEnum),
 					},
 					order_id: {
-						type: 'number',
+						type: 'string',
 						required: false,
 						condition: 'one id, or several as filter[order_id][]',
 					},
 					document_ref: { type: 'number', required: false },
-					pickup_warehouse_id: { type: 'number', required: false },
+					pickup_warehouse_id: { type: 'string', required: false },
 					destination_warehouse_id: {
-						type: 'number',
+						type: 'string',
 						required: false,
 					},
-					carrier_id: { type: 'number', required: false },
+					carrier_id: { type: 'string', required: false },
 					status: {
 						type: 'enum',
 						required: false,
@@ -422,7 +422,7 @@ export const docs: Record<
 			notes: `Allowed moves: ${statusTransitionNote}. A repeat of the current status answers 400, anything else 409. ${endsNote}, and the same move stamps shipped_at; ${ShippingStatusEnum.DELIVERED} stamps delivered_at. Neither stamp is ever rewritten. With warehouse-movement installed, a delivery moving to ${ShippingStatusEnum.SHIPPED} draws its stock-tracked lines from the pickup warehouse's lots, oldest first, and lowers the order's reservation - 409 when the warehouse holds less than a line asks, backorder or not; ${ShippingStatusEnum.SHIPPED} to ${ShippingStatusEnum.RETURNED} puts the goods back into the same lots. ${ShippingStatusEnum.FAILED} after shipping moves no stock. A return moving to ${ShippingStatusEnum.DELIVERED} needs a condition on every line (409 otherwise) and takes its goods back into the lots the order's sales drew from at the destination warehouse - resellable lines restocked, damaged ones written off on the same lot; 409 when the goods did not leave that warehouse`,
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 				status: {

@@ -77,7 +77,7 @@ export const docs: Record<
 		request: {
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -97,7 +97,7 @@ export const docs: Record<
 			notes: `Provide at least one body parameter. document_type is not updatable - it is the key an allocation resolves on, and moving it would hand already-issued numbers to another series. ${counterNote}, so raising start_number on a series that has issued anything documents an intent without changing what comes next`,
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -126,7 +126,7 @@ export const docs: Record<
 			notes: 'Hard - the table has no deleted state and therefore no restore. Nothing stops the removal of a series that has already issued numbers, and recreating it starts the counter again from start_number, which then collides with the references already carrying that code',
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -182,7 +182,7 @@ export const docs: Record<
 					default: OrderDirectionEnum.ASC,
 				},
 				filter: {
-					id: { type: 'number', required: false },
+					id: { type: 'string', required: false },
 					term: {
 						type: 'string',
 						required: false,

@@ -13,6 +13,7 @@ import {
 import PlaceContentRepository from '@/features/place/place-content.repository';
 import { pickValuesFromObject } from '@/helpers/objects.helper';
 import { cleanEntityCache } from '@/shared/abstracts/service.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 /**
@@ -28,7 +29,7 @@ export class PlaceService {
 	public async checkParentId(
 		action: 'create' | 'update',
 		place_type: PlaceType,
-		parent_id?: number | null,
+		parent_id?: EntityId | null,
 	) {
 		if (place_type === PlaceTypeEnum.COUNTRY) {
 			if (parent_id) {
@@ -161,7 +162,7 @@ export class PlaceService {
 		return updatedEntity;
 	}
 
-	public async delete(id: number) {
+	public async delete(id: EntityId) {
 		const hasChildren = await this.hasChildren(id);
 
 		if (hasChildren) {
@@ -173,11 +174,11 @@ export class PlaceService {
 		await this.repository.createQuery().filterById(id).delete();
 	}
 
-	public async restore(id: number) {
+	public async restore(id: EntityId) {
 		await this.repository.createQuery().filterById(id).restore();
 	}
 
-	public findById(id: number, withDeleted: boolean): Promise<PlaceEntity> {
+	public findById(id: EntityId, withDeleted: boolean): Promise<PlaceEntity> {
 		return this.repository
 			.createQuery()
 			.filterById(id)
@@ -189,7 +190,7 @@ export class PlaceService {
 	 * @description Used in `read` method from controller; this will return a custom shape
 	 */
 	public async getEntryData(data: {
-		id: number;
+		id: EntityId;
 		language?: string;
 		withDeleted: boolean;
 	}) {
@@ -292,7 +293,7 @@ export class PlaceService {
 			.all();
 	}
 
-	public hasChildren(id: number) {
+	public hasChildren(id: EntityId) {
 		return this.repository
 			.createQuery()
 			.filterBy('parent_id', id)

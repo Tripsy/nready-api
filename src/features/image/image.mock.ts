@@ -9,14 +9,15 @@ import {
 import { ImageValidator, OrderByEnum } from '@/features/image/image.validator';
 import { createPastDate } from '@/helpers/date.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 const imageValidator = new ImageValidator('image');
 
 export function getImageEntityMock(): ImageEntity {
 	return {
-		id: 1,
+		id: mockId(1),
 		section: ImageSectionEnum.PRODUCT,
-		entity_id: 1,
+		entity_id: mockId(1),
 		image_type: ImageTypeEnum.GALLERY,
 		storage: ImageStorageEnum.LOCAL,
 		path: '/products/pepsi.jpg',
@@ -38,7 +39,7 @@ export function getImageEntityMock(): ImageEntity {
 export const imageInputPayloads = {
 	create: {
 		section: ImageSectionEnum.PRODUCT,
-		entity_id: 1,
+		entity_id: mockId(1),
 		image_type: ImageTypeEnum.GALLERY,
 		storage: ImageStorageEnum.LOCAL,
 		path: '/products/pepsi.jpg',
@@ -58,9 +59,9 @@ export const imageInputPayloads = {
 		],
 	},
 	update: {
-		id: 1,
+		id: mockId(1),
 		section: ImageSectionEnum.PRODUCT,
-		entity_id: 1,
+		entity_id: mockId(1),
 		image_type: ImageTypeEnum.GALLERY,
 		storage: ImageStorageEnum.LOCAL,
 		path: '/products/pepsi.jpg',
@@ -92,10 +93,10 @@ export const imageInputPayloads = {
 	},
 	orderUpdate: {
 		section: ImageSectionEnum.PRODUCT,
-		entity_id: 1,
+		entity_id: mockId(1),
 		positions: [
-			{ id: 1, sort_order: 1 },
-			{ id: 2, sort_order: 2 },
+			{ id: mockId(1), sort_order: 1 },
+			{ id: mockId(2), sort_order: 2 },
 		],
 	},
 };

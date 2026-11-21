@@ -4,9 +4,9 @@ import {
 	CreateDateColumn,
 	Entity,
 	Index,
-	PrimaryGeneratedColumn,
 	UpdateDateColumn,
 } from 'typeorm';
+import { EntityIdAbstract } from '@/shared/abstracts/entity-id.abstract';
 import { numericTransformer } from '@/shared/transformers/numeric.transformer';
 
 /**
@@ -84,12 +84,9 @@ const ENTITY_TABLE_NAME = 'vat_rate';
 })
 @Check(`(rate >= 0 AND rate < 100)`)
 @Check(`(category IN ('standard', 'reduced', 'second_reduced'))`)
-export default class VatRateEntity {
+export default class VatRateEntity extends EntityIdAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
-
-	@PrimaryGeneratedColumn({ type: 'int' })
-	id!: number;
 
 	@CreateDateColumn({ type: 'timestamp', nullable: false })
 	created_at!: Date;

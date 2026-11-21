@@ -3,12 +3,12 @@ import type AccountRecoveryEntity from '@/features/account/account-recovery.enti
 import type AccountTokenEntity from '@/features/account/account-token.entity';
 import type { AuthValidToken } from '@/features/account/account-token.service';
 import { createFutureDate, createPastDate } from '@/helpers/date.helper';
-import { mockUuid } from '@/tests/mocks/uuid.mock';
+import { mockId, mockUuid } from '@/tests/mocks/uuid.mock';
 
 export function getAccountTokenMock(): AccountTokenEntity {
 	return {
-		id: 1,
-		user_id: 1,
+		id: mockId(1),
+		user_id: mockId(1),
 		ident: mockUuid(),
 		created_at: createPastDate(28800),
 		metadata: { 'user-agent': 'test-agent' },
@@ -19,8 +19,8 @@ export function getAccountTokenMock(): AccountTokenEntity {
 
 export function getAccountRecoveryMock(): AccountRecoveryEntity {
 	return {
-		id: 1,
-		user_id: 1,
+		id: mockId(1),
+		user_id: mockId(1),
 		ident: mockUuid(),
 		created_at: createPastDate(28800),
 		used_at: createPastDate(14400),
@@ -39,8 +39,8 @@ export function getAuthValidTokenMock(): AuthValidToken {
 
 export function getAuthActiveTokenMock(): AccountTokenEntity {
 	return {
-		id: 1,
-		user_id: 1,
+		id: mockId(1),
+		user_id: mockId(1),
 		ident: mockUuid(),
 		created_at: createPastDate(28800),
 		used_at: createPastDate(14400),
@@ -50,7 +50,7 @@ export function getAuthActiveTokenMock(): AccountTokenEntity {
 
 export function getConfirmationTokenPayloadMock(): ConfirmationTokenPayload {
 	return {
-		user_id: 1,
+		user_id: mockId(1),
 		user_email: 'john.doe@example.com',
 	};
 }

@@ -1,4 +1,5 @@
 import { createQuery } from '@/helpers/hook.helper';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * The image a feature shows for one of its own rows, looked up without importing the feature that
@@ -60,7 +61,7 @@ export type TargetImageProperties = {
 };
 
 export type TargetImage = {
-	id: number;
+	id: EntityId;
 	path: string;
 	storage: TargetImageStorage;
 	properties: TargetImageProperties | null;
@@ -80,8 +81,8 @@ export type TargetImage = {
 export type TargetImageProvider = (
 	section: string,
 	imageType: TargetImageType,
-	entityIds: number[],
-) => Promise<Map<number, TargetImage>>;
+	entityIds: EntityId[],
+) => Promise<Map<EntityId, TargetImage>>;
 
 /**
  * The same question asked of a whole gallery: every image a target carries of that type, in the
@@ -98,17 +99,17 @@ export type TargetImageProvider = (
 export type TargetImageListProvider = (
 	section: string,
 	imageType: TargetImageType,
-	entityIds: number[],
-) => Promise<Map<number, TargetImage[]>>;
+	entityIds: EntityId[],
+) => Promise<Map<EntityId, TargetImage[]>>;
 
 const targetImageProvider = createQuery<
 	Parameters<TargetImageProvider>,
-	Map<number, TargetImage>
+	Map<EntityId, TargetImage>
 >(() => new Map());
 
 const targetImageListProvider = createQuery<
 	Parameters<TargetImageListProvider>,
-	Map<number, TargetImage[]>
+	Map<EntityId, TargetImage[]>
 >(() => new Map());
 
 /**
@@ -120,8 +121,8 @@ export const registerTargetImageProvider = targetImageProvider.register;
 export const resolveTargetImages = async (
 	section: string,
 	imageType: TargetImageType,
-	entityIds: number[],
-): Promise<Map<number, TargetImage>> => {
+	entityIds: EntityId[],
+): Promise<Map<EntityId, TargetImage>> => {
 	if (entityIds.length === 0) {
 		return new Map();
 	}
@@ -142,8 +143,8 @@ export const registerTargetImageListProvider = targetImageListProvider.register;
 export const resolveTargetImageLists = async (
 	section: string,
 	imageType: TargetImageType,
-	entityIds: number[],
-): Promise<Map<number, TargetImage[]>> => {
+	entityIds: EntityId[],
+): Promise<Map<EntityId, TargetImage[]>> => {
 	if (entityIds.length === 0) {
 		return new Map();
 	}

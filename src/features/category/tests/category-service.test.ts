@@ -21,12 +21,14 @@ import type { CategoryValidator } from '@/features/category/category.validator';
 import CategoryContentRepository from '@/features/category/category-content.repository';
 import { createCurrentDate } from '@/helpers/date.helper';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import {
 	createMockRepository,
 	setupTransactionMock,
 	testServiceFindByFilter,
 	testServiceFindById,
 } from '@/tests/jest-service.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 /** A category with the fields each tree test cares about, defaults left alone. */
 function buildCategory(
@@ -66,12 +68,14 @@ function mockTreeRepository(
 
 	const findAncestors = jest
 		.fn<(entity: CategoryEntity) => Promise<CategoryEntity[]>>()
-		.mockResolvedValue(options.ancestors ?? [buildCategory({ id: 9 })]);
+		.mockResolvedValue(
+			options.ancestors ?? [buildCategory({ id: mockId(9) })],
+		);
 
 	const findDescendantsTree = jest
 		.fn<(entity: CategoryEntity) => Promise<CategoryEntity>>()
 		.mockResolvedValue(
-			options.subtree ?? buildCategory({ id: 1, children: [] }),
+			options.subtree ?? buildCategory({ id: mockId(1), children: [] }),
 		);
 
 	jest.spyOn(RepositoryAbstract, 'getTreeRepository').mockReturnValue({
@@ -135,8 +139,14 @@ describe('CategoryService', () => {
 
 		it('should attach the resolved parent entity and save inside the transaction', async () => {
 			const createData = categoryOutputPayloads.create;
-			const parent = buildCategory({ id: 5, type: createData.type });
-			const saved = buildCategory({ id: 9, type: createData.type });
+			const parent = buildCategory({
+				id: mockId(5),
+				type: createData.type,
+			});
+			const saved = buildCategory({
+				id: mockId(9),
+				type: createData.type,
+			});
 
 			const { transaction } = setupTransactionMock();
 			const repository = mockScopedRepository(parent, saved);
@@ -172,13 +182,16 @@ describe('CategoryService', () => {
 		 */
 		it('should throw when the parent is already at the depth ceiling', async () => {
 			const createData = categoryOutputPayloads.create;
-			const parent = buildCategory({ id: 5, type: createData.type });
+			const parent = buildCategory({
+				id: mockId(5),
+				type: createData.type,
+			});
 
 			setupTransactionMock();
 			mockScopedRepository(parent, buildCategory());
 
 			mockTreeRepository([], {
-				ancestors: [parent, buildCategory({ id: 9 })],
+				ancestors: [parent, buildCategory({ id: mockId(9) })],
 			});
 
 			await expect(serviceCategory.create(createData)).rejects.toThrow(
@@ -191,7 +204,10 @@ describe('CategoryService', () => {
 
 			setupTransactionMock();
 			mockScopedRepository(
-				buildCategory({ id: 5, type: CategoryTypeEnum.PRODUCT }),
+				buildCategory({
+					id: mockId(5),
+					type: CategoryTypeEnum.PRODUCT,
+				}),
 				buildCategory(),
 			);
 
@@ -219,11 +235,11 @@ describe('CategoryService', () => {
 	 * stop a cycle, a cross-type graft or a move under a row that is on its way out.
 	 */
 	describe('updateDataWithContent - reparenting guards', () => {
-		const updateData = categoryOutputPayloads.update; // parent_id: 3
+		const updateData = categoryOutputPayloads.update; // parent_id: mockId(3)
 
 		it('should reject moving a category under its current parent', async () => {
 			const entry = buildCategory({
-				id: 1,
+				id: mockId(1),
 				parent: buildCategory({ id: updateData.parent_id }),
 			});
 
@@ -234,9 +250,9 @@ describe('CategoryService', () => {
 
 		it('should reject a deleted parent for a live category', async () => {
 			const entry = buildCategory({
-				id: 1,
+				id: mockId(1),
 				deleted_at: null,
-				parent: buildCategory({ id: 9 }),
+				parent: buildCategory({ id: mockId(9) }),
 			});
 
 			jest.spyOn(serviceCategory, 'findById').mockResolvedValue(
@@ -253,9 +269,9 @@ describe('CategoryService', () => {
 
 		it('should reject an inactive parent for an active category', async () => {
 			const entry = buildCategory({
-				id: 1,
+				id: mockId(1),
 				status: CategoryStatusEnum.ACTIVE,
-				parent: buildCategory({ id: 9 }),
+				parent: buildCategory({ id: mockId(9) }),
 			});
 
 			jest.spyOn(serviceCategory, 'findById').mockResolvedValue(
@@ -272,9 +288,9 @@ describe('CategoryService', () => {
 
 		it('should reject a parent of a different type', async () => {
 			const entry = buildCategory({
-				id: 1,
+				id: mockId(1),
 				type: CategoryTypeEnum.ARTICLE,
-				parent: buildCategory({ id: 9 }),
+				parent: buildCategory({ id: mockId(9) }),
 			});
 
 			jest.spyOn(serviceCategory, 'findById').mockResolvedValue(
@@ -291,8 +307,8 @@ describe('CategoryService', () => {
 
 		it('should reject moving a category under its own descendant (cycle)', async () => {
 			const entry = buildCategory({
-				id: 1,
-				parent: buildCategory({ id: 9 }),
+				id: mockId(1),
+				parent: buildCategory({ id: mockId(9) }),
 			});
 
 			jest.spyOn(serviceCategory, 'findById').mockResolvedValue(
@@ -301,7 +317,7 @@ describe('CategoryService', () => {
 
 			// `findDescendants` includes the subject itself, hence both ids.
 			const { findDescendants } = mockTreeRepository([
-				buildCategory({ id: 1 }),
+				buildCategory({ id: mockId(1) }),
 				buildCategory({ id: updateData.parent_id }),
 			]);
 
@@ -319,18 +335,18 @@ describe('CategoryService', () => {
 		 */
 		it('should measure the moved subtree against the ceiling, not just the node', async () => {
 			const entry = buildCategory({
-				id: 1,
-				parent: buildCategory({ id: 9 }),
+				id: mockId(1),
+				parent: buildCategory({ id: mockId(9) }),
 			});
 
 			jest.spyOn(serviceCategory, 'findById').mockResolvedValue(
 				buildCategory({ id: updateData.parent_id }),
 			);
 
-			mockTreeRepository([buildCategory({ id: 1 })], {
+			mockTreeRepository([buildCategory({ id: mockId(1) })], {
 				subtree: buildCategory({
-					id: 1,
-					children: [buildCategory({ id: 2, children: [] })],
+					id: mockId(1),
+					children: [buildCategory({ id: mockId(2), children: [] })],
 				}),
 			});
 
@@ -341,16 +357,16 @@ describe('CategoryService', () => {
 
 		it('should save the new parent and the contents when every guard passes', async () => {
 			const entry = buildCategory({
-				id: 1,
+				id: mockId(1),
 				sort_order: 30,
-				parent: buildCategory({ id: 9 }),
+				parent: buildCategory({ id: mockId(9) }),
 			});
 
 			jest.spyOn(serviceCategory, 'findById').mockResolvedValue(
 				buildCategory({ id: updateData.parent_id }),
 			);
 
-			mockTreeRepository([buildCategory({ id: 1 })]);
+			mockTreeRepository([buildCategory({ id: mockId(1) })]);
 
 			const scopedRepository = {
 				save: jest.fn<
@@ -392,16 +408,16 @@ describe('CategoryService', () => {
 		 */
 		it('should detach the parent when parent_id is sent empty', async () => {
 			const entry = buildCategory({
-				id: 1,
+				id: mockId(1),
 				sort_order: 30,
-				parent: buildCategory({ id: 9 }),
+				parent: buildCategory({ id: mockId(9) }),
 			});
 
 			const detachData = { ...updateData, parent_id: undefined };
 
 			const findById = jest.spyOn(serviceCategory, 'findById');
 
-			mockTreeRepository([buildCategory({ id: 1 })]);
+			mockTreeRepository([buildCategory({ id: mockId(1) })]);
 
 			const scopedRepository = {
 				save: jest.fn<
@@ -433,7 +449,7 @@ describe('CategoryService', () => {
 		 */
 		it('should attach a parent to a category that has none', async () => {
 			const entry = buildCategory({
-				id: 1,
+				id: mockId(1),
 				sort_order: 30,
 				parent: null,
 			});
@@ -442,7 +458,7 @@ describe('CategoryService', () => {
 				buildCategory({ id: updateData.parent_id }),
 			);
 
-			mockTreeRepository([buildCategory({ id: 1 })]);
+			mockTreeRepository([buildCategory({ id: mockId(1) })]);
 
 			const scopedRepository = {
 				save: jest.fn<
@@ -467,7 +483,7 @@ describe('CategoryService', () => {
 
 		it('should leave the row alone when parent_id repeats the current parent of a root', async () => {
 			const entry = buildCategory({
-				id: 1,
+				id: mockId(1),
 				sort_order: 30,
 				parent: null,
 			});
@@ -502,12 +518,12 @@ describe('CategoryService', () => {
 	 * children hanging off an inactive parent.
 	 */
 	describe('updateStatus - descendant cascade', () => {
-		function mockDescendantsQuery(activeIds: number[]) {
+		function mockDescendantsQuery(activeIds: EntityId[]) {
 			const descendantsQueryBuilder = {
 				select: jest.fn().mockReturnThis(),
 				where: jest.fn().mockReturnThis(),
 				getRawMany: jest
-					.fn<() => Promise<{ id: number }[]>>()
+					.fn<() => Promise<{ id: EntityId }[]>>()
 					.mockResolvedValue(activeIds.map((id) => ({ id }))),
 			};
 
@@ -554,11 +570,11 @@ describe('CategoryService', () => {
 
 		it('should refuse to deactivate a category that still has active descendants', async () => {
 			const entry = buildCategory({
-				id: 1,
+				id: mockId(1),
 				status: CategoryStatusEnum.ACTIVE,
 			});
 
-			mockDescendantsQuery([1, 2, 3]);
+			mockDescendantsQuery([mockId(1), mockId(2), mockId(3)]);
 
 			await expect(
 				serviceCategory.updateStatus(
@@ -570,13 +586,13 @@ describe('CategoryService', () => {
 
 		it('should cascade to the active descendants when forced', async () => {
 			const entry = buildCategory({
-				id: 1,
+				id: mockId(1),
 				status: CategoryStatusEnum.ACTIVE,
 				sort_order: 30,
 			});
 
 			const { scopedRepository, updateQueryBuilder } =
-				mockDescendantsQuery([1, 2, 3]);
+				mockDescendantsQuery([mockId(1), mockId(2), mockId(3)]);
 
 			await serviceCategory.updateStatus(
 				entry,
@@ -587,7 +603,7 @@ describe('CategoryService', () => {
 			// The subject's own id is filtered out - it is saved below, not bulk-updated.
 			expect(updateQueryBuilder.where).toHaveBeenCalledWith(
 				'id IN (:...ids)',
-				{ ids: [2, 3] },
+				{ ids: [mockId(2), mockId(3)] },
 			);
 			// Cascaded rows leave their sibling group too, so they reset alongside.
 			expect(updateQueryBuilder.set).toHaveBeenCalledWith({
@@ -602,7 +618,7 @@ describe('CategoryService', () => {
 
 		it('should skip the descendant lookup when the category is being activated', async () => {
 			const entry = buildCategory({
-				id: 1,
+				id: mockId(1),
 				status: CategoryStatusEnum.INACTIVE,
 				sort_order: 30,
 			});
@@ -656,9 +672,9 @@ describe('CategoryService', () => {
 
 		it('should assign descending positions across the group', async () => {
 			const siblings = [
-				buildCategory({ id: 13, sort_order: 10 }),
-				buildCategory({ id: 14, sort_order: 20 }),
-				buildCategory({ id: 15, sort_order: 30 }),
+				buildCategory({ id: mockId(13), sort_order: 10 }),
+				buildCategory({ id: mockId(14), sort_order: 20 }),
+				buildCategory({ id: mockId(15), sort_order: 30 }),
 			];
 
 			const { transaction, scopedRepository } =
@@ -666,49 +682,49 @@ describe('CategoryService', () => {
 
 			await serviceCategory.updateOrder(
 				CategoryTypeEnum.PRODUCT,
-				9,
-				[15, 13, 14],
+				mockId(9),
+				[mockId(15), mockId(13), mockId(14)],
 			);
 
 			expect(transaction).toHaveBeenCalled();
 			expect(
 				siblings.map((sibling) => [sibling.id, sibling.sort_order]),
 			).toEqual([
-				[13, 2],
-				[14, 1],
-				[15, 3],
+				[mockId(13), 2],
+				[mockId(14), 1],
+				[mockId(15), 3],
 			]);
 			expect(scopedRepository.save).toHaveBeenCalledWith(siblings);
 		});
 
 		it('should scope the group to a parent when one is given', async () => {
 			const { queryBuilder } = mockSiblingGroup([
-				buildCategory({ id: 13 }),
-				buildCategory({ id: 14 }),
+				buildCategory({ id: mockId(13) }),
+				buildCategory({ id: mockId(14) }),
 			]);
 
 			await serviceCategory.updateOrder(
 				CategoryTypeEnum.PRODUCT,
-				9,
-				[14, 13],
+				mockId(9),
+				[mockId(14), mockId(13)],
 			);
 
 			expect(queryBuilder.andWhere).toHaveBeenCalledWith(
 				'category.parent_id = :parent_id',
-				{ parent_id: 9 },
+				{ parent_id: mockId(9) },
 			);
 		});
 
 		it('should scope the group to the roots when no parent is given', async () => {
 			const { queryBuilder } = mockSiblingGroup([
-				buildCategory({ id: 9 }),
-				buildCategory({ id: 10 }),
+				buildCategory({ id: mockId(9) }),
+				buildCategory({ id: mockId(10) }),
 			]);
 
 			await serviceCategory.updateOrder(
 				CategoryTypeEnum.PRODUCT,
 				undefined,
-				[10, 9],
+				[mockId(10), mockId(9)],
 			);
 
 			expect(queryBuilder.andWhere).toHaveBeenCalledWith(
@@ -723,16 +739,16 @@ describe('CategoryService', () => {
 
 		it('should reject a subset of the group', async () => {
 			const { scopedRepository } = mockSiblingGroup([
-				buildCategory({ id: 13 }),
-				buildCategory({ id: 14 }),
-				buildCategory({ id: 15 }),
+				buildCategory({ id: mockId(13) }),
+				buildCategory({ id: mockId(14) }),
+				buildCategory({ id: mockId(15) }),
 			]);
 
 			await expect(
 				serviceCategory.updateOrder(
 					CategoryTypeEnum.PRODUCT,
-					9,
-					[13, 14],
+					mockId(9),
+					[mockId(13), mockId(14)],
 				),
 			).rejects.toThrow('category.validation.invalid_ids_provided');
 
@@ -741,15 +757,15 @@ describe('CategoryService', () => {
 
 		it('should reject an id that belongs to another group', async () => {
 			const { scopedRepository } = mockSiblingGroup([
-				buildCategory({ id: 13 }),
-				buildCategory({ id: 14 }),
+				buildCategory({ id: mockId(13) }),
+				buildCategory({ id: mockId(14) }),
 			]);
 
 			await expect(
 				serviceCategory.updateOrder(
 					CategoryTypeEnum.PRODUCT,
-					9,
-					[13, 99],
+					mockId(9),
+					[mockId(13), mockId(99)],
 				),
 			).rejects.toThrow('category.validation.invalid_ids_provided');
 
@@ -759,15 +775,15 @@ describe('CategoryService', () => {
 
 	describe('delete - descendant guard', () => {
 		it('should refuse to delete a category that still has live descendants', async () => {
-			const category = buildCategory({ id: 1, deleted_at: null });
+			const category = buildCategory({ id: mockId(1), deleted_at: null });
 
 			jest.spyOn(serviceCategory, 'findById').mockResolvedValue(category);
 			mockTreeRepository([
 				category,
-				buildCategory({ id: 2, deleted_at: null }),
+				buildCategory({ id: mockId(2), deleted_at: null }),
 			]);
 
-			await expect(serviceCategory.delete(1)).rejects.toThrow(
+			await expect(serviceCategory.delete(mockId(1))).rejects.toThrow(
 				'category.error.has_descendants',
 			);
 
@@ -775,27 +791,35 @@ describe('CategoryService', () => {
 		});
 
 		it('should ignore descendants that are already soft-deleted', async () => {
-			const category = buildCategory({ id: 1, deleted_at: null });
+			const category = buildCategory({ id: mockId(1), deleted_at: null });
 
 			jest.spyOn(serviceCategory, 'findById').mockResolvedValue(category);
 			mockTreeRepository([
 				category,
-				buildCategory({ id: 2, deleted_at: createCurrentDate() }),
+				buildCategory({
+					id: mockId(2),
+					deleted_at: createCurrentDate(),
+				}),
 			]);
 			mockCategory.query.delete.mockResolvedValue(1);
 
-			await serviceCategory.delete(1);
+			await serviceCategory.delete(mockId(1));
 
-			expect(mockCategory.query.filterById).toHaveBeenCalledWith(1);
+			expect(mockCategory.query.filterById).toHaveBeenCalledWith(
+				mockId(1),
+			);
 			expect(mockCategory.query.delete).toHaveBeenCalledWith();
 		});
 
 		it('should refuse to delete an already deleted category', async () => {
 			jest.spyOn(serviceCategory, 'findById').mockResolvedValue(
-				buildCategory({ id: 1, deleted_at: createCurrentDate() }),
+				buildCategory({
+					id: mockId(1),
+					deleted_at: createCurrentDate(),
+				}),
 			);
 
-			await expect(serviceCategory.delete(1)).rejects.toThrow(
+			await expect(serviceCategory.delete(mockId(1))).rejects.toThrow(
 				'category.error.already_deleted',
 			);
 		});
@@ -804,10 +828,10 @@ describe('CategoryService', () => {
 	describe('restore - parent guards', () => {
 		it('should refuse to restore a category that is not deleted', async () => {
 			mockCategory.query.firstOrFail.mockResolvedValue(
-				buildCategory({ id: 1, deleted_at: null }),
+				buildCategory({ id: mockId(1), deleted_at: null }),
 			);
 
-			await expect(serviceCategory.restore(1)).rejects.toThrow(
+			await expect(serviceCategory.restore(mockId(1))).rejects.toThrow(
 				'category.error.not_deleted',
 			);
 		});
@@ -815,16 +839,16 @@ describe('CategoryService', () => {
 		it('should refuse to restore under a deleted parent', async () => {
 			mockCategory.query.firstOrFail.mockResolvedValue(
 				buildCategory({
-					id: 1,
+					id: mockId(1),
 					deleted_at: createCurrentDate(),
 					parent: buildCategory({
-						id: 2,
+						id: mockId(2),
 						deleted_at: createCurrentDate(),
 					}),
 				}),
 			);
 
-			await expect(serviceCategory.restore(1)).rejects.toThrow(
+			await expect(serviceCategory.restore(mockId(1))).rejects.toThrow(
 				'category.error.parent_deleted',
 			);
 		});
@@ -832,17 +856,17 @@ describe('CategoryService', () => {
 		it('should refuse to restore under an inactive parent', async () => {
 			mockCategory.query.firstOrFail.mockResolvedValue(
 				buildCategory({
-					id: 1,
+					id: mockId(1),
 					deleted_at: createCurrentDate(),
 					parent: buildCategory({
-						id: 2,
+						id: mockId(2),
 						deleted_at: null,
 						status: CategoryStatusEnum.INACTIVE,
 					}),
 				}),
 			);
 
-			await expect(serviceCategory.restore(1)).rejects.toThrow(
+			await expect(serviceCategory.restore(mockId(1))).rejects.toThrow(
 				'category.error.parent_not_active',
 			);
 		});
@@ -903,7 +927,7 @@ describe('CategoryService', () => {
 
 		mockTreeRepository([getCategoryEntityMock()]);
 
-		await serviceCategory.delete(1);
+		await serviceCategory.delete(mockId(1));
 
 		expect(mockCategory.query.delete).toHaveBeenCalledWith();
 	});
@@ -916,9 +940,9 @@ describe('CategoryService', () => {
 		});
 		mockCategory.query.restore.mockReturnThis();
 
-		await serviceCategory.restore(1);
+		await serviceCategory.restore(mockId(1));
 
-		expect(mockCategory.query.filterById).toHaveBeenCalledWith(1);
+		expect(mockCategory.query.filterById).toHaveBeenCalledWith(mockId(1));
 		expect(mockCategory.query.restore).toHaveBeenCalledWith();
 	});
 });

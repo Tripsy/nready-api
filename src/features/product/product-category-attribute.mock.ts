@@ -11,6 +11,7 @@ import {
 import { createPastDate } from '@/helpers/date.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
 import { MeasureUnitEnum } from '@/shared/types/measure-unit.type';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 const validator = new ProductCategoryAttributeValidator('product');
 
@@ -20,9 +21,9 @@ const validator = new ProductCategoryAttributeValidator('product');
  */
 export function getProductCategoryAttributeEntityMock(): ProductCategoryAttributeEntity {
 	return {
-		id: 1,
-		category_id: 4,
-		attribute_label_id: 11,
+		id: mockId(1),
+		category_id: mockId(4),
+		attribute_label_id: mockId(11),
 		scope: ProductCategoryAttributeScopeEnum.PRODUCT,
 		value_type: ProductCategoryAttributeValueTypeEnum.NUMBER,
 		type: ProductCategoryAttributeTypeEnum.INPUT,
@@ -53,8 +54,8 @@ export const productCategoryAttributeInputPayloads = {
 	// type the payload against the *parsed* shape, where an optional field is a present key
 	// holding `undefined`
 	create: {
-		category_id: 4,
-		attribute_label_id: 8,
+		category_id: mockId(4),
+		attribute_label_id: mockId(8),
 		scope: ProductCategoryAttributeScopeEnum.PRODUCT,
 		value_type: ProductCategoryAttributeValueTypeEnum.TERM,
 		type: ProductCategoryAttributeTypeEnum.SELECT,
@@ -68,12 +69,12 @@ export const productCategoryAttributeInputPayloads = {
 		inherit: true,
 		sort_order: 10,
 		options: [
-			{ term_id: 12, sort_order: 10 },
-			{ term_id: 13, sort_order: 20 },
+			{ term_id: mockId(12), sort_order: 10 },
+			{ term_id: mockId(13), sort_order: 20 },
 		],
 	},
 	update: {
-		id: 1,
+		id: mockId(1),
 		scope: undefined,
 		value_type: undefined,
 		type: undefined,
@@ -89,7 +90,7 @@ export const productCategoryAttributeInputPayloads = {
 		options: undefined,
 	},
 	resolve: {
-		category_id: [1, 5],
+		category_id: [mockId(1), mockId(5)],
 	},
 	find: {
 		page: 1,
@@ -97,7 +98,7 @@ export const productCategoryAttributeInputPayloads = {
 		order_by: OrderByEnum.SORT_ORDER,
 		direction: OrderDirectionEnum.ASC,
 		filter: {
-			category_id: 4,
+			category_id: mockId(4),
 			is_deleted: false,
 		},
 	},

@@ -5,6 +5,8 @@ import {
 	createQuery,
 } from '@/helpers/hook.helper';
 import { getSystemLogger } from '@/providers/logger.provider';
+import type { EntityId } from '@/shared/types/entity-id.type';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 /**
  * The slots features plug into each other through. What differs between the shapes is what a
@@ -18,27 +20,29 @@ describe('hook.helper', () => {
 
 	describe('createNotification', () => {
 		it('does nothing when no handler is registered', async () => {
-			const hook = createNotification<{ id: number }>('failed');
+			const hook = createNotification<{ id: EntityId }>('failed');
 
-			await expect(hook.notify({ id: 1 })).resolves.toBeUndefined();
+			await expect(
+				hook.notify({ id: mockId(1) }),
+			).resolves.toBeUndefined();
 		});
 
 		it('hands the payload to the registered handler', async () => {
-			const hook = createNotification<{ id: number }>('failed');
+			const hook = createNotification<{ id: EntityId }>('failed');
 			const handler = jest
-				.fn<(payload: { id: number }) => Promise<void>>()
+				.fn<(payload: { id: EntityId }) => Promise<void>>()
 				.mockResolvedValue();
 
 			hook.register(handler);
 
-			await hook.notify({ id: 1 });
+			await hook.notify({ id: mockId(1) });
 
-			expect(handler).toHaveBeenCalledWith({ id: 1 });
+			expect(handler).toHaveBeenCalledWith({ id: mockId(1) });
 		});
 
 		// The caller's write has already committed - a throw could only turn it into a 500
 		it('logs a failing handler rather than rethrowing', async () => {
-			const hook = createNotification<{ id: number }>('failed');
+			const hook = createNotification<{ id: EntityId }>('failed');
 			const error = new Error('boom');
 			const logged = jest
 				.spyOn(getSystemLogger(), 'error')
@@ -48,24 +52,26 @@ describe('hook.helper', () => {
 				throw error;
 			});
 
-			await expect(hook.notify({ id: 1 })).resolves.toBeUndefined();
+			await expect(
+				hook.notify({ id: mockId(1) }),
+			).resolves.toBeUndefined();
 
 			expect(logged).toHaveBeenCalledWith(
-				{ err: error, payload: { id: 1 } },
+				{ err: error, payload: { id: mockId(1) } },
 				'failed',
 			);
 		});
 
 		it('stops calling a handler once unregistered', async () => {
-			const hook = createNotification<{ id: number }>('failed');
+			const hook = createNotification<{ id: EntityId }>('failed');
 			const handler = jest
-				.fn<(payload: { id: number }) => Promise<void>>()
+				.fn<(payload: { id: EntityId }) => Promise<void>>()
 				.mockResolvedValue();
 
 			hook.register(handler);
 			hook.register(null);
 
-			await hook.notify({ id: 1 });
+			await hook.notify({ id: mockId(1) });
 
 			expect(handler).not.toHaveBeenCalled();
 		});
@@ -73,9 +79,9 @@ describe('hook.helper', () => {
 
 	describe('createQuery', () => {
 		it('answers the fallback when nothing is registered', async () => {
-			const query = createQuery<[id: number], boolean>(() => false);
+			const query = createQuery<[id: EntityId], boolean>(() => false);
 
-			await expect(query.ask(1)).resolves.toBe(false);
+			await expect(query.ask(mockId(1))).resolves.toBe(false);
 		});
 
 		it('builds a fresh fallback for every call', async () => {
@@ -89,24 +95,28 @@ describe('hook.helper', () => {
 		});
 
 		it('answers with the registered handler, passing its arguments', async () => {
-			const query = createQuery<[id: number, name: string], string>(
+			const query = createQuery<[id: EntityId, name: string], string>(
 				() => '',
 			);
 
-			query.register(async (id: number, name: string) => `${name}#${id}`);
+			query.register(
+				async (id: EntityId, name: string) => `${name}#${id}`,
+			);
 
-			await expect(query.ask(3, 'order')).resolves.toBe('order#3');
+			await expect(query.ask(mockId(3), 'order')).resolves.toBe(
+				`order#${mockId(3)}`,
+			);
 		});
 
 		// It gates a write not yet made - the fallback on an error would let it through on a guess
 		it('propagates a failing handler', async () => {
-			const query = createQuery<[id: number], boolean>(() => false);
+			const query = createQuery<[id: EntityId], boolean>(() => false);
 
 			query.register(async () => {
 				throw new Error('boom');
 			});
 
-			await expect(query.ask(1)).rejects.toThrow('boom');
+			await expect(query.ask(mockId(1))).rejects.toThrow('boom');
 		});
 	});
 

@@ -2,6 +2,7 @@ import { jest } from '@jest/globals';
 import { orderReturnInputPayloads } from '@/features/order-return/order-return.mock';
 import { OrderReturnValidator } from '@/features/order-return/order-return.validator';
 import { withDebugValidated } from '@/tests/jest-validator.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 beforeEach(() => {
 	jest.restoreAllMocks();
@@ -50,8 +51,8 @@ describe('OrderReturnValidator', () => {
 		const validated = orderReturnValidator.create.safeParse({
 			...orderReturnInputPayloads.create,
 			lines: [
-				{ variant_id: 27, quantity: 1 },
-				{ variant_id: 27, quantity: 2 },
+				{ variant_id: mockId(27), quantity: 1 },
+				{ variant_id: mockId(27), quantity: 2 },
 			],
 		});
 
@@ -61,21 +62,23 @@ describe('OrderReturnValidator', () => {
 	it('create() refuses a zero quantity', () => {
 		const validated = orderReturnValidator.create.safeParse({
 			...orderReturnInputPayloads.create,
-			lines: [{ variant_id: 27, quantity: 0 }],
+			lines: [{ variant_id: mockId(27), quantity: 0 }],
 		});
 
 		expect(validated.success).toBe(false);
 	});
 
 	it('update() refuses a payload carrying only the id', () => {
-		const validated = orderReturnValidator.update.safeParse({ id: 7 });
+		const validated = orderReturnValidator.update.safeParse({
+			id: mockId(7),
+		});
 
 		expect(validated.success).toBe(false);
 	});
 
 	it('update() accepts refund_shipping alone', () => {
 		const validated = orderReturnValidator.update.safeParse({
-			id: 7,
+			id: mockId(7),
 			refund_shipping: false,
 		});
 
@@ -86,7 +89,9 @@ describe('OrderReturnValidator', () => {
 	});
 
 	it('approve() leaves refund_shipping undefined when absent', () => {
-		const validated = orderReturnValidator.approve.safeParse({ id: 7 });
+		const validated = orderReturnValidator.approve.safeParse({
+			id: mockId(7),
+		});
 
 		withDebugValidated(() => {
 			expect(validated.success).toBe(true);
@@ -96,7 +101,7 @@ describe('OrderReturnValidator', () => {
 
 	it('approve() refuses a price without its VAT rate', () => {
 		const validated = orderReturnValidator.approve.safeParse({
-			id: 7,
+			id: mockId(7),
 			price: 20,
 		});
 
@@ -105,7 +110,7 @@ describe('OrderReturnValidator', () => {
 
 	it('approve() accepts a price stated with its VAT rate', () => {
 		const validated = orderReturnValidator.approve.safeParse({
-			id: 7,
+			id: mockId(7),
 			price: 20,
 			vat_rate: 21,
 		});
@@ -116,7 +121,7 @@ describe('OrderReturnValidator', () => {
 	// `approved` and `received` have their own way in
 	it('statusUpdate() refuses a status the route does not take', () => {
 		const validated = orderReturnValidator.statusUpdate.safeParse({
-			id: 7,
+			id: mockId(7),
 			status: 'approved',
 		});
 

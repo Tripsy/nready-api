@@ -11,6 +11,7 @@ import {
 import { ComplaintValidator } from '@/features/complaint/complaint.validator';
 import asyncHandler from '@/helpers/async.handler';
 import { BaseController } from '@/shared/abstracts/controller.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * The reader-facing side. No permission is checked - reporting is what any reader does - but an
@@ -29,15 +30,9 @@ class ComplaintPublicController extends BaseController {
 		super();
 	}
 
-	/**
-	 * Who the request counts as. `requiredAuth` has already rejected a caller with no account, so
-	 * the id is present - the `?? 0` never fires and only satisfies the optional return type of
-	 * `getId`.
-	 */
-	private resolveReporter(res: Response): number {
-		this.policy.requiredAuth(res.locals.auth);
-
-		return this.policy.getId(res.locals.auth) ?? 0;
+	/** Who the request counts as - 401 for a visitor. */
+	private resolveReporter(res: Response): EntityId {
+		return this.policy.requireId(res.locals.auth);
 	}
 
 	public create = asyncHandler(async (req: Request, res: Response) => {

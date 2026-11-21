@@ -19,6 +19,7 @@ import {
 import { getMetaDataValue, tokenMetaData } from '@/helpers/meta-data.helper';
 import { getErrorMessage } from '@/helpers/system.helper';
 import { cacheProvider } from '@/providers/cache.provider';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 let authSecretKey: KeyObject | null = null;
 
@@ -37,7 +38,7 @@ function getAuthSecretKey(): KeyObject {
 }
 
 export type AuthTokenPayload = {
-	user_id: number;
+	user_id: EntityId;
 	ident: string;
 };
 
@@ -200,7 +201,7 @@ export class AccountTokenService {
 	/**
 	 * @description Generates a new auth token
 	 */
-	public generateAuthToken(user: Partial<UserEntity> & { id: number }): {
+	public generateAuthToken(user: Partial<UserEntity> & { id: EntityId }): {
 		token: string;
 		ident: string;
 		expire_at: Date;
@@ -228,7 +229,7 @@ export class AccountTokenService {
 	 * @description Gets the valid auth tokens for a user via repository
 	 */
 	public async getAuthValidTokens(
-		user_id: number,
+		user_id: EntityId,
 	): Promise<AuthValidToken[]> {
 		const authValidTokens = await this.accountTokenRepository
 			.createQuery()
@@ -270,7 +271,7 @@ export class AccountTokenService {
 	 * @description Generate a new auth token and returns the token
 	 */
 	public async setupAuthToken(
-		user: Partial<UserEntity> & { id: number },
+		user: Partial<UserEntity> & { id: EntityId },
 		req: Request,
 	): Promise<string> {
 		const { token, ident, expire_at } = this.generateAuthToken(user);
@@ -289,7 +290,7 @@ export class AccountTokenService {
 	/**
 	 * @description Removes all auth tokens for a user
 	 */
-	public async removeAccountTokenForUser(user_id: number): Promise<void> {
+	public async removeAccountTokenForUser(user_id: EntityId): Promise<void> {
 		const tokens = await this.accountTokenRepository
 			.createQuery()
 			.select(['id', 'ident'])

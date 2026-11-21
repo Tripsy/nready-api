@@ -5,6 +5,7 @@ import { commentService } from '@/features/comment/comment.service';
 import { commentEmailService } from '@/features/comment/comment-email.service';
 import { CommentSubscriptionTypeEnum } from '@/features/comment/comment-subscription.entity';
 import { commentSubscriptionService } from '@/features/comment/comment-subscription.service';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export const SCHEDULE_EXPRESSION = '0 */4 * * *';
 export const EXPECTED_RUN_TIME = 30; // seconds
@@ -80,7 +81,7 @@ const notifyCommentSubscribers = async () => {
 		...new Set(
 			entries
 				.map((entry) => entry.parent_id)
-				.filter((parentId): parentId is number => Boolean(parentId)),
+				.filter((parentId): parentId is EntityId => Boolean(parentId)),
 		),
 	];
 
@@ -93,7 +94,7 @@ const notifyCommentSubscribers = async () => {
 				.all()
 		: [];
 
-	const parentAuthors = new Map<number, string | null>(
+	const parentAuthors = new Map<EntityId, string | null>(
 		parents.map((parent) => [parent.id, authorEmail(parent)]),
 	);
 

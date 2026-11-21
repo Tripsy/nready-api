@@ -28,7 +28,7 @@ const targetParams = {
 		values: Object.values(RatingEntityTypeEnum),
 	},
 	entity_id: {
-		type: 'number' as const,
+		type: 'string' as const,
 		required: true,
 	},
 };

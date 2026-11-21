@@ -1,6 +1,7 @@
 import { expect, jest } from '@jest/globals';
 import type { EmailTemplate } from '@/features/template/template.entity';
 import type { EmailAddressType } from '@/shared/types/email.type';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 const loadEmailTemplate =
 	jest.fn<(label: string, language: string) => Promise<EmailTemplate>>();
@@ -31,12 +32,17 @@ describe('OrderReturnEmailService', () => {
 		shipping: { tracking_number: 'AWB123', tracking_url: null },
 		lines: [
 			{
-				variant_id: 27,
+				variant_id: mockId(27),
 				quantity: '1',
 				sku: 'OXF-M',
 				label: 'Oxford shirt',
 			},
-			{ variant_id: 28, quantity: '2', sku: 'OXF-L', label: null },
+			{
+				variant_id: mockId(28),
+				quantity: '2',
+				sku: 'OXF-L',
+				label: null,
+			},
 		],
 	} as never;
 
@@ -50,7 +56,7 @@ describe('OrderReturnEmailService', () => {
 		jest.clearAllMocks();
 
 		loadEmailTemplate.mockImplementation(async (label, language) => ({
-			id: 1,
+			id: mockId(1),
 			language: language,
 			content: { subject: label, html: '' },
 		}));
@@ -80,7 +86,7 @@ describe('OrderReturnEmailService', () => {
 		expect(template.content.vars).toMatchObject({
 			name: 'Ana',
 			reference: 'RMA-7',
-			order_id: 118,
+			order_id: mockId(118),
 			order_reference: 'ORD-118',
 			response: 'Please pack the item in its original box',
 			tracking_number: 'AWB123',

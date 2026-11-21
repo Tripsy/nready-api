@@ -4,6 +4,7 @@ import type ProductVariantEntity from '@/features/product/product-variant.entity
 import type WarehouseEntity from '@/features/warehouse/warehouse.entity';
 import { EntityAppendOnlyAbstract } from '@/shared/abstracts/entity-append-only.abstract';
 import { numericTransformer } from '@/shared/transformers/numeric.transformer';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export const WarehouseMovementTypeEnum = {
 	RECEIPT: 'receipt', // A GRN confirmed
@@ -125,12 +126,12 @@ export default class WarehouseMovementEntity extends EntityAppendOnlyAbstract {
 	})
 	source_type!: WarehouseMovementSource;
 
-	@Column('int', {
+	@Column('uuid', {
 		nullable: true,
 		comment:
 			'Row in the table named by source_type; no FK, the target varies',
 	})
-	source_id!: number | null;
+	source_id!: EntityId | null;
 
 	@Column({
 		type: 'timestamp',
@@ -144,21 +145,21 @@ export default class WarehouseMovementEntity extends EntityAppendOnlyAbstract {
 	notes!: string | null;
 
 	// RELATIONS
-	@Column('int', { nullable: false })
-	warehouse_id!: number;
+	@Column('uuid', { nullable: false })
+	warehouse_id!: EntityId;
 
-	@Column('int', { nullable: false })
-	variant_id!: number;
+	@Column('uuid', { nullable: false })
+	variant_id!: EntityId;
 
 	// Nullable only for movements that touch no particular lot; every FIFO consumption names one
-	@Column('int', { nullable: true })
-	grn_item_id!: number | null;
+	@Column('uuid', { nullable: true })
+	grn_item_id!: EntityId | null;
 
-	@Column('int', {
+	@Column('uuid', {
 		nullable: true,
 		comment: 'The movement this one cancels out',
 	})
-	reversal_of_id!: number | null;
+	reversal_of_id!: EntityId | null;
 
 	@ManyToOne('WarehouseEntity', {
 		onDelete: 'RESTRICT',

@@ -14,6 +14,7 @@ import {
 	isParticipationAllowed,
 	ParticipationEnum,
 } from '@/shared/registries/target-participation.registry';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 /**
@@ -22,13 +23,13 @@ import type { ValidatorOutput } from '@/shared/types/mock.type';
  * required even when an account is known.
  */
 export type RatingOwner = {
-	user_id: number | null;
+	user_id: EntityId | null;
 	user_ip_hash: string;
 };
 
 export type RatingTarget = {
 	entity_type: RatingEntityType;
-	entity_id: number;
+	entity_id: EntityId;
 };
 
 export type RatingSummary = {
@@ -170,7 +171,7 @@ export class RatingService {
 	 * Hard, and it has to be: `rating` has no `deleted_at` to soft-delete into, and a row that
 	 * lingered would keep counting towards both uniques and every aggregate.
 	 */
-	public async delete(id: number): Promise<void> {
+	public async delete(id: EntityId): Promise<void> {
 		await this.repository.createQuery().filterById(id).delete(false);
 	}
 
@@ -204,7 +205,7 @@ export class RatingService {
 	 */
 	public async deleteByTargets(
 		entityType: RatingEntityType,
-		entityIds: number[],
+		entityIds: EntityId[],
 	): Promise<void> {
 		if (entityIds.length === 0) {
 			return;
@@ -231,7 +232,7 @@ export class RatingService {
 	/**
 	 * @description Used in `read` method from the dashboard controller
 	 */
-	public getEntryData(id: number): Promise<RatingEntity> {
+	public getEntryData(id: EntityId): Promise<RatingEntity> {
 		return this.repository
 			.createQuery()
 			.join('rating.user', 'user', 'LEFT')
@@ -328,8 +329,8 @@ export class RatingService {
 	 */
 	public async getSummaries(
 		entityType: RatingEntityType,
-		entityIds: number[],
-	): Promise<Record<number, RatingSummary>> {
+		entityIds: EntityId[],
+	): Promise<Record<EntityId, RatingSummary>> {
 		const rows = await this.repository
 			.createQuery()
 			.filterBy('entity_type', entityType)
@@ -344,12 +345,12 @@ export class RatingService {
 			.addGroupBy('rating.type')
 			.addGroupBy('rating.value')
 			.addGroupBy('rating.reaction')
-			.getRawMany<RatingSummaryRow & { entity_id: number }>();
+			.getRawMany<RatingSummaryRow & { entity_id: EntityId }>();
 
-		const grouped = new Map<number, RatingSummaryRow[]>();
+		const grouped = new Map<EntityId, RatingSummaryRow[]>();
 
 		for (const row of rows) {
-			const entityId = Number(row.entity_id);
+			const entityId = row.entity_id;
 			const bucket = grouped.get(entityId);
 
 			if (bucket) {
@@ -359,7 +360,7 @@ export class RatingService {
 			}
 		}
 
-		const summaries: Record<number, RatingSummary> = {};
+		const summaries: Record<EntityId, RatingSummary> = {};
 
 		for (const [entityId, bucket] of grouped) {
 			summaries[entityId] = RatingService.foldSummary(bucket);
@@ -374,9 +375,9 @@ export class RatingService {
 	 */
 	public async getOwnRatingsForTargets(
 		entityType: RatingEntityType,
-		entityIds: number[],
+		entityIds: EntityId[],
 		owner: RatingOwner,
-	): Promise<Record<number, RatingEntity[]>> {
+	): Promise<Record<EntityId, RatingEntity[]>> {
 		const entries = await this.repository
 			.createQuery()
 			.select([
@@ -391,7 +392,7 @@ export class RatingService {
 			.filterByOwner(owner.user_id, owner.user_ip_hash)
 			.all();
 
-		const own: Record<number, RatingEntity[]> = {};
+		const own: Record<EntityId, RatingEntity[]> = {};
 
 		for (const entry of entries) {
 			const bucket = own[entry.entity_id];

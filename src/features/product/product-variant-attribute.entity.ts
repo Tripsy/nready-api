@@ -3,6 +3,7 @@ import type ProductVariantEntity from '@/features/product/product-variant.entity
 import type TermEntity from '@/features/term/term.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import { numericTransformer } from '@/shared/transformers/numeric.transformer';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 const ENTITY_TABLE_NAME = 'product_variant_attribute';
 
@@ -70,21 +71,21 @@ export default class ProductVariantAttributeEntity extends EntityAbstract {
 	 * `WHERE deleted_at IS NULL` answers a query that does not say it. The foreign key's cascade
 	 * looks the children up the same way.
 	 */
-	@Column('int', { nullable: false })
+	@Column('uuid', { nullable: false })
 	@Index('IDX_product_variant_attribute_variant_id')
-	variant_id!: number;
+	variant_id!: EntityId;
 
 	// Both indexed for the cascade `term` triggers on delete - Postgres looks the children up by
 	// each key separately, the label is not a prefix of the unique index, and the facet indexes
 	// lead on the label rather than the value
-	@Column('int', { nullable: false })
+	@Column('uuid', { nullable: false })
 	@Index('IDX_product_variant_attribute_label_id')
-	attribute_label_id!: number;
+	attribute_label_id!: EntityId;
 
 	// Nullable since the value may instead be a literal in one of the three columns below
-	@Column('int', { nullable: true })
+	@Column('uuid', { nullable: true })
 	@Index('IDX_product_variant_attribute_value_id')
-	value_term_id!: number | null;
+	value_term_id!: EntityId | null;
 
 	@Column('decimal', {
 		precision: 14,

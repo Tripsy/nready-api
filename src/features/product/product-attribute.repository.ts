@@ -3,6 +3,7 @@ import dataSource from '@/config/data-source.config';
 import type { ProductAttributeType } from '@/features/product/product.validator';
 import ProductAttributeEntity from '@/features/product/product-attribute.entity';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * A payload value with its normalized form attached. `value_base` never comes from a request -
@@ -21,8 +22,8 @@ export type ResolvedAttributeValue = ProductAttributeType & {
  * a scalar one is identified by the label - a product has exactly one volume.
  */
 export const attributeKey = (value: {
-	attribute_label_id: number;
-	value_term_id?: number | null;
+	attribute_label_id: EntityId;
+	value_term_id?: EntityId | null;
 }): string =>
 	value.value_term_id
 		? `${value.attribute_label_id}:term:${value.value_term_id}`
@@ -50,7 +51,7 @@ export const ProductAttributeRepository = dataSource
 		 */
 		async syncValues(
 			manager: EntityManager,
-			product_id: number,
+			product_id: EntityId,
 			values: ResolvedAttributeValue[],
 		): Promise<void> {
 			const repository = manager.getRepository(ProductAttributeEntity);

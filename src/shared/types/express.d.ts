@@ -1,11 +1,13 @@
 import { UserOperatorType } from '@/features/user/user.entity';
 import { OutputWrapper } from '@/middleware/output-handler.middleware';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import { UserRole } from '@/shared/types/user-role.type';
 
 export type AuthContextPermissions = Record<string, string[]>;
 
 export type AuthContext = {
-	id: number;
+	// Null for a visitor: no user is signed in
+	id: EntityId | null;
 	email: string;
 	name: string;
 	language: string;

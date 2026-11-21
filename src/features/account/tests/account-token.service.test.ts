@@ -5,7 +5,9 @@ import type { AccountTokenQuery } from '@/features/account/account-token.reposit
 import { AccountTokenService } from '@/features/account/account-token.service';
 import { getUserEntityMock } from '@/features/user/user.mock';
 import { createCurrentDate } from '@/helpers/date.helper';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import { createMockRepository } from '@/tests/jest-service.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 /**
  * These tests have been created by Cursor they may not be 100% sufficient
@@ -53,10 +55,14 @@ describe('AccountTokenService', () => {
 			serviceAccountToken,
 			'determineAuthTokenPayload',
 		).mockReturnValue({
-			user_id: 1,
+			user_id: mockId(1),
 			ident: 'some-ident',
 		});
-		const entity = { id: 1, user_id: 1, ident: 'some-ident' };
+		const entity = {
+			id: mockId(1),
+			user_id: mockId(1),
+			ident: 'some-ident',
+		};
 		mockAccountToken.query.firstOrFail.mockResolvedValue(entity);
 
 		const result = await serviceAccountToken.findByToken('any-token');
@@ -66,14 +72,14 @@ describe('AccountTokenService', () => {
 		);
 		expect(mockAccountToken.query.filterBy).toHaveBeenCalledWith(
 			'user_id',
-			1,
+			mockId(1),
 		);
 		expect(result).toBe(entity);
 	});
 
 	it('generateAuthToken should throw when user has no id', () => {
 		expect(() =>
-			serviceAccountToken.generateAuthToken({} as { id: number }),
+			serviceAccountToken.generateAuthToken({} as { id: EntityId }),
 		).toThrow('User object must contain `id` property.');
 	});
 
@@ -126,17 +132,17 @@ describe('AccountTokenService', () => {
 
 	it('removeAccountTokenForUser should call query delete', async () => {
 		mockAccountToken.query.all.mockResolvedValue([
-			{ id: 1, ident: 'ident-1' },
-			{ id: 2, ident: 'ident-2' },
+			{ id: mockId(1), ident: 'ident-1' },
+			{ id: mockId(2), ident: 'ident-2' },
 		] as never);
 		mockAccountToken.query.delete.mockResolvedValue(1);
 		const forgetSpy = jest.spyOn(serviceAccountToken, 'forgetSessions');
 
-		await serviceAccountToken.removeAccountTokenForUser(1);
+		await serviceAccountToken.removeAccountTokenForUser(mockId(1));
 
 		expect(mockAccountToken.query.filterBy).toHaveBeenCalledWith(
 			'user_id',
-			1,
+			mockId(1),
 		);
 		expect(mockAccountToken.query.delete).toHaveBeenCalledWith(false, true);
 		// A cached session must not outlive its row
@@ -168,10 +174,10 @@ describe('AccountTokenService', () => {
 		jest.spyOn(
 			serviceAccountToken,
 			'determineAuthTokenPayload',
-		).mockReturnValue({ user_id: 7, ident: 'ident-123' });
+		).mockReturnValue({ user_id: mockId(7), ident: 'ident-123' });
 		mockAccountToken.query.firstOrFail.mockResolvedValue({
-			id: 1,
-			user_id: 7,
+			id: mockId(1),
+			user_id: mockId(7),
 			ident: 'ident-123',
 			metadata: null,
 			used_at: '2026-01-01T10:00:00.000Z',
@@ -184,7 +190,7 @@ describe('AccountTokenService', () => {
 		expect(session.expire_at).toBeInstanceOf(Date);
 		expect(mockAccountToken.query.filterBy).toHaveBeenCalledWith(
 			'user_id',
-			7,
+			mockId(7),
 		);
 	});
 });

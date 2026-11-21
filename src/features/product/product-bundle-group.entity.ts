@@ -10,6 +10,7 @@ import type ProductEntity from '@/features/product/product.entity';
 import type ProductBundleItemEntity from '@/features/product/product-bundle-item.entity';
 import type TermEntity from '@/features/term/term.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 const ENTITY_TABLE_NAME = 'product_bundle_group';
 
@@ -49,18 +50,18 @@ export default class ProductBundleGroupEntity extends EntityAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
 
-	@Column('int', {
+	@Column('uuid', {
 		nullable: false,
 		comment: 'The bundle this choice belongs to',
 	})
-	product_id!: number;
+	product_id!: EntityId;
 
-	@Column('int', {
+	@Column('uuid', {
 		nullable: false,
 		comment:
 			'Term holding the multilingual prompt, e.g. "Choose your fries"',
 	})
-	label_id!: number;
+	label_id!: EntityId;
 
 	@Column('int', {
 		nullable: false,

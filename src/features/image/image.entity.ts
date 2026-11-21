@@ -4,11 +4,12 @@ import {
 	Entity,
 	Index,
 	OneToMany,
-	PrimaryGeneratedColumn,
 	UpdateDateColumn,
 } from 'typeorm';
 import type ImageContentEntity from '@/features/image/image-content.entity';
+import { EntityIdAbstract } from '@/shared/abstracts/entity-id.abstract';
 import type { StatusTransitions } from '@/shared/types/common.type';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export const ImageSectionEnum = {
 	PRODUCT: 'product',
@@ -84,12 +85,9 @@ const ENTITY_TABLE_NAME = 'image';
 
 @Entity({ name: ENTITY_TABLE_NAME, schema: 'public' })
 @Index('IDX_image_type_id', ['entity_id', 'section', 'image_type'])
-export default class ImageEntity {
+export default class ImageEntity extends EntityIdAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
-
-	@PrimaryGeneratedColumn({ type: 'int' })
-	id!: number;
 
 	@CreateDateColumn({ type: 'timestamp', nullable: false })
 	created_at!: Date;
@@ -105,11 +103,11 @@ export default class ImageEntity {
 	})
 	section!: ImageSection;
 
-	@Column('int', {
+	@Column('uuid', {
 		nullable: false,
 		comment: 'ID of the entity this image is linked to',
 	})
-	entity_id!: number;
+	entity_id!: EntityId;
 
 	@Column({
 		type: 'enum',

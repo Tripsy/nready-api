@@ -1,14 +1,10 @@
-import {
-	Column,
-	CreateDateColumn,
-	Entity,
-	Index,
-	PrimaryGeneratedColumn,
-} from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index } from 'typeorm';
 import {
 	type CommentEntityType,
 	CommentEntityTypeEnum,
 } from '@/features/comment/comment.entity';
+import { EntityIdAbstract } from '@/shared/abstracts/entity-id.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export const CommentSubscriptionTypeEnum = {
 	ALL: 'all', // Notified on all comments
@@ -37,12 +33,9 @@ const ENTITY_TABLE_NAME = 'comment_subscription';
 	['entity_type', 'entity_id', 'user_email'],
 	{ unique: true },
 )
-export default class CommentSubscriptionEntity {
+export default class CommentSubscriptionEntity extends EntityIdAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = false;
-
-	@PrimaryGeneratedColumn({ type: 'int' })
-	id!: number;
 
 	@CreateDateColumn({ type: 'timestamp', nullable: false })
 	created_at!: Date;
@@ -51,10 +44,10 @@ export default class CommentSubscriptionEntity {
 	// name and address stay required either way: they are what the notification is addressed to,
 	// and `user_email` carries the unique index, which a NULL would silently opt the row out of.
 	@Column({
-		type: 'int',
+		type: 'uuid',
 		nullable: true,
 	})
-	user_id?: number | null;
+	user_id?: EntityId | null;
 
 	@Column({
 		type: 'varchar',
@@ -75,10 +68,10 @@ export default class CommentSubscriptionEntity {
 	entity_type!: CommentEntityType;
 
 	@Column({
-		type: 'int',
+		type: 'uuid',
 		nullable: false,
 	})
-	entity_id!: number;
+	entity_id!: EntityId;
 
 	/**
 	 * What the notification - and the page its unsubscribe link leads to - is written in.

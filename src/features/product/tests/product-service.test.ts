@@ -34,6 +34,7 @@ import { ProductTagRepository } from '@/features/product/product-tag.repository'
 import ProductVariantEntity from '@/features/product/product-variant.entity';
 import { ProductVariantRepository } from '@/features/product/product-variant.repository';
 import { cacheProvider } from '@/providers/cache.provider';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import { MeasureUnitEnum } from '@/shared/types/measure-unit.type';
 import {
 	createMockQuery,
@@ -44,6 +45,7 @@ import {
 	testServiceFindById,
 	testServiceRestore,
 } from '@/tests/jest-service.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 /**
  * `save` echoing its input back - what a test asserting on the row the service *built* needs.
@@ -195,7 +197,7 @@ describe('ProductService', () => {
 			jest.spyOn(
 				ProductContentRepository,
 				'findConflictingSlug',
-			).mockResolvedValue({ id: 99 } as never);
+			).mockResolvedValue({ id: mockId(99) } as never);
 
 			await expect(
 				service.create(productOutputPayloads.create),
@@ -398,18 +400,20 @@ describe('ProductService', () => {
 			stubDefinitions([getProductCategoryAttributeEntityMock()]);
 
 			categoryLinkQuery.all.mockResolvedValue([
-				{ category_id: 4 },
+				{ category_id: mockId(4) },
 			] as never);
 
 			await service.updateDataWithContent(entity, {
 				id: entity.id,
-				attributes: [{ attribute_label_id: 11, value_numeric: 500 }],
+				attributes: [
+					{ attribute_label_id: mockId(11), value_numeric: 500 },
+				],
 			} as never);
 
 			expect(
 				productCategoryAttributeService.resolveDefinitionsByLabel,
 			).toHaveBeenCalledWith(
-				[4],
+				[mockId(4)],
 				ProductCategoryAttributeScopeEnum.PRODUCT,
 				{ assertScopeAgreement: true },
 			);
@@ -436,8 +440,8 @@ describe('ProductService', () => {
 			// Several branches in one call - the clean is per operation, not per row
 			await service.updateDataWithContent(entity, {
 				id: entity.id,
-				categories: [1, 2],
-				tags: [3, 4],
+				categories: [mockId(1), mockId(2)],
+				tags: [mockId(3), mockId(4)],
 				availabilities: [],
 			} as never);
 
@@ -485,7 +489,7 @@ describe('ProductService', () => {
 			stubDefinitions(definitions);
 
 			categoryLinkQuery.all.mockResolvedValue([
-				{ category_id: 4 },
+				{ category_id: mockId(4) },
 			] as never);
 
 			return service.updateDataWithContent(entity, {
@@ -514,7 +518,7 @@ describe('ProductService', () => {
 			stubDefinitions([definition]);
 
 			categoryLinkQuery.all.mockResolvedValue([
-				{ category_id: 4 },
+				{ category_id: mockId(4) },
 			] as never);
 
 			await expect(
@@ -587,7 +591,7 @@ describe('ProductService', () => {
 			stubDefinitions(definitions);
 
 			categoryLinkQuery.all.mockResolvedValue([
-				{ category_id: 4 },
+				{ category_id: mockId(4) },
 			] as never);
 
 			return service.updateDataWithContent(entity, {
@@ -618,20 +622,29 @@ describe('ProductService', () => {
 
 		it('rejects a label the product categories do not declare', async () => {
 			await expect(
-				saveAttribute({ attribute_label_id: 999, value_numeric: 1 }),
+				saveAttribute({
+					attribute_label_id: mockId(999),
+					value_numeric: 1,
+				}),
 			).rejects.toMatchObject({ statusCode: 422 });
 		});
 
 		it('rejects a value of the wrong shape for the definition', async () => {
 			// The definition mock is numeric; a term is not what it stores
 			await expect(
-				saveAttribute({ attribute_label_id: 11, value_term_id: 13 }),
+				saveAttribute({
+					attribute_label_id: mockId(11),
+					value_term_id: mockId(13),
+				}),
 			).rejects.toMatchObject({ statusCode: 422 });
 		});
 
 		it('rejects a number outside the definition bounds', async () => {
 			await expect(
-				saveAttribute({ attribute_label_id: 11, value_numeric: 99 }),
+				saveAttribute({
+					attribute_label_id: mockId(11),
+					value_numeric: 99,
+				}),
 			).rejects.toMatchObject({ statusCode: 422 });
 		});
 
@@ -647,13 +660,13 @@ describe('ProductService', () => {
 			definition.max_value = null;
 
 			await saveAttribute(
-				{ attribute_label_id: 11, value_numeric: 0.5 },
+				{ attribute_label_id: mockId(11), value_numeric: 0.5 },
 				[definition],
 			);
 
 			expect(ProductAttributeRepository.syncValues).toHaveBeenCalledWith(
 				expect.anything(),
-				expect.any(Number),
+				expect.any(String),
 				[
 					expect.objectContaining({
 						value_numeric: 0.5,
@@ -671,15 +684,16 @@ describe('ProductService', () => {
 			definition.unit = null;
 			definition.min_value = null;
 			definition.max_value = null;
-			definition.options = [{ term_id: 13 }] as never;
+			definition.options = [{ term_id: mockId(13) }] as never;
 
-			await saveAttribute({ attribute_label_id: 11, value_term_id: 13 }, [
-				definition,
-			]);
+			await saveAttribute(
+				{ attribute_label_id: mockId(11), value_term_id: mockId(13) },
+				[definition],
+			);
 
 			expect(ProductAttributeRepository.syncValues).toHaveBeenCalledWith(
 				expect.anything(),
-				expect.any(Number),
+				expect.any(String),
 				[expect.objectContaining({ value_base: null })],
 			);
 		});
@@ -694,12 +708,16 @@ describe('ProductService', () => {
 			definition.unit = null;
 			definition.min_value = null;
 			definition.max_value = null;
-			definition.options = [{ term_id: 13 }] as never;
+			definition.options = [{ term_id: mockId(13) }] as never;
 
 			await expect(
-				saveAttribute({ attribute_label_id: 11, value_term_id: 99 }, [
-					definition,
-				]),
+				saveAttribute(
+					{
+						attribute_label_id: mockId(11),
+						value_term_id: mockId(99),
+					},
+					[definition],
+				),
 			).rejects.toMatchObject({ statusCode: 422 });
 		});
 	});
@@ -737,8 +755,8 @@ describe('ProductService', () => {
 		 */
 		function groupRepository(
 			groups: {
-				id: number;
-				label_id: number;
+				id: EntityId;
+				label_id: EntityId;
 				candidates: number;
 			}[],
 		) {
@@ -758,7 +776,7 @@ describe('ProductService', () => {
 
 		function arrangeBundle(options: {
 			componentProduct?: Partial<ProductEntity>;
-			componentProductId?: number;
+			componentProductId?: EntityId;
 			includedUnits?: number;
 			groups?: Parameters<typeof groupRepository>[0];
 		}) {
@@ -767,7 +785,7 @@ describe('ProductService', () => {
 			const variantRepository = {
 				find: jest.fn(async () => [
 					{
-						id: 3,
+						id: mockId(3),
 						product_id: options.componentProductId ?? 42,
 						product: options.componentProduct ?? {
 							composition: ProductCompositionEnum.SIMPLE,
@@ -801,7 +819,7 @@ describe('ProductService', () => {
 
 		const bundlePayload = {
 			composition: ProductCompositionEnum.BUNDLE,
-			bundle_items: [{ variant_id: 3, quantity: 1 }],
+			bundle_items: [{ variant_id: mockId(3), quantity: 1 }],
 		};
 
 		it('accepts a bundle whose components are simple products', async () => {
@@ -933,8 +951,10 @@ describe('ProductService', () => {
 		describe('choice groups', () => {
 			const groupPayload = {
 				composition: ProductCompositionEnum.BUNDLE,
-				bundle_groups: [{ label_id: 41, position: 0 }],
-				bundle_items: [{ variant_id: 3, group_label_id: 41 }],
+				bundle_groups: [{ label_id: mockId(41), position: 0 }],
+				bundle_items: [
+					{ variant_id: mockId(3), group_label_id: mockId(41) },
+				],
 			};
 
 			/*
@@ -946,8 +966,8 @@ describe('ProductService', () => {
 				const { entity } = arrangeBundle({
 					groups: [
 						{
-							id: 7,
-							label_id: 41,
+							id: mockId(7),
+							label_id: mockId(41),
 							candidates: 2,
 						},
 					],
@@ -961,7 +981,12 @@ describe('ProductService', () => {
 				expect(ProductBundleRepository.syncItems).toHaveBeenCalledWith(
 					expect.anything(),
 					entity.id,
-					[expect.objectContaining({ variant_id: 3, group_id: 7 })],
+					[
+						expect.objectContaining({
+							variant_id: mockId(3),
+							group_id: mockId(7),
+						}),
+					],
 				);
 			});
 
@@ -997,8 +1022,8 @@ describe('ProductService', () => {
 				const { entity } = arrangeBundle({
 					groups: [
 						{
-							id: 7,
-							label_id: 41,
+							id: mockId(7),
+							label_id: mockId(41),
 							candidates: 0,
 						},
 					],
@@ -1022,8 +1047,8 @@ describe('ProductService', () => {
 				const { entity, bundleItemRepository } = arrangeBundle({
 					groups: [
 						{
-							id: 7,
-							label_id: 41,
+							id: mockId(7),
+							label_id: mockId(41),
 							candidates: 2,
 						},
 					],
@@ -1048,8 +1073,8 @@ describe('ProductService', () => {
 				const { entity } = arrangeBundle({
 					groups: [
 						{
-							id: 7,
-							label_id: 41,
+							id: mockId(7),
+							label_id: mockId(41),
 							candidates: 1,
 						},
 					],

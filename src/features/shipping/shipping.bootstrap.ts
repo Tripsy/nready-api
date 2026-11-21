@@ -9,6 +9,7 @@ import {
 import ShippingEntity from '@/features/shipping/shipping.entity';
 import { shippingService } from '@/features/shipping/shipping.service';
 import { cleanEntityCache } from '@/shared/abstracts/service.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * Follows an order's fate with its deliveries:
@@ -35,7 +36,7 @@ export default function registerShippingBootstrap() {
 	});
 
 	registerOrderDeliverySync(
-		async (manager: EntityManager, orderId: number) => {
+		async (manager: EntityManager, orderId: EntityId) => {
 			const synced = await shippingService.syncLinesForOrder(
 				manager,
 				orderId,

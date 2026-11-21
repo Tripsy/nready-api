@@ -3,6 +3,7 @@ import type GrnEntity from '@/features/grn/grn.entity';
 import type ProductVariantEntity from '@/features/product/product-variant.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import { numericTransformer } from '@/shared/transformers/numeric.transformer';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 const ENTITY_TABLE_NAME = 'grn_item';
 
@@ -54,11 +55,11 @@ export default class GrnItemEntity extends EntityAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
 
-	@Column('int', { nullable: false })
-	grn_id!: number;
+	@Column('uuid', { nullable: false })
+	grn_id!: EntityId;
 
-	@Column('int', { nullable: false })
-	variant_id!: number;
+	@Column('uuid', { nullable: false })
+	variant_id!: EntityId;
 
 	@Column('numeric', {
 		precision: 12,

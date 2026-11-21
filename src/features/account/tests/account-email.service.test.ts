@@ -1,6 +1,7 @@
 import { expect, jest } from '@jest/globals';
 import type { EmailTemplate } from '@/features/template/template.entity';
 import { formatDate } from '@/helpers/date.helper';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 /*
  * `AccountEmailService` collaborates with two module-level functions rather than injected
@@ -29,7 +30,7 @@ const { AccountEmailService } = await import(
 
 function getTemplateMock(): EmailTemplate {
 	return {
-		id: 1,
+		id: mockId(1),
 		language: 'en',
 		content: {
 			subject: 'Subject',
@@ -40,7 +41,7 @@ function getTemplateMock(): EmailTemplate {
 
 function getUserMock() {
 	return {
-		id: 1,
+		id: mockId(1),
 		name: 'John Doe',
 		email: 'john.doe@example.com',
 		language: 'en',

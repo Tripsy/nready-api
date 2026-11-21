@@ -19,6 +19,7 @@ import {
 	assertValidStatusTransition,
 	cleanEntityCache,
 } from '@/shared/abstracts/service.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 export class ClientService {
@@ -27,7 +28,10 @@ export class ClientService {
 		private userService: UserService,
 	) {}
 
-	public async checkDuplicate(data: ClientIdentityData, withoutId?: number) {
+	public async checkDuplicate(
+		data: ClientIdentityData,
+		withoutId?: EntityId,
+	) {
 		const query = this.repository
 			.createQuery()
 			.filterBy('client_type', data.client_type);
@@ -94,7 +98,7 @@ export class ClientService {
 	 */
 	public async create(
 		data: ValidatorOutput<ClientValidator, 'create'>,
-		user_id?: number,
+		user_id?: EntityId,
 	): Promise<ClientEntity> {
 		const identityData: ClientIdentityData =
 			data.client_type === ClientTypeEnum.COMPANY
@@ -125,7 +129,7 @@ export class ClientService {
 	 * @description Update any data
 	 */
 	public async update(
-		data: DeepPartial<ClientEntity> & { id: number },
+		data: DeepPartial<ClientEntity> & { id: EntityId },
 	): Promise<ClientEntity> {
 		const saved = await this.repository.save(data);
 
@@ -167,7 +171,7 @@ export class ClientService {
 	 */
 	public async updateAccount(
 		entry: ClientEntity,
-		user_id: number | null,
+		user_id: EntityId | null,
 	): Promise<ClientEntity> {
 		if (user_id) {
 			await this.userService.findById(user_id, false);
@@ -193,15 +197,15 @@ export class ClientService {
 		await this.update(entry);
 	}
 
-	public async delete(id: number) {
+	public async delete(id: EntityId) {
 		await this.repository.createQuery().filterById(id).delete();
 	}
 
-	public async restore(id: number) {
+	public async restore(id: EntityId) {
 		await this.repository.createQuery().filterById(id).restore();
 	}
 
-	public findById(id: number, withDeleted: boolean): Promise<ClientEntity> {
+	public findById(id: EntityId, withDeleted: boolean): Promise<ClientEntity> {
 		return this.repository
 			.createQuery()
 			.filterById(id)
@@ -215,7 +219,7 @@ export class ClientService {
 	 * Unpaginated: scoped to one account through `IDX_client_user_id`, and an account holds a
 	 * handful of clients, not a listing's worth.
 	 */
-	public findOwn(user_id: number): Promise<ClientEntity[]> {
+	public findOwn(user_id: EntityId): Promise<ClientEntity[]> {
 		return this.repository
 			.createQuery()
 			.filterBy('user_id', user_id)
@@ -227,7 +231,7 @@ export class ClientService {
 	 * A client the given account holds. Somebody else's client answers the same 404 a missing one
 	 * does, so a caller learns nothing about rows they cannot use.
 	 */
-	public findOwnById(id: number, user_id: number): Promise<ClientEntity> {
+	public findOwnById(id: EntityId, user_id: EntityId): Promise<ClientEntity> {
 		return this.repository
 			.createQuery()
 			.filterById(id)
@@ -235,7 +239,7 @@ export class ClientService {
 			.firstOrFail();
 	}
 
-	public async getEntryData(data: { id: number; withDeleted: boolean }) {
+	public async getEntryData(data: { id: EntityId; withDeleted: boolean }) {
 		const entry = await this.repository
 			.createQuery()
 			// The linked account, so the window names it rather than printing an id

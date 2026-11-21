@@ -22,6 +22,7 @@ import {
 	testServiceFindById,
 	testServiceUpdateStatus,
 } from '@/tests/jest-service.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 describe('ImageService', () => {
 	beforeEach(() => {
@@ -123,20 +124,20 @@ describe('ImageService', () => {
 		it('should keep the highest sort_order per target', async () => {
 			const first = {
 				...getImageEntityMock(),
-				id: 10,
-				entity_id: 7,
+				id: mockId(10),
+				entity_id: mockId(7),
 				sort_order: 5,
 			};
 			const later = {
 				...getImageEntityMock(),
-				id: 11,
-				entity_id: 7,
+				id: mockId(11),
+				entity_id: mockId(7),
 				sort_order: 0,
 			};
 			const other = {
 				...getImageEntityMock(),
-				id: 12,
-				entity_id: 8,
+				id: mockId(12),
+				entity_id: mockId(8),
 				sort_order: 2,
 			};
 
@@ -151,11 +152,11 @@ describe('ImageService', () => {
 			const primary = await serviceImage.getPrimaryByTargets(
 				ImageSectionEnum.ARTICLE,
 				ImageTypeEnum.GALLERY,
-				[7, 8],
+				[mockId(7), mockId(8)],
 			);
 
-			expect(primary.get(7)?.id).toBe(10);
-			expect(primary.get(8)?.id).toBe(12);
+			expect(primary.get(mockId(7))?.id).toBe(mockId(10));
+			expect(primary.get(mockId(8))?.id).toBe(mockId(12));
 			expect(primary.size).toBe(2);
 		});
 
@@ -175,7 +176,7 @@ describe('ImageService', () => {
 			await serviceImage.getPrimaryByTargets(
 				ImageSectionEnum.ARTICLE,
 				ImageTypeEnum.GALLERY,
-				[7],
+				[mockId(7)],
 			);
 
 			expect(mockImage.query.orderBy).toHaveBeenCalledWith(
@@ -192,10 +193,10 @@ describe('ImageService', () => {
 			const primary = await serviceImage.getPrimaryByTargets(
 				ImageSectionEnum.ARTICLE,
 				ImageTypeEnum.GALLERY,
-				[7],
+				[mockId(7)],
 			);
 
-			expect(primary.has(7)).toBe(false);
+			expect(primary.has(mockId(7))).toBe(false);
 		});
 
 		// An `IN ()` would be a syntax error, so the guard has to come before the query.

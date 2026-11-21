@@ -3,6 +3,7 @@ import dataSource from '@/config/data-source.config';
 import type { ProductContentType } from '@/features/product/product.validator';
 import ProductContentEntity from '@/features/product/product-content.entity';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export class ProductContentQuery extends RepositoryAbstract<ProductContentEntity> {
 	constructor(repository: Repository<ProductContentEntity>) {
@@ -20,7 +21,7 @@ export const ProductContentRepository = dataSource
 		async saveContent(
 			manager: EntityManager,
 			contents: ProductContentType[],
-			product_id: number,
+			product_id: EntityId,
 		) {
 			if (!contents.length) {
 				return;
@@ -53,7 +54,7 @@ export const ProductContentRepository = dataSource
 		 */
 		async findConflictingSlug(
 			contents: ProductContentType[],
-			product_id?: number,
+			product_id?: EntityId,
 		): Promise<ProductContentEntity | null> {
 			if (!contents.length) {
 				return null;

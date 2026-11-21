@@ -12,6 +12,7 @@ import SubscriptionEntity, {
 	SubscriptionStatusEnum,
 } from '@/features/subscription/subscription.entity';
 import { comparePassword } from '@/helpers/security.helper';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { AuthContext } from '@/shared/types/express';
 
 export type ArticleAccessContext = {
@@ -21,7 +22,7 @@ export type ArticleAccessContext = {
 };
 
 export type ArticleAccessTarget = {
-	id: number;
+	id: EntityId;
 	visibility: ArticleVisibility;
 };
 
@@ -64,7 +65,7 @@ export class ArticleAccessPolicy {
 			throw new NotAllowedError(lang('article.error.access_restricted'));
 		}
 
-		if (rule.requires_auth && auth.id === 0) {
+		if (rule.requires_auth && auth.id === null) {
 			throw new UnauthorizedError(
 				lang('article.error.access_requires_auth'),
 			);
@@ -118,7 +119,7 @@ export class ArticleAccessPolicy {
 	 * Add the plan dimension here once plans exist; see the README TODO.
 	 */
 	private async assertSubscription(auth: AuthContext): Promise<void> {
-		if (auth.id === 0) {
+		if (auth.id === null) {
 			throw new UnauthorizedError(
 				lang('article.error.access_requires_auth'),
 			);

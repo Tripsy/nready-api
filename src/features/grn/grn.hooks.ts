@@ -1,5 +1,6 @@
 import type { EntityManager } from 'typeorm';
 import { createQuery } from '@/helpers/hook.helper';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * What `grn` asks of the stock ledger while it confirms or cancels a receipt, all inside the
@@ -17,9 +18,9 @@ import { createQuery } from '@/helpers/hook.helper';
 
 /** One confirmed line, as the ledger books it. */
 export type StockReceipt = {
-	grn_item_id: number;
-	warehouse_id: number;
-	variant_id: number;
+	grn_item_id: EntityId;
+	warehouse_id: EntityId;
+	variant_id: EntityId;
 	qty: number;
 	unit_cost_base: number;
 	occurred_at: Date; // The receiving day - it orders the FIFO pick
@@ -27,8 +28,8 @@ export type StockReceipt = {
 
 /** The first movement found against a lot other than its own receipt. */
 export type LotMovement = {
-	grn_item_id: number | null;
-	variant_id: number;
+	grn_item_id: EntityId | null;
+	variant_id: EntityId;
 	movement_type: string;
 };
 
@@ -38,12 +39,12 @@ const receiptRecorder = createQuery<
 >(() => undefined);
 
 const lotMovementFinder = createQuery<
-	[manager: EntityManager, grnItemIds: number[]],
+	[manager: EntityManager, grnItemIds: EntityId[]],
 	LotMovement | null
 >(() => null);
 
 const receiptReverser = createQuery<
-	[manager: EntityManager, grnItemIds: number[], occurredAt: Date],
+	[manager: EntityManager, grnItemIds: EntityId[], occurredAt: Date],
 	void
 >(() => undefined);
 

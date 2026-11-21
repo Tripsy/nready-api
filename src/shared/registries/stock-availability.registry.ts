@@ -1,4 +1,5 @@
 import { createQuery } from '@/helpers/hook.helper';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * What can still be sold of a stock-tracked variant, asked without importing the feature that
@@ -24,8 +25,8 @@ export type VariantAvailability = {
  * cart priced as if the stock were there would promise what checkout then refuses.
  */
 const stockAvailability = createQuery<
-	[variantIds: readonly number[]],
-	Map<number, VariantAvailability>
+	[variantIds: readonly EntityId[]],
+	Map<EntityId, VariantAvailability>
 >(() => new Map());
 
 /** Called from the stock-keeping feature's `*.bootstrap.ts`. */
@@ -36,8 +37,8 @@ export const registerStockAvailabilityResolver = stockAvailability.register;
  * variant is absent from the map, which is how a caller tells "never short" from "none left".
  */
 export const resolveStockAvailability = (
-	variantIds: readonly number[],
-): Promise<Map<number, VariantAvailability>> => {
+	variantIds: readonly EntityId[],
+): Promise<Map<EntityId, VariantAvailability>> => {
 	if (variantIds.length === 0) {
 		return Promise.resolve(new Map());
 	}

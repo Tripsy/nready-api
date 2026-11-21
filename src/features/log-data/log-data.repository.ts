@@ -33,33 +33,29 @@ export class LogDataQuery extends RepositoryAbstract<LogDataEntity> {
 
 	filterByTerm(term?: string): this {
 		if (term) {
-			if (!Number.isNaN(Number(term)) && term.trim() !== '') {
-				this.filterBy('id', Number(term));
-			} else {
-				if (term.length >= Configuration.get('filter.termMinLength')) {
-					this.filterAny([
-						{
-							column: 'request_id',
-							value: term,
-							operator: '=',
-						},
-						{
-							column: 'pid',
-							value: term,
-							operator: '=',
-						},
-						{
-							column: 'message',
-							value: term,
-							operator: 'ILIKE',
-						},
-						{
-							column: 'context::text',
-							value: term,
-							operator: 'ILIKE',
-						},
-					]);
-				}
+			if (term.length >= Configuration.get('filter.termMinLength')) {
+				this.filterAny([
+					{
+						column: 'request_id',
+						value: term,
+						operator: '=',
+					},
+					{
+						column: 'pid',
+						value: term,
+						operator: '=',
+					},
+					{
+						column: 'message',
+						value: term,
+						operator: 'ILIKE',
+					},
+					{
+						column: 'context::text',
+						value: term,
+						operator: 'ILIKE',
+					},
+				]);
 			}
 		}
 

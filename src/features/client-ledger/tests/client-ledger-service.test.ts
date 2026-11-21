@@ -13,12 +13,14 @@ import { cashFlowService } from '@/features/cash-flow/cash-flow.service';
 import registerClientLedgerBootstrap from '@/features/client-ledger/client-ledger.bootstrap';
 import { ClientLedgerEntryTypeEnum } from '@/features/client-ledger/client-ledger.entity';
 import { clientLedgerService } from '@/features/client-ledger/client-ledger.service';
+import type { EntityId } from '@/shared/types/entity-id.type';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 describe('client ledger', () => {
 	const movement = (
 		overrides: Partial<LedgerMovement> = {},
 	): LedgerMovement => ({
-		id: 9,
+		id: mockId(9),
 		parent_id: null,
 		status: CashFlowStatusEnum.COMPLETED,
 		direction: CashFlowDirectionEnum.IN,
@@ -31,7 +33,7 @@ describe('client ledger', () => {
 	});
 
 	/** A manager whose insert chain records the row it was asked to write. */
-	const arrange = (clientId: number | null) => {
+	const arrange = (clientId: EntityId | null) => {
 		const values = jest.fn((_row: unknown) => ({
 			orIgnore: () => ({ execute: jest.fn(async () => undefined) }),
 		}));
@@ -77,15 +79,15 @@ describe('client ledger', () => {
 	describe('recordCashFlow', () => {
 		// Money received from the client is positive, at the gross of the movement
 		it('books money in as a positive payment', async () => {
-			const { manager, values } = arrange(5);
+			const { manager, values } = arrange(mockId(5));
 
 			await clientLedgerService.recordCashFlow(movement(), manager);
 
 			expect(values).toHaveBeenCalledWith(
 				expect.objectContaining({
-					client_id: 5,
+					client_id: mockId(5),
 					entry_type: ClientLedgerEntryTypeEnum.PAYMENT,
-					cash_flow_id: 9,
+					cash_flow_id: mockId(9),
 					amount: 1210,
 					amount_base: 1210,
 				}),
@@ -94,12 +96,12 @@ describe('client ledger', () => {
 
 		// Money paid back is negative; a refund names its parent's client, which `cash-flow` resolves
 		it('books money out as a negative refund', async () => {
-			const { manager, values } = arrange(5);
+			const { manager, values } = arrange(mockId(5));
 
 			await clientLedgerService.recordCashFlow(
 				movement({
 					direction: CashFlowDirectionEnum.OUT,
-					parent_id: 3,
+					parent_id: mockId(3),
 				}),
 				manager,
 			);
@@ -114,7 +116,7 @@ describe('client ledger', () => {
 
 		// Only money that moved: not yet captured, not a client's, or worth nothing
 		it('books nothing for a movement not completed, not a client one, or worth nothing', async () => {
-			const pending = arrange(5);
+			const pending = arrange(mockId(5));
 
 			await clientLedgerService.recordCashFlow(
 				movement({ status: CashFlowStatusEnum.PENDING }),
@@ -128,7 +130,7 @@ describe('client ledger', () => {
 				vendor.manager,
 			);
 
-			const zero = arrange(5);
+			const zero = arrange(mockId(5));
 
 			await clientLedgerService.recordCashFlow(
 				movement({ amount: 10 }),

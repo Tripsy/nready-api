@@ -17,10 +17,11 @@ import { type UserService, userService } from '@/features/user/user.service';
 import { runInBackground } from '@/helpers/background.helper';
 import { createCurrentDate, createFutureDate } from '@/helpers/date.helper';
 import { comparePassword } from '@/helpers/security.helper';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 export type ConfirmationTokenPayload = {
-	user_id: number;
+	user_id: EntityId;
 	user_email: string;
 	user_email_new?: string;
 };
@@ -53,7 +54,7 @@ export class AccountService {
 	public async updatePassword(
 		user: UserEntity,
 		password: string,
-		keepRecoveryId?: number,
+		keepRecoveryId?: EntityId,
 	): Promise<void> {
 		user.password = password; // Subscriber hashes it
 		user.password_updated_at = createCurrentDate();
@@ -105,7 +106,7 @@ export class AccountService {
 	 */
 	public createConfirmationToken(
 		user: Partial<UserEntity> & {
-			id: number;
+			id: EntityId;
 			email: string;
 		},
 		email_new?: string,
@@ -145,7 +146,7 @@ export class AccountService {
 
 	public processEmailConfirmCreate(
 		user: Partial<UserEntity> & {
-			id: number;
+			id: EntityId;
 			name: string;
 			email: string;
 			language: string;
@@ -166,7 +167,7 @@ export class AccountService {
 
 	public processRegistration(
 		user: Partial<UserEntity> & {
-			id: number;
+			id: EntityId;
 			name: string;
 			email: string;
 			language: string;

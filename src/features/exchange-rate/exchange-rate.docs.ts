@@ -80,7 +80,7 @@ export const docs: Record<
 		request: {
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -100,7 +100,7 @@ export const docs: Record<
 			notes: `Provide at least one body parameter. Editable only while rate_date is within the last ${UPDATE_WINDOW_DAYS} days - an older rate answers 400, because documents have been priced against it. The currency and the day are not updatable: together they identify the row, so a wrong one is deleted and entered again. An edited row becomes ${ExchangeRateSourceEnum.MANUAL} whatever it was, which is what stops a later import from writing over a correction`,
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -128,7 +128,7 @@ export const docs: Record<
 			notes: 'Hard - the table has no deleted state and therefore no restore. Documents already priced against the rate keep their own frozen copy of it, so removing the row does not move their figures; conversions asking for that day afterwards fall back to the last publication before it',
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -184,7 +184,7 @@ export const docs: Record<
 					default: OrderDirectionEnum.DESC,
 				},
 				filter: {
-					id: { type: 'number', required: false },
+					id: { type: 'string', required: false },
 					currency: { ...currencyParam, required: false },
 					base_currency: {
 						...currencyParam,

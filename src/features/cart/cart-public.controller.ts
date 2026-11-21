@@ -10,6 +10,7 @@ import {
 import { CartValidator } from '@/features/cart/cart.validator';
 import asyncHandler from '@/helpers/async.handler';
 import { BaseController } from '@/shared/abstracts/controller.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /** The header a client returns its cart handle in. */
 export const CART_TOKEN_HEADER = 'x-cart-token';
@@ -51,7 +52,7 @@ class CartPublicController extends BaseController {
 	 * to attach the cart to a user that does not exist. `isAuthenticated` is what tells the two
 	 * apart.
 	 */
-	private getUserId(res: Response): number | null {
+	private getUserId(res: Response): EntityId | null {
 		return this.policy.isAuthenticated(res.locals.auth)
 			? (this.policy.getId(res.locals.auth) ?? null)
 			: null;
@@ -81,9 +82,9 @@ class CartPublicController extends BaseController {
 	 * `assertOwnClient` raises.
 	 */
 	private async previewClientId(
-		clientId: number | undefined,
+		clientId: EntityId | undefined,
 		res: Response,
-	): Promise<number | null> {
+	): Promise<EntityId | null> {
 		const userId = this.getUserId(res);
 
 		if (!clientId || userId === null) {
@@ -99,9 +100,9 @@ class CartPublicController extends BaseController {
 		cart: CartEntity,
 		res: Response,
 		message?: string,
-		clientId?: number | null,
+		clientId?: EntityId | null,
 		delivery?: CartDeliveryChoice | null,
-		billingAddressId?: number | null,
+		billingAddressId?: EntityId | null,
 	): Promise<void> {
 		const data = await this.cartService.withPricing(
 			cart,
@@ -234,7 +235,7 @@ class CartPublicController extends BaseController {
 		const order = await this.cartService.toOrder(
 			cart,
 			data,
-			this.policy.getId(res.locals.auth) ?? 0,
+			this.policy.requireId(res.locals.auth),
 			res.locals.language,
 		);
 

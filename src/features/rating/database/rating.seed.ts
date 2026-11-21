@@ -16,6 +16,7 @@ import RatingEntity, {
 } from '@/features/rating/rating.entity';
 import UserEntity from '@/features/user/user.entity';
 import { hashIp } from '@/helpers/security.helper';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /** Articles to spread ratings over; enough to give a listing something to sort by. */
 const TARGET_ARTICLES = 8;
@@ -42,7 +43,7 @@ function guestIpHash(index: number): string {
 
 /** Matches both uniques at once, since each seeded identity owns its own address. */
 function ratingKey(
-	entityId: number,
+	entityId: EntityId,
 	type: RatingType,
 	userIpHash: string,
 ): string {
@@ -124,7 +125,7 @@ export const ratingSeed: SeedDefinition = {
 
 		const pending = candidates.filter((candidate) => {
 			const key = ratingKey(
-				candidate.entity_id as number,
+				candidate.entity_id as EntityId,
 				candidate.type as RatingType,
 				candidate.user_ip_hash as string,
 			);
@@ -159,9 +160,9 @@ export const ratingSeed: SeedDefinition = {
  * so the type decides which of the two is filled and the other is left null.
  */
 function buildRating(
-	entityId: number,
+	entityId: EntityId,
 	type: RatingType,
-	userId: number | null,
+	userId: EntityId | null,
 	userIpHash: string,
 	random: () => number,
 ): Partial<RatingEntity> {

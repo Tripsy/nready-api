@@ -5,13 +5,14 @@ import {
 } from '@/features/address/address.validator';
 import { createPastDate } from '@/helpers/date.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 const addressValidator = new AddressValidator('address');
 
 export function getAddressEntityMock(): AddressEntity {
 	return {
-		id: 1,
-		city_id: 1,
+		id: mockId(1),
+		city_id: mockId(1),
 		details: 'Str Florio nr 3',
 		postal_code: '636231',
 		created_at: createPastDate(28800),
@@ -22,13 +23,13 @@ export function getAddressEntityMock(): AddressEntity {
 
 export const addressInputPayloads = {
 	create: {
-		city_id: 1,
+		city_id: mockId(1),
 		details: 'Str Florio nr 3',
 		postal_code: '636231',
 	},
 	update: {
-		id: 1,
-		city_id: 1,
+		id: mockId(1),
+		city_id: mockId(1),
 		details: 'Str Florio nr 4',
 		postal_code: '636231',
 	},

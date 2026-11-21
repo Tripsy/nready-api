@@ -225,6 +225,8 @@ docker network create development
 
 PostgreSQL and Redis are not part of this compose file. The container reaches them through
 `host.docker.internal`, so run them wherever suits and point `DB_*` / `REDIS_*` at them.
+PostgreSQL has to be **18 or newer**: every id is a UUID v7, and the columns default to the
+built-in `uuidv7()`, which earlier versions do not have.
 
 Start the Docker container using the following command:
 

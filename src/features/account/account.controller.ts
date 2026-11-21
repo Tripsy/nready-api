@@ -45,6 +45,7 @@ import {
 	tokenMetaData,
 } from '@/helpers/meta-data.helper';
 import { BaseController } from '@/shared/abstracts/controller.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 class AccountController extends BaseController {
 	constructor(
@@ -82,7 +83,7 @@ class AccountController extends BaseController {
 	 * has one code path for the 403-with-token-list case.
 	 */
 	private async issueAuthToken(
-		user: Partial<UserEntity> & { id: number },
+		user: Partial<UserEntity> & { id: EntityId },
 		req: Request,
 		res: Response,
 		successMessage: string,

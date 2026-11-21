@@ -2,6 +2,7 @@ import { lang } from '@/config/message.setup';
 import { BadRequestError, CustomError } from '@/exceptions';
 import { cacheProvider } from '@/providers/cache.provider';
 import type { StatusTransitions } from '@/shared/types/common.type';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export type EntityWithCache = {
 	NAME: string;
@@ -33,7 +34,7 @@ export type EntityWithCache = {
  */
 export async function cleanEntityCache(
 	entity: EntityWithCache,
-	id: number,
+	id: EntityId,
 ): Promise<void> {
 	return cleanEntityCacheBy(entity, id);
 }
@@ -69,7 +70,7 @@ export async function cleanEntityCacheBy(
  */
 export async function cleanEntityCacheMany(
 	entity: EntityWithCache,
-	ids: number[],
+	ids: EntityId[],
 ): Promise<void> {
 	if (!entity.HAS_CACHE || ids.length === 0) {
 		return;

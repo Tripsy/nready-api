@@ -68,6 +68,7 @@ import {
 	cleanEntityCache,
 	cleanEntityCacheMany,
 } from '@/shared/abstracts/service.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 /**
@@ -132,7 +133,7 @@ export type InvoiceLineInput = {
 
 /** Part of an order line to bill - partial shipments, goods and services billed apart. */
 export type OrderLineSelection = {
-	order_line_id: number;
+	order_line_id: EntityId;
 	quantity: number;
 };
 
@@ -143,7 +144,7 @@ export type OrderLineSelection = {
  * - `amount` - a price correction, **net**: value off goods the client keeps.
  */
 export type InvoiceLineSelection = {
-	invoice_line_id: number;
+	invoice_line_id: EntityId;
 	quantity?: number;
 	amount?: number;
 };
@@ -333,8 +334,8 @@ export class InvoiceService {
 	 * out. A partial reversal releases exactly the quantity it took back.
 	 */
 	public async getBilledQuantities(
-		orderId: number,
-	): Promise<Map<number, number>> {
+		orderId: EntityId,
+	): Promise<Map<EntityId, number>> {
 		const orderFilter = this.sourceFilter(
 			'invoice',
 			InvoiceSourceTypeEnum.ORDER,
@@ -366,13 +367,10 @@ export class InvoiceService {
 				},
 			)
 			.groupBy('line.order_line_id')
-			.getRawMany<{ order_line_id: number; quantity: string }>();
+			.getRawMany<{ order_line_id: EntityId; quantity: string }>();
 
 		return new Map(
-			rows.map((row) => [
-				Number(row.order_line_id),
-				Number(row.quantity),
-			]),
+			rows.map((row) => [row.order_line_id, Number(row.quantity)]),
 		);
 	}
 
@@ -385,8 +383,8 @@ export class InvoiceService {
 	 */
 	public async getBilledSourceIds(
 		sourceType: BillableSourceType,
-		sourceIds: readonly number[],
-	): Promise<Set<number>> {
+		sourceIds: readonly EntityId[],
+	): Promise<Set<EntityId>> {
 		if (sourceIds.length === 0) {
 			return new Set();
 		}
@@ -429,12 +427,12 @@ export class InvoiceService {
 				},
 			)
 			.groupBy('source.source_id')
-			.getRawMany<{ source_id: number; times: string }>();
+			.getRawMany<{ source_id: EntityId; times: string }>();
 
 		return new Set(
 			rows
 				.filter((row) => Number(row.times) > 0)
-				.map((row) => Number(row.source_id)),
+				.map((row) => row.source_id),
 		);
 	}
 
@@ -446,7 +444,7 @@ export class InvoiceService {
 	 * has no provider and contributes nothing.
 	 */
 	public async getUnbilledSources(
-		orderId: number,
+		orderId: EntityId,
 	): Promise<{ source_type: BillableSourceType; source: BillableSource }[]> {
 		const unbilled: {
 			source_type: BillableSourceType;
@@ -491,8 +489,8 @@ export class InvoiceService {
 	public async getLineCaps(
 		invoice: InvoiceWithSources,
 		lines: readonly InvoiceLineEntity[],
-	): Promise<Map<number, InvoiceLineCap>> {
-		const caps = new Map<number, InvoiceLineCap>();
+	): Promise<Map<EntityId, InvoiceLineCap>> {
+		const caps = new Map<EntityId, InvoiceLineCap>();
 
 		if (invoice.is_reversal || !invoice.order_id) {
 			return caps;
@@ -509,7 +507,7 @@ export class InvoiceService {
 					line.kind === InvoiceLineKindEnum.SHIPPING &&
 					line.shipping_id !== null,
 			)
-			.map((line) => Number(line.shipping_id));
+			.map((line) => line.shipping_id as EntityId);
 		const shippingProvider = getBillableSourceProvider(
 			InvoiceSourceTypeEnum.SHIPPING,
 		);
@@ -520,10 +518,10 @@ export class InvoiceService {
 				: Promise.resolve([]),
 			productLines.length > 0
 				? this.getBilledQuantities(invoice.order_id)
-				: Promise.resolve(new Map<number, number>()),
+				: Promise.resolve(new Map<EntityId, number>()),
 			shippingIds.length > 0 && shippingProvider
 				? shippingProvider.getLineCaps(shippingIds)
-				: Promise.resolve(new Map<number, InvoiceLineCap>()),
+				: Promise.resolve(new Map<EntityId, InvoiceLineCap>()),
 		]);
 
 		const orderLineById = new Map(
@@ -531,7 +529,7 @@ export class InvoiceService {
 		);
 
 		for (const line of productLines) {
-			const orderLine = orderLineById.get(Number(line.order_line_id));
+			const orderLine = orderLineById.get(line.order_line_id as EntityId);
 
 			if (!orderLine) {
 				continue;
@@ -794,8 +792,8 @@ export class InvoiceService {
 	 */
 	private async buildLinesForSource(
 		sourceType: BillableSourceType,
-		sourceId: number | undefined,
-		orderId: number,
+		sourceId: EntityId | undefined,
+		orderId: EntityId,
 	): Promise<DeepPartial<InvoiceLineEntity>[]> {
 		const provider = getBillableSourceProvider(sourceType);
 
@@ -893,7 +891,7 @@ export class InvoiceService {
 	 * so the repair path and the duplicate guard are the same row.
 	 */
 	public async raiseForOrder(
-		orderId: number,
+		orderId: EntityId,
 	): Promise<InvoiceWithSources | null> {
 		const order = await orderService.findById(orderId, false);
 		const lines = await this.buildOrderLines(order);
@@ -926,7 +924,7 @@ export class InvoiceService {
 	 */
 	public async raiseForSource(
 		sourceType: BillableSourceType,
-		sourceId: number,
+		sourceId: EntityId,
 	): Promise<InvoiceWithSources | null> {
 		const provider = getBillableSourceProvider(sourceType);
 		const source = provider ? await provider.findBillable(sourceId) : null;
@@ -971,7 +969,7 @@ export class InvoiceService {
 	 * rethrown only after every step has had its go, for the registry to log.
 	 */
 	public async raiseForOrderDocuments(
-		orderId: number,
+		orderId: EntityId,
 	): Promise<InvoiceWithSources[]> {
 		const raised: InvoiceWithSources[] = [];
 		let firstError: unknown = null;
@@ -1013,7 +1011,7 @@ export class InvoiceService {
 	 * The header and nothing else: the lines, the party snapshots and the sources are what
 	 * `getPublicDocument` reads, for the one document the buyer opens to print.
 	 */
-	public findPublicForOrder(orderId: number): Promise<InvoiceEntity[]> {
+	public findPublicForOrder(orderId: EntityId): Promise<InvoiceEntity[]> {
 		return this.publicOrderDocumentsQuery(orderId)
 			.select([
 				'invoice.id',
@@ -1040,7 +1038,7 @@ export class InvoiceService {
 	/**
 	 * @description Used by `InvoiceController.document` - the back office's printable copy
 	 */
-	public getDocument(invoiceId: number): Promise<InvoiceDocument> {
+	public getDocument(invoiceId: EntityId): Promise<InvoiceDocument> {
 		return this.buildDocument(
 			this.repository.createQuery().filterById(invoiceId),
 		);
@@ -1053,8 +1051,8 @@ export class InvoiceService {
 	 * another order - or a draft, or a canceled one - answers the same 404 as a missing id.
 	 */
 	public getPublicDocument(
-		orderId: number,
-		invoiceId: number,
+		orderId: EntityId,
+		invoiceId: EntityId,
 	): Promise<InvoiceDocument> {
 		return this.buildDocument(
 			this.publicOrderDocumentsQuery(orderId).filterById(invoiceId),
@@ -1150,7 +1148,7 @@ export class InvoiceService {
 	 * sources, so the one filter finds both. Issued only: a draft is still the business's to
 	 * change and holds no number, and a canceled document was never valid.
 	 */
-	private publicOrderDocumentsQuery(orderId: number) {
+	private publicOrderDocumentsQuery(orderId: EntityId) {
 		return this.repository
 			.createQuery()
 			.filterRaw(
@@ -1183,7 +1181,7 @@ export class InvoiceService {
 	 * figures it was raised from, and rewriting the lines under it would leave it billing goods the
 	 * order no longer lists.
 	 */
-	public async hasLiveOrderInvoice(orderId: number): Promise<boolean> {
+	public async hasLiveOrderInvoice(orderId: EntityId): Promise<boolean> {
 		const orderFilter = this.sourceFilter(
 			'invoice',
 			InvoiceSourceTypeEnum.ORDER,
@@ -1216,7 +1214,7 @@ export class InvoiceService {
 	 * Settling is not done here: the caller runs the client's allocation, oldest document first.
 	 */
 	public async raiseForCashFlow(
-		cashFlowId: number,
+		cashFlowId: EntityId,
 	): Promise<InvoiceWithSources | null> {
 		const cashFlow = await cashFlowService.findById(cashFlowId, false);
 
@@ -1349,8 +1347,8 @@ export class InvoiceService {
 	 * document at once cannot both take the same quantity or value back.
 	 */
 	public async getReversedPerLine(
-		parentId: number,
-	): Promise<Map<number, ReversedLineTotals>> {
+		parentId: EntityId,
+	): Promise<Map<EntityId, ReversedLineTotals>> {
 		const rows = await this.lineRepository
 			.createQueryBuilder('line')
 			.innerJoin(
@@ -1373,14 +1371,14 @@ export class InvoiceService {
 			.andWhere('line.parent_line_id IS NOT NULL')
 			.groupBy('line.parent_line_id')
 			.getRawMany<{
-				parent_line_id: number;
+				parent_line_id: EntityId;
 				quantity: string;
 				net: string;
 			}>();
 
 		return new Map(
 			rows.map((row) => [
-				Number(row.parent_line_id),
+				row.parent_line_id,
 				{
 					quantity: roundMoney(Number(row.quantity)),
 					net: roundMoney(Number(row.net)),
@@ -1535,7 +1533,7 @@ export class InvoiceService {
 	/** The default selection: every line's remaining units, where they still fit in its value. */
 	private everythingReversible(
 		parentLines: readonly InvoiceLineEntity[],
-		remaining: ReadonlyMap<number, ReversedLineTotals>,
+		remaining: ReadonlyMap<EntityId, ReversedLineTotals>,
 	): InvoiceLineSelection[] {
 		const selection: InvoiceLineSelection[] = [];
 
@@ -1711,7 +1709,7 @@ export class InvoiceService {
 	/** The links a document is raised with - see `invoice-source.entity.ts`. Written once. */
 	private async writeSources(
 		manager: EntityManager,
-		invoiceId: number,
+		invoiceId: EntityId,
 		sources: InvoiceSources,
 	): Promise<void> {
 		const rows = (
@@ -1720,15 +1718,17 @@ export class InvoiceService {
 				[InvoiceSourceTypeEnum.SHIPPING, sources.shipping_id],
 				[InvoiceSourceTypeEnum.SUBSCRIPTION, sources.subscription_id],
 			] as const
-		)
-			.filter(([, sourceId]) => sourceId !== null)
-			.map(([sourceType, sourceId]) =>
-				manager.create(InvoiceSourceEntity, {
-					invoice_id: invoiceId,
-					source_type: sourceType,
-					source_id: Number(sourceId),
-				}),
-			);
+		).flatMap(([sourceType, sourceId]) =>
+			sourceId === null
+				? []
+				: [
+						manager.create(InvoiceSourceEntity, {
+							invoice_id: invoiceId,
+							source_type: sourceType,
+							source_id: sourceId,
+						}),
+					],
+		);
 
 		if (rows.length > 0) {
 			await manager.getRepository(InvoiceSourceEntity).save(rows);
@@ -1759,7 +1759,7 @@ export class InvoiceService {
 						where: { invoice_id: In(ids) },
 					});
 
-		const sourceOf = (invoiceId: number, type: InvoiceSourceType) =>
+		const sourceOf = (invoiceId: EntityId, type: InvoiceSourceType) =>
 			rows.find(
 				(row) =>
 					row.invoice_id === invoiceId && row.source_type === type,
@@ -1783,9 +1783,9 @@ export class InvoiceService {
 	 */
 	public async findIdsBySource(
 		sourceType: InvoiceSourceType,
-		sourceId: number,
+		sourceId: EntityId,
 		manager: EntityManager = dataSource.manager,
-	): Promise<number[]> {
+	): Promise<EntityId[]> {
 		const rows = await manager.getRepository(InvoiceSourceEntity).find({
 			select: { invoice_id: true },
 			where: { source_type: sourceType, source_id: sourceId },
@@ -1802,7 +1802,7 @@ export class InvoiceService {
 	private sourceFilter(
 		alias: string,
 		sourceType: InvoiceSourceType,
-		sourceId: number,
+		sourceId: EntityId,
 	): { condition: string; parameters: Record<string, string | number> } {
 		const key = `source_${sourceType}`;
 
@@ -1828,7 +1828,7 @@ export class InvoiceService {
 	 */
 	public async recomputeTotals(
 		manager: EntityManager,
-		invoiceId: number,
+		invoiceId: EntityId,
 	): Promise<InvoiceTotals> {
 		const lines = await manager.getRepository(InvoiceLineEntity).find({
 			where: { invoice_id: invoiceId },
@@ -1849,7 +1849,7 @@ export class InvoiceService {
 	 */
 	public async getReversedAmount(
 		manager: EntityManager,
-		invoiceId: number,
+		invoiceId: EntityId,
 	): Promise<number> {
 		const result = await manager
 			.getRepository(InvoiceEntity)
@@ -1913,7 +1913,7 @@ export class InvoiceService {
 	 * @description Update any data
 	 */
 	public async update(
-		data: DeepPartial<InvoiceEntity> & { id: number },
+		data: DeepPartial<InvoiceEntity> & { id: EntityId },
 	): Promise<InvoiceEntity> {
 		const saved = await this.repository.save(data);
 
@@ -1995,12 +1995,12 @@ export class InvoiceService {
 		items: NonNullable<
 			ValidatorOutput<InvoiceValidator, 'update'>['lines']
 		>,
-	): Promise<{ writes: InvoiceLineEntity[]; removedIds: number[] }> {
+	): Promise<{ writes: InvoiceLineEntity[]; removedIds: EntityId[] }> {
 		const existing = await this.getLines(entry.id);
 		const existingById = new Map(existing.map((line) => [line.id, line]));
 		const caps = await this.getLineCaps(entry, existing);
 
-		const keptIds = new Set<number>();
+		const keptIds = new Set<EntityId>();
 		const writes: InvoiceLineEntity[] = [];
 
 		for (const item of items) {
@@ -2103,7 +2103,7 @@ export class InvoiceService {
 	 * with no cap passes.
 	 */
 	public assertWithinCap(
-		lineId: number,
+		lineId: EntityId,
 		input: Pick<InvoiceLineInput, 'quantity' | 'unit_price'>,
 		cap: InvoiceLineCap | undefined,
 	): void {
@@ -2214,7 +2214,7 @@ export class InvoiceService {
 		const sellerDetails = entry.seller_details ?? this.buildSellerDetails();
 
 		const issuedAt = new Date();
-		const refundedMovementIds: number[] = [];
+		const refundedMovementIds: EntityId[] = [];
 
 		const saved = await dataSource.transaction(async (manager) => {
 			const reference = await documentSeriesService.allocate(
@@ -2277,7 +2277,7 @@ export class InvoiceService {
 	private async refundReversal(
 		manager: EntityManager,
 		reversal: InvoiceEntity,
-	): Promise<number[]> {
+	): Promise<EntityId[]> {
 		if (!reversal.is_reversal || !reversal.parent_invoice_id) {
 			return [];
 		}
@@ -2313,7 +2313,7 @@ export class InvoiceService {
 			),
 		);
 
-		const refundedFrom: number[] = [];
+		const refundedFrom: EntityId[] = [];
 
 		for (const allocation of allocations) {
 			if (owed <= PAYMENT_SETTLED_TOLERANCE) {
@@ -2402,7 +2402,7 @@ export class InvoiceService {
 	/** What the original's issued reversals already paid back - their allocations are refunds. */
 	private async getRefundedForParent(
 		manager: EntityManager,
-		parentId: number,
+		parentId: EntityId,
 	): Promise<number> {
 		const result = await manager
 			.getRepository(InvoicePaymentEntity)
@@ -2458,7 +2458,7 @@ export class InvoiceService {
 	}
 
 	public async findById(
-		id: number,
+		id: EntityId,
 		withDeleted: boolean,
 	): Promise<InvoiceWithSources> {
 		const invoice = await this.repository
@@ -2473,7 +2473,7 @@ export class InvoiceService {
 	}
 
 	/** The document's lines, in the order they were written - which is the order they read in. */
-	public getLines(invoiceId: number): Promise<InvoiceLineEntity[]> {
+	public getLines(invoiceId: EntityId): Promise<InvoiceLineEntity[]> {
 		return this.lineRepository
 			.createQuery()
 			.filterBy('invoice_id', invoiceId)
@@ -2481,7 +2481,7 @@ export class InvoiceService {
 			.all();
 	}
 
-	public getPayments(invoiceId: number): Promise<InvoicePaymentEntity[]> {
+	public getPayments(invoiceId: EntityId): Promise<InvoicePaymentEntity[]> {
 		return this.paymentRepository
 			.createQuery()
 			.filterBy('invoice_id', invoiceId)
@@ -2499,7 +2499,7 @@ export class InvoiceService {
 	 * reversal form defaults to and caps against - and, on a draft, how far each may be restated.
 	 */
 	public async getEntryData(data: {
-		id: number;
+		id: EntityId;
 	}): Promise<InvoiceWithDetails> {
 		const [invoice] = await this.withOutstanding([
 			await this.findById(data.id, false),
@@ -2510,7 +2510,7 @@ export class InvoiceService {
 			this.getPayments(invoice.id),
 			// A reversal is never reversed, so only an original has anything to report here
 			invoice.is_reversal
-				? Promise.resolve(new Map<number, ReversedLineTotals>())
+				? Promise.resolve(new Map<EntityId, ReversedLineTotals>())
 				: this.getReversedPerLine(invoice.id),
 		]);
 
@@ -2519,7 +2519,7 @@ export class InvoiceService {
 
 		const caps = isDraft
 			? await this.getLineCaps(invoice, lines)
-			: new Map<number, InvoiceLineCap>();
+			: new Map<EntityId, InvoiceLineCap>();
 
 		const resolvedParties = isDraft
 			? {
@@ -2610,7 +2610,7 @@ export class InvoiceService {
 			...new Set(
 				entries
 					.map((entry) => entry.order_id)
-					.filter((orderId): orderId is number => orderId !== null),
+					.filter((orderId): orderId is EntityId => orderId !== null),
 			),
 		];
 
@@ -2686,7 +2686,7 @@ export class InvoiceService {
 						})
 						.groupBy('invoice_payment.invoice_id')
 						.getRawMany<{
-							invoice_id: number;
+							invoice_id: EntityId;
 							allocated: string;
 						}>(),
 			originalIds.length === 0
@@ -2710,21 +2710,18 @@ export class InvoiceService {
 						})
 						.groupBy('reversal.parent_invoice_id')
 						.getRawMany<{
-							parent_invoice_id: number;
+							parent_invoice_id: EntityId;
 							reversed: string;
 						}>(),
 		]);
 
 		const allocated = new Map(
-			allocatedRows.map((row) => [
-				Number(row.invoice_id),
-				Number(row.allocated),
-			]),
+			allocatedRows.map((row) => [row.invoice_id, Number(row.allocated)]),
 		);
 
 		const reversed = new Map(
 			reversedRows.map((row) => [
-				Number(row.parent_invoice_id),
+				row.parent_invoice_id,
 				Number(row.reversed),
 			]),
 		);
@@ -2778,13 +2775,13 @@ export class InvoiceService {
 						})
 						.groupBy('reversal.parent_invoice_id')
 						.getRawMany<{
-							parent_invoice_id: number;
+							parent_invoice_id: EntityId;
 							reversed_net: string;
 						}>();
 
 		const reversedNet = new Map(
 			rows.map((row) => [
-				Number(row.parent_invoice_id),
+				row.parent_invoice_id,
 				Number(row.reversed_net),
 			]),
 		);
@@ -2899,7 +2896,7 @@ export class InvoiceService {
 	}
 
 	private async buildBillingDetails(
-		clientId: number,
+		clientId: EntityId,
 		address: ClientAddressSnapshot,
 	): Promise<BillingDetails> {
 		const client = await clientService.findById(clientId, false);

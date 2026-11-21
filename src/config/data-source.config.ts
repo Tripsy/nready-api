@@ -16,7 +16,10 @@ const dataSource = new DataSource({
 	migrationsTableName: 'system.migrations',
 	entities: [buildSrcPath(`features/**/*.entity.${filesExtension}`)],
 	migrations: [buildSrcPath(`database/migrations/*.${filesExtension}`)],
-	subscribers: [buildSrcPath(`features/**/*.subscriber.${filesExtension}`)],
+	subscribers: [
+		buildSrcPath(`features/**/*.subscriber.${filesExtension}`),
+		buildSrcPath(`shared/subscribers/*.subscriber.${filesExtension}`),
+	],
 	poolSize: 10,
 });
 

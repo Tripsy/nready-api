@@ -39,7 +39,7 @@ const targetParams = {
 		condition:
 			'a review is not a target - it is reported by flagging it through moderation instead',
 	},
-	entity_id: { type: 'number' as const, required: true },
+	entity_id: { type: 'string' as const, required: true },
 };
 
 const addressingNote =

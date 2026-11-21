@@ -14,8 +14,8 @@ export class InvoiceQuery extends RepositoryAbstract<InvoiceEntity> {
 	/**
 	 * A number a person read off a document, or free text from the notes.
 	 *
-	 * `ref_number` first: the figure printed next to the series is what an operator types when a
-	 * buyer calls about an invoice, and it is far more selective than the id nobody sees.
+	 * A bare number is the `ref_number` printed next to the series - what an operator types when a
+	 * buyer calls about an invoice.
 	 */
 	filterByTerm(term?: string): this {
 		if (!term) {
@@ -25,20 +25,7 @@ export class InvoiceQuery extends RepositoryAbstract<InvoiceEntity> {
 		const trimmed = term.trim();
 
 		if (trimmed !== '' && !Number.isNaN(Number(trimmed))) {
-			this.filterAny([
-				{
-					column: 'ref_number',
-					value: Number(trimmed),
-					operator: '=',
-				},
-				{
-					column: 'id',
-					value: Number(trimmed),
-					operator: '=',
-				},
-			]);
-
-			return this;
+			return this.filterBy('ref_number', Number(trimmed));
 		}
 
 		if (trimmed.length >= Configuration.get('filter.termMinLength')) {

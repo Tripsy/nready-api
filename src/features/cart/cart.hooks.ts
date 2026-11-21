@@ -1,5 +1,6 @@
 import type { EntityManager } from 'typeorm';
 import { createQuery } from '@/helpers/hook.helper';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * What `cart` asks while turning a basket into an order.
@@ -18,7 +19,7 @@ import { createQuery } from '@/helpers/hook.helper';
  * untracked variant is absent from the outer one. Figures can be negative when a site is
  * over-committed.
  */
-export type WarehouseAvailability = Map<number, Map<number, number>>;
+export type WarehouseAvailability = Map<EntityId, Map<EntityId, number>>;
 
 /*
  * Asked inside the checkout transaction, after the order has reserved its stock, so the read sits
@@ -27,7 +28,7 @@ export type WarehouseAvailability = Map<number, Map<number, number>>;
  * guess would send a parcel from a site that cannot fill it.
  */
 const warehouseAvailability = createQuery<
-	[manager: EntityManager, variantIds: readonly number[]],
+	[manager: EntityManager, variantIds: readonly EntityId[]],
 	WarehouseAvailability
 >(() => new Map());
 

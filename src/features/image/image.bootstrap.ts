@@ -5,6 +5,7 @@ import {
 	registerTargetImageProvider,
 	type TargetImageType,
 } from '@/shared/registries/target-image.registry';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * Registers where the image standing for a row comes from, so a feature rendering a page can show
@@ -29,7 +30,7 @@ export default function registerImageBootstrap() {
 		async (
 			section: string,
 			imageType: TargetImageType,
-			entityIds: number[],
+			entityIds: EntityId[],
 		) => {
 			if (!isImageSection(section)) {
 				return new Map();
@@ -50,7 +51,7 @@ export default function registerImageBootstrap() {
 		async (
 			section: string,
 			imageType: TargetImageType,
-			entityIds: number[],
+			entityIds: EntityId[],
 		) => {
 			if (!isImageSection(section)) {
 				return new Map();

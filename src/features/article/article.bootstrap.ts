@@ -8,6 +8,7 @@ import {
 	ParticipationEnum,
 	registerParticipationResolver,
 } from '@/shared/registries/target-participation.registry';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 const SETTING_BY_PARTICIPATION: Record<Participation, ArticleSetting> = {
 	[ParticipationEnum.RATING]: ArticleSettingEnum.ALLOW_RATING,
@@ -25,7 +26,7 @@ const SETTING_BY_PARTICIPATION: Record<Participation, ArticleSetting> = {
 export default function registerArticleBootstrap() {
 	registerParticipationResolver(
 		ArticleEntity.NAME,
-		async (entityId: number, participation: Participation) => {
+		async (entityId: EntityId, participation: Participation) => {
 			const settings = await articleService.getSettings(entityId);
 
 			return settings

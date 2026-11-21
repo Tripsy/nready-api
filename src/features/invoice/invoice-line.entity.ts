@@ -5,6 +5,7 @@ import type OrderLineEntity from '@/features/order/order-line.entity';
 import type ShippingEntity from '@/features/shipping/shipping.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import { numericTransformer } from '@/shared/transformers/numeric.transformer';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * What a line bills for, and with it which source column may be filled.
@@ -55,9 +56,9 @@ export default class InvoiceLineEntity extends EntityAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
 
-	@Column('int', { nullable: false })
+	@Column('uuid', { nullable: false })
 	@Index('IDX_invoice_line_invoice_id')
-	invoice_id!: number;
+	invoice_id!: EntityId;
 
 	@Column({
 		type: 'enum',
@@ -73,17 +74,17 @@ export default class InvoiceLineEntity extends EntityAbstract {
 	 * from must not take the invoice with it - nor keep an order line alive purely because it was
 	 * once billed.
 	 */
-	@Column('int', { nullable: true })
+	@Column('uuid', { nullable: true })
 	@Index('IDX_invoice_line_order_line_id', {
 		where: 'order_line_id IS NOT NULL',
 	})
-	order_line_id!: number | null;
+	order_line_id!: EntityId | null;
 
-	@Column('int', { nullable: true })
+	@Column('uuid', { nullable: true })
 	@Index('IDX_invoice_line_shipping_id', {
 		where: 'shipping_id IS NOT NULL',
 	})
-	shipping_id!: number | null;
+	shipping_id!: EntityId | null;
 
 	/**
 	 * On a reversal, the line of the original document this one takes back. What caps a partial
@@ -92,11 +93,11 @@ export default class InvoiceLineEntity extends EntityAbstract {
 	 *
 	 * RESTRICT: the original is an issued document and is never deleted while a reversal stands.
 	 */
-	@Column('int', { nullable: true })
+	@Column('uuid', { nullable: true })
 	@Index('IDX_invoice_line_parent_line_id', {
 		where: 'parent_line_id IS NOT NULL',
 	})
-	parent_line_id!: number | null;
+	parent_line_id!: EntityId | null;
 
 	/**
 	 * On a reversal, whether this line takes back **value** rather than quantity: a price
@@ -119,12 +120,12 @@ export default class InvoiceLineEntity extends EntityAbstract {
 	 * that keeps a sold variant from being deleted, and an invoice - which is never deleted -
 	 * would extend that hold over the catalogue permanently.
 	 */
-	@Column('int', { nullable: true })
+	@Column('uuid', { nullable: true })
 	@Index('IDX_invoice_line_product_id', { where: 'product_id IS NOT NULL' })
-	product_id!: number | null;
+	product_id!: EntityId | null;
 
-	@Column('int', { nullable: true })
-	variant_id!: number | null;
+	@Column('uuid', { nullable: true })
+	variant_id!: EntityId | null;
 
 	@Column('varchar', {
 		nullable: false,

@@ -10,6 +10,7 @@ import {
 	testServiceFindByFilter,
 	testServiceFindById,
 } from '@/tests/jest-service.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 describe('LogDataService', () => {
 	beforeEach(() => {
@@ -26,7 +27,7 @@ describe('LogDataService', () => {
 		query,
 		serviceLogData,
 		{
-			ids: [1, 2, 3],
+			ids: [mockId(1), mockId(2), mockId(3)],
 		},
 	);
 	testServiceFindById<LogDataEntity, LogDataQuery>(query, serviceLogData);

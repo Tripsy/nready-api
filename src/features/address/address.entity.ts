@@ -1,6 +1,7 @@
 import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import type PlaceEntity from '@/features/place/place.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * An address flattened into the columns a document freezes it as - the fields every holder of a
@@ -55,9 +56,9 @@ export default class AddressEntity extends EntityAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
 
-	@Column('int', { nullable: true })
+	@Column('uuid', { nullable: true })
 	@Index('IDX_address_city_id')
-	city_id!: number | null;
+	city_id!: EntityId | null;
 
 	@Column('text')
 	details!: string;

@@ -2,6 +2,7 @@ import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import type UserEntity from '@/features/user/user.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import type { StatusTransitions } from '@/shared/types/common.type';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export const ClientStatusEnum = {
 	ACTIVE: 'active',
@@ -151,9 +152,9 @@ export default class ClientEntity extends EntityAbstract {
 	 * accepts a client the caller holds, and a review counts as a verified purchase only through
 	 * an order placed on one of its author's clients.
 	 */
-	@Column('int', { nullable: true })
+	@Column('uuid', { nullable: true })
 	@Index('IDX_client_user_id', { where: 'user_id IS NOT NULL' })
-	user_id!: number | null;
+	user_id!: EntityId | null;
 
 	// OTHER
 	@Column('text', { nullable: true })

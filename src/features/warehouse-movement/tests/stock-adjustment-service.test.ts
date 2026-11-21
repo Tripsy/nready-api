@@ -20,13 +20,15 @@ import WarehouseMovementEntity, {
 	WarehouseMovementSourceEnum,
 	WarehouseMovementTypeEnum,
 } from '@/features/warehouse-movement/warehouse-movement.entity';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import { createMockRepository } from '@/tests/jest-service.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
-const WAREHOUSE_ID = 1;
-const VARIANT_ID = 6;
+const WAREHOUSE_ID = mockId(1);
+const VARIANT_ID = mockId(6);
 
 function lot(
-	id: number,
+	id: EntityId,
 	qty: number,
 	remaining: number,
 	cost: number,
@@ -51,7 +53,7 @@ function fakeManager(
 	let nextId = 500;
 	const adjustments: StockAdjustmentEntity[] = [];
 	const ledger: WarehouseMovementEntity[] = [];
-	const updates: { id: number; values: object }[] = [];
+	const updates: { id: EntityId; values: object }[] = [];
 
 	const manager = {
 		getRepository: jest.fn((target: unknown) => {
@@ -79,7 +81,7 @@ function fakeManager(
 			if (target === StockAdjustmentEntity) {
 				return {
 					findOne: jest.fn(
-						async (query: { where: { id: number } }) =>
+						async (query: { where: { id: EntityId } }) =>
 							adjustments.find(
 								(row) => row.id === query.where.id,
 							) ?? null,
@@ -90,7 +92,7 @@ function fakeManager(
 			if (target === WarehouseMovementEntity) {
 				return {
 					find: jest.fn(
-						async (query: { where: { source_id: number } }) =>
+						async (query: { where: { source_id: EntityId } }) =>
 							ledger.filter(
 								(row) =>
 									row.source_id === query.where.source_id &&
@@ -108,7 +110,7 @@ function fakeManager(
 				for (const row of value) {
 					ledger.push({
 						...(row as WarehouseMovementEntity),
-						id: nextId++,
+						id: mockId(nextId++),
 					});
 				}
 
@@ -117,7 +119,7 @@ function fakeManager(
 
 			const row = {
 				...(value as StockAdjustmentEntity),
-				id: nextId++,
+				id: mockId(nextId++),
 			};
 
 			adjustments.push(row);
@@ -125,7 +127,11 @@ function fakeManager(
 			return row;
 		}),
 		update: jest.fn(
-			async (_target: unknown, where: { id: number }, values: object) => {
+			async (
+				_target: unknown,
+				where: { id: EntityId },
+				values: object,
+			) => {
 				updates.push({ id: where.id, values: values });
 
 				const row = adjustments.find((entry) => entry.id === where.id);
@@ -147,21 +153,21 @@ function fakeManager(
 
 describe('planTopUp', () => {
 	const lots = [
-		lot(1, 10, 10, 20, 1), // full - no room
-		lot(2, 30, 25, 21, 2), // room 5
-		lot(3, 20, 12, 22, 3), // room 8, newest
+		lot(mockId(1), 10, 10, 20, 1), // full - no room
+		lot(mockId(2), 30, 25, 21, 2), // room 5
+		lot(mockId(3), 20, 12, 22, 3), // room 8, newest
 	];
 
 	it('fills the newest receipt first, at its own cost', () => {
 		expect(planTopUp(lots, 6)).toEqual([
-			{ grn_item_id: 3, qty: 6, unit_cost_base: 22 },
+			{ grn_item_id: mockId(3), qty: 6, unit_cost_base: 22 },
 		]);
 	});
 
 	it('spills into older lots with room once the newest is full', () => {
 		expect(planTopUp(lots, 11)).toEqual([
-			{ grn_item_id: 3, qty: 8, unit_cost_base: 22 },
-			{ grn_item_id: 2, qty: 3, unit_cost_base: 21 },
+			{ grn_item_id: mockId(3), qty: 8, unit_cost_base: 22 },
+			{ grn_item_id: mockId(2), qty: 3, unit_cost_base: 21 },
 		]);
 	});
 
@@ -211,15 +217,15 @@ describe('StockAdjustmentService', () => {
 				.spyOn(grnService, 'consumeLots')
 				.mockResolvedValue([
 					{
-						key: 0,
-						grn_item_id: 8,
+						key: mockId(0),
+						grn_item_id: mockId(8),
 						variant_id: VARIANT_ID,
 						qty: 10,
 						unit_cost_base: 41.2,
 					},
 					{
-						key: 0,
-						grn_item_id: 15,
+						key: mockId(0),
+						grn_item_id: mockId(15),
 						variant_id: VARIANT_ID,
 						qty: 2,
 						unit_cost_base: 43.9,
@@ -232,7 +238,7 @@ describe('StockAdjustmentService', () => {
 			);
 
 			expect(consume).toHaveBeenCalledWith(manager, WAREHOUSE_ID, [
-				{ key: 0, variant_id: VARIANT_ID, quantity: 12 },
+				{ key: VARIANT_ID, variant_id: VARIANT_ID, quantity: 12 },
 			]);
 			expect(adjustments).toHaveLength(1);
 			expect(adjustments[0]).toMatchObject({
@@ -254,7 +260,7 @@ describe('StockAdjustmentService', () => {
 				[
 					WarehouseMovementTypeEnum.WRITE_OFF,
 					-10,
-					8,
+					mockId(8),
 					41.2,
 					WarehouseMovementSourceEnum.ADJUSTMENT,
 					id,
@@ -262,7 +268,7 @@ describe('StockAdjustmentService', () => {
 				[
 					WarehouseMovementTypeEnum.WRITE_OFF,
 					-2,
-					15,
+					mockId(15),
 					43.9,
 					WarehouseMovementSourceEnum.ADJUSTMENT,
 					id,
@@ -275,8 +281,8 @@ describe('StockAdjustmentService', () => {
 
 			jest.spyOn(grnService, 'consumeLots').mockResolvedValue([
 				{
-					key: 0,
-					grn_item_id: 8,
+					key: mockId(0),
+					grn_item_id: mockId(8),
 					variant_id: VARIANT_ID,
 					qty: 2,
 					unit_cost_base: 41.2,
@@ -319,7 +325,10 @@ describe('StockAdjustmentService', () => {
 	});
 
 	describe('createWithin - add', () => {
-		const siteLots = [lot(8, 10, 4, 41.2, 1), lot(15, 20, 16, 43.9, 2)];
+		const siteLots = [
+			lot(mockId(8), 10, 4, 41.2, 1),
+			lot(mockId(15), 20, 16, 43.9, 2),
+		];
 
 		it('tops up the newest lot with room, as an adjustment', async () => {
 			const { manager, adjustments, ledger } = fakeManager();
@@ -337,7 +346,7 @@ describe('StockAdjustmentService', () => {
 
 			expect(consume).not.toHaveBeenCalled();
 			expect(restore).toHaveBeenCalledWith(manager, [
-				expect.objectContaining({ grn_item_id: 15, qty: 3 }),
+				expect.objectContaining({ grn_item_id: mockId(15), qty: 3 }),
 			]);
 			expect(adjustments[0]).toMatchObject({
 				qty: 3,
@@ -349,7 +358,7 @@ describe('StockAdjustmentService', () => {
 					row.qty,
 					row.grn_item_id,
 				]),
-			).toEqual([[WarehouseMovementTypeEnum.ADJUSTMENT, 3, 15]]);
+			).toEqual([[WarehouseMovementTypeEnum.ADJUSTMENT, 3, mockId(15)]]);
 		});
 
 		it('refuses more than the lots have room for', async () => {
@@ -383,8 +392,8 @@ describe('StockAdjustmentService', () => {
 
 			jest.spyOn(grnService, 'consumeLots').mockResolvedValue([
 				{
-					key: 0,
-					grn_item_id: 8,
+					key: mockId(0),
+					grn_item_id: mockId(8),
 					variant_id: VARIANT_ID,
 					qty: 3,
 					unit_cost_base: 41.2,
@@ -405,7 +414,7 @@ describe('StockAdjustmentService', () => {
 			await service.reverse(id);
 
 			expect(restore).toHaveBeenCalledWith(fake.manager, [
-				{ grn_item_id: 8, qty: 3 },
+				{ grn_item_id: mockId(8), qty: 3 },
 			]);
 			expect(withdraw).not.toHaveBeenCalled();
 
@@ -414,7 +423,7 @@ describe('StockAdjustmentService', () => {
 			expect(reversal).toMatchObject({
 				movement_type: WarehouseMovementTypeEnum.ADJUSTMENT,
 				qty: 3,
-				grn_item_id: 8,
+				grn_item_id: mockId(8),
 				reversal_of_id: fake.ledger[0].id,
 				source_id: id,
 			});
@@ -427,7 +436,7 @@ describe('StockAdjustmentService', () => {
 			const fake = fakeManager();
 
 			jest.spyOn(grnService, 'lockSiteLots').mockResolvedValue([
-				lot(15, 20, 16, 43.9, 2),
+				lot(mockId(15), 20, 16, 43.9, 2),
 			]);
 			jest.spyOn(grnService, 'restoreLots').mockResolvedValue();
 
@@ -444,7 +453,7 @@ describe('StockAdjustmentService', () => {
 			await service.reverse(id);
 
 			expect(withdraw).toHaveBeenCalledWith(fake.manager, [
-				{ grn_item_id: 15, qty: 2 },
+				{ grn_item_id: mockId(15), qty: 2 },
 			]);
 			expect(fake.ledger[fake.ledger.length - 1]).toMatchObject({
 				qty: -2,

@@ -1,4 +1,6 @@
 import type { WarehouseAvailability } from '@/features/cart/cart.hooks';
+import { compareIds } from '@/helpers/id.helper';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * Which warehouse each part of a checkout leaves from. Pure, so the rules can be exercised without
@@ -25,13 +27,13 @@ import type { WarehouseAvailability } from '@/features/cart/cart.hooks';
  */
 
 export type FulfillmentLine = {
-	variant_id: number;
-	product_id: number;
+	variant_id: EntityId;
+	product_id: EntityId;
 	quantity: number;
 };
 
 export type FulfillmentGroup = {
-	warehouse_id: number;
+	warehouse_id: EntityId;
 	lines: FulfillmentLine[];
 };
 
@@ -49,31 +51,28 @@ function roundQuantity(value: number): number {
 }
 
 type Demand = {
-	variant_id: number;
+	variant_id: EntityId;
 	/** What the sites can supply of the line - its quantity, capped at what they hold together. */
 	quantity: number;
 	/** Positive stock per candidate site. */
-	stock: Map<number, number>;
+	stock: Map<EntityId, number>;
 };
 
 type Candidate = {
-	sites: number[];
+	sites: EntityId[];
 	whole: boolean;
 	hasDefault: boolean;
 	score: number;
 };
 
-function stockAt(demand: Demand, warehouseId: number): number {
+function stockAt(demand: Demand, warehouseId: EntityId): number {
 	return demand.stock.get(warehouseId) ?? 0;
 }
 
-function* combinations(
-	items: readonly number[],
-	size: number,
-): Generator<number[]> {
-	const picked: number[] = [];
+function* combinations<T>(items: readonly T[], size: number): Generator<T[]> {
+	const picked: T[] = [];
 
-	function* walk(start: number): Generator<number[]> {
+	function* walk(start: number): Generator<T[]> {
 		if (picked.length === size) {
 			yield [...picked];
 
@@ -93,9 +92,9 @@ function* combinations(
 /** Sites with something to give, the default first, then by how much of the order each holds. */
 function rankCandidates(
 	demands: readonly Demand[],
-	defaultWarehouseId: number,
-): number[] {
-	const held = new Map<number, { lines: number; units: number }>();
+	defaultWarehouseId: EntityId,
+): EntityId[] {
+	const held = new Map<EntityId, { lines: number; units: number }>();
 
 	for (const demand of demands) {
 		for (const [warehouseId, quantity] of demand.stock) {
@@ -114,16 +113,16 @@ function rankCandidates(
 					Number(aId === defaultWarehouseId) ||
 				b.lines - a.lines ||
 				b.units - a.units ||
-				aId - bId,
+				compareIds(aId, bId),
 		)
 		.slice(0, MAX_CANDIDATE_WAREHOUSES)
 		.map(([warehouseId]) => warehouseId);
 }
 
 function evaluate(
-	sites: number[],
+	sites: EntityId[],
 	demands: readonly Demand[],
-	defaultWarehouseId: number,
+	defaultWarehouseId: EntityId,
 ): Candidate | null {
 	const hasDefault = sites.includes(defaultWarehouseId);
 	let whole = true;
@@ -175,10 +174,10 @@ function compare(a: Candidate, b: Candidate): number {
 /** The smallest set of sites that can fill every demand, best first by `compare`. */
 function chooseSites(
 	demands: readonly Demand[],
-	candidates: readonly number[],
-	defaultWarehouseId: number,
-): number[] {
-	const sorted = [...candidates].sort((a, b) => a - b);
+	candidates: readonly EntityId[],
+	defaultWarehouseId: EntityId,
+): EntityId[] {
+	const sorted = [...candidates].sort(compareIds);
 
 	for (let size = 1; size <= sorted.length; size++) {
 		let best: Candidate | null = null;
@@ -203,9 +202,9 @@ function chooseSites(
 /** How a demand's quantity divides over the chosen sites. */
 function assign(
 	demand: Demand,
-	sites: readonly number[],
-	defaultWarehouseId: number,
-): Map<number, number> {
+	sites: readonly EntityId[],
+	defaultWarehouseId: EntityId,
+): Map<EntityId, number> {
 	if (
 		sites.includes(defaultWarehouseId) &&
 		stockAt(demand, defaultWarehouseId) >= demand.quantity
@@ -215,7 +214,10 @@ function assign(
 
 	const byStock = [...sites]
 		.filter((site) => stockAt(demand, site) > 0)
-		.sort((a, b) => stockAt(demand, b) - stockAt(demand, a) || a - b);
+		.sort(
+			(a, b) =>
+				stockAt(demand, b) - stockAt(demand, a) || compareIds(a, b),
+		);
 
 	const whole = byStock.find(
 		(site) => stockAt(demand, site) >= demand.quantity,
@@ -225,7 +227,7 @@ function assign(
 		return new Map([[whole, demand.quantity]]);
 	}
 
-	const parts = new Map<number, number>();
+	const parts = new Map<EntityId, number>();
 	let left = demand.quantity;
 
 	for (const site of byStock) {
@@ -254,7 +256,7 @@ function assign(
 export function planDeliveries(
 	lines: readonly FulfillmentLine[],
 	availability: WarehouseAvailability,
-	defaultWarehouseId: number,
+	defaultWarehouseId: EntityId,
 ): FulfillmentGroup[] {
 	const raw: Demand[] = lines.flatMap((line) => {
 		const sites = availability.get(line.variant_id);
@@ -307,7 +309,7 @@ export function planDeliveries(
 		]),
 	);
 
-	const groups = new Map<number, FulfillmentLine[]>(
+	const groups = new Map<EntityId, FulfillmentLine[]>(
 		sites.map((site) => [site, []]),
 	);
 
@@ -330,7 +332,7 @@ export function planDeliveries(
 				Number(bId === defaultWarehouseId) -
 					Number(aId === defaultWarehouseId) ||
 				b.length - a.length ||
-				aId - bId,
+				compareIds(aId, bId),
 		)
 		.map(([warehouseId, groupLines]) => ({
 			warehouse_id: warehouseId,
@@ -352,7 +354,7 @@ export function planDeliveries(
 		const mainSite = parts
 			? [...parts].sort(
 					([aSite, aQuantity], [bSite, bQuantity]) =>
-						bQuantity - aQuantity || aSite - bSite,
+						bQuantity - aQuantity || compareIds(aSite, bSite),
 				)[0]?.[0]
 			: undefined;
 		const carrier =

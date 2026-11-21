@@ -72,11 +72,11 @@ export const docs: Record<
 			notes: 'Requires an account. Every review lands awaiting moderation - it is a lasting claim about something being sold, so it is not published unread. A second review of the same product answers 409; revise the first one instead. is_verified is set when the caller holds a completed order for the product (and the variant, when named) billed to one of their own clients; it is never taken from the body',
 			body: {
 				product_id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 				variant_id: {
-					type: 'number',
+					type: 'string',
 					required: false,
 					condition:
 						'must belong to that product; omitted when the review is about the product itself',
@@ -113,7 +113,7 @@ export const docs: Record<
 			notes: `Addressed by product, never by review id: one live review per buyer per product, so the path plus the account names exactly one row. Only a pending review may be revised - once a moderator has approved, rejected or marked it as spam the write is refused with 403. At least one of: ${publicParamsUpdateList.join(', ')}`,
 			params: {
 				product_id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -148,7 +148,7 @@ export const docs: Record<
 			notes: 'Only while the review is still pending - a review a moderator has approved, rejected or marked as spam is refused with 403. Soft, and withdrawing a pending review frees the slot, so the buyer may write a new one afterwards',
 			params: {
 				product_id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -175,7 +175,7 @@ export const docs: Record<
 			notes: "Approved reviews only. `own` is the caller's own review whatever its status - the one row they may see before a moderator has - and is null for a visitor with no account or no review. Pinned reviews come first, whatever the sort",
 			params: {
 				product_id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -204,7 +204,7 @@ export const docs: Record<
 				},
 				filter: {
 					variant_id: {
-						type: 'number',
+						type: 'string',
 						required: false,
 						condition:
 							'narrows to the reviews naming that variant; the ones naming none drop out',
@@ -240,7 +240,7 @@ export const docs: Record<
 			notes: 'Over approved reviews only. `distribution` is keyed by whole stars, the review average rounded; `dimensions` averages each score over the reviews that gave it, so a dimension nobody scored is absent. Cached per product and dropped by any write that changes it',
 			params: {
 				product_id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},

@@ -103,7 +103,7 @@ export const docs: Record<
 			notes: `Requires an account. The id must name a client linked to that account - somebody else's answers 404, exactly as a missing one does. Partial: send only what changes; client_type defaults to the stored one and picks the branch the same way create does. person_identification_number is refused here. Changing a company's name, CUI or registration number to one already on file answers 409`,
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 					condition: "one of the caller's own clients",
 				},

@@ -35,6 +35,7 @@ import {
 	testServiceFindById,
 	testServiceUpdateStatus,
 } from '@/tests/jest-service.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 describe('CashFlowService', () => {
 	beforeEach(() => {
@@ -104,8 +105,8 @@ describe('CashFlowService', () => {
 	it('createWithin - a refund takes its parent records', async () => {
 		const parent = getCashFlowEntityMock();
 		const records = [
-			{ operational_record_type: 'client', entity_id: 5 },
-			{ operational_record_type: 'order', entity_id: 7 },
+			{ operational_record_type: 'client', entity_id: mockId(5) },
+			{ operational_record_type: 'order', entity_id: mockId(7) },
 		];
 
 		jest.spyOn(serviceCashFlow, 'findById').mockResolvedValue(parent);
@@ -122,7 +123,10 @@ describe('CashFlowService', () => {
 
 		const manager = {
 			getRepository: jest.fn(() => ({
-				save: jest.fn(async (entry: object) => ({ ...entry, id: 99 })),
+				save: jest.fn(async (entry: object) => ({
+					...entry,
+					id: mockId(99),
+				})),
 				find: jest.fn(async () => records),
 			})),
 		} as unknown as EntityManager;
@@ -141,19 +145,19 @@ describe('CashFlowService', () => {
 			category: CashFlowCategoryEnum.REFUND,
 			currency: parent.currency,
 			parent_id: parent.id,
-			operational_records: { vendor: 3 },
+			operational_records: { vendor: mockId(3) },
 		} as ValidatorOutput<CashFlowValidator, 'create'>);
 
 		expect(setup).toHaveBeenCalledTimes(2);
 		expect(setup).toHaveBeenCalledWith(manager, {
-			cash_flow_id: 99,
+			cash_flow_id: mockId(99),
 			operational_record_type: 'client',
-			entity_id: 5,
+			entity_id: mockId(5),
 		});
 		expect(setup).toHaveBeenCalledWith(manager, {
-			cash_flow_id: 99,
+			cash_flow_id: mockId(99),
 			operational_record_type: 'order',
-			entity_id: 7,
+			entity_id: mockId(7),
 		});
 	});
 
@@ -266,7 +270,7 @@ describe('CashFlowService', () => {
 	it('should create entry - refund', async () => {
 		const entity = getCashFlowEntityMock({
 			category: CashFlowCategoryEnum.REFUND,
-			parent_id: 1,
+			parent_id: mockId(1),
 		});
 
 		const createData = cashFlowOutputPayloads.create;
@@ -474,7 +478,7 @@ describe('CashFlowService', () => {
 		mockCashFlow.query.first.mockResolvedValue(entity);
 		mockCashFlow.query.delete.mockResolvedValue(1);
 
-		await serviceCashFlow.delete(1, false);
+		await serviceCashFlow.delete(mockId(1), false);
 
 		expect(mockCashFlow.query.delete).toHaveBeenCalledWith();
 	});
@@ -537,15 +541,15 @@ describe('CashFlowService.restatePendingForOrder', () => {
 	// A gateway callback racing the edit has to wait for the restated amount, or land first
 	it('locks the pending request before restating it', async () => {
 		const request = getCashFlowEntityMock({
-			id: 7,
+			id: mockId(7),
 			status: CashFlowStatusEnum.PENDING,
 			vat_rate: 0,
 		});
 		const { manager, builder, update, calls } = managerReturning([request]);
 
 		await expect(
-			service.restatePendingForOrder(manager, 1, 150),
-		).resolves.toBe(7);
+			service.restatePendingForOrder(manager, mockId(1), 150),
+		).resolves.toBe(mockId(7));
 
 		expect(builder.setLock).toHaveBeenCalledWith(
 			'pessimistic_write',
@@ -553,7 +557,7 @@ describe('CashFlowService.restatePendingForOrder', () => {
 			['cash_flow'],
 		);
 		expect(calls).toEqual(['setLock', 'getMany']);
-		expect(update).toHaveBeenCalledWith(7, {
+		expect(update).toHaveBeenCalledWith(mockId(7), {
 			amount: service.inputAmount(150),
 		});
 	});
@@ -563,7 +567,7 @@ describe('CashFlowService.restatePendingForOrder', () => {
 		const { manager, update } = managerReturning([]);
 
 		await expect(
-			service.restatePendingForOrder(manager, 1, 150),
+			service.restatePendingForOrder(manager, mockId(1), 150),
 		).resolves.toBeNull();
 
 		expect(update).not.toHaveBeenCalled();

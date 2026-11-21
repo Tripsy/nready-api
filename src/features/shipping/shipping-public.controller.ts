@@ -34,7 +34,7 @@ class ShippingPublicController extends BaseController {
 
 		const entries = await this.shippingService.findForOwnOrder(
 			data.order_id,
-			this.policy.getId(res.locals.auth) ?? 0,
+			this.policy.requireId(res.locals.auth),
 		);
 
 		res.locals.output.data({
@@ -55,7 +55,7 @@ class ShippingPublicController extends BaseController {
 
 		const entries = await this.shippingService.findForOwnOrders(
 			data.order_id,
-			this.policy.getId(res.locals.auth) ?? 0,
+			this.policy.requireId(res.locals.auth),
 		);
 
 		res.locals.output.data({
