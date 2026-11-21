@@ -293,11 +293,11 @@ export const docs: Record<keyof typeof grnController, ApiInputDocumentation> = {
 		},
 	}),
 	costOverFloor: helperApiInputDocumentation({
-		description: 'List prices whose floor is at or under cost',
+		description: 'List prices whose floor is under cost',
 		withBearerAuth: true,
 		success: {
 			status: 200,
-			description: 'Prices at or under cost',
+			description: 'Prices under cost',
 			dataSample: {
 				entries: [
 					{
@@ -316,7 +316,7 @@ export const docs: Record<keyof typeof grnController, ApiInputDocumentation> = {
 		withAuthErrors: true,
 		withErrors: [422],
 		request: {
-			notes: "One entry per price row (variant and currency) whose floor - min_price, or sale_price when no min_price is set - is at or under the variant's cost_price, so a sale at that floor earns nothing or loses money. Both exclude VAT. cost_price is the weighted average set by confirmed receipts, in the base currency; floor_base is the floor converted to it at the newest exchange rate on or before today, and a currency with no published rate is left out. Live variants and products only. Always tightest first (floor_base - cost_price ascending). Nothing is ever repriced; the same list is mailed to the application address every morning while it is not empty",
+			notes: "One entry per price row (variant and currency) whose floor - min_price, or sale_price when no min_price is set - is under the variant's cost_price, so a sale at that floor loses money - a floor exactly at cost breaks even and is not listed. Both exclude VAT. cost_price is the weighted average set by confirmed receipts, in the base currency; floor_base is the floor converted to it at the newest exchange rate on or before today, and a currency with no published rate is left out. Live variants and products only. Always tightest first (floor_base - cost_price ascending). Nothing is ever repriced; the same list is mailed to the application address every morning while it is not empty",
 			query: {
 				page: { type: 'number', required: false },
 				limit: { type: 'number', required: false },

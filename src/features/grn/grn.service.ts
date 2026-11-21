@@ -1258,9 +1258,10 @@ export class GrnService {
 	/**
 	 * @description Used by the `cost-over-floor` cron and `GET /grns/cost-over-floor`
 	 *
-	 * Price rows whose floor no longer covers what the variant costs: `cost_price` at or above
+	 * Price rows whose floor no longer covers what the variant costs: `cost_price` above
 	 * `min_price`, or `sale_price` where no floor is set - a sale at the lowest price the row
-	 * allows would then earn nothing or lose money. Both figures exclude VAT. Tightest first (`floor_base - cost_price` ascending).
+	 * allows would then lose money. A floor exactly at cost breaks even and is not listed. Both
+	 * figures exclude VAT. Tightest first (`floor_base - cost_price` ascending).
 	 *
 	 * Read from current state, not from a receipt: `cost_price` is re-averaged by every confirm
 	 * and cancel, and a price edit can open or close the gap just as well, so the report stands on
@@ -1306,7 +1307,7 @@ export class GrnService {
 						AND variant.cost_price IS NOT NULL
 						AND (price.currency = $1 OR rate.rate IS NOT NULL)
 				) candidate
-				WHERE candidate.cost_price >= candidate.floor_base
+				WHERE candidate.cost_price > candidate.floor_base
 				ORDER BY candidate.floor_base - candidate.cost_price ASC,
 					candidate.variant_id ASC, candidate.currency ASC
 				LIMIT $3 OFFSET $4

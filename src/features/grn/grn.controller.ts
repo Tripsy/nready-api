@@ -39,7 +39,7 @@ class GrnController extends BaseController {
 	});
 
 	/**
-	 * Price rows whose floor is at or under the variant's cost, tightest first - the list the
+	 * Price rows whose floor is under the variant's cost, tightest first - the list the
 	 * `cost-over-floor` cron mails. Gated as a `find` of receipts, which set that cost. Not
 	 * cached: a receipt, a cancel or a price edit moves it, and a stale gap is the one figure
 	 * this exists to make someone act on.

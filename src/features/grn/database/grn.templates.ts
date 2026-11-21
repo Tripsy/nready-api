@@ -20,9 +20,9 @@ const grnTemplates: TemplateSeedEntry[] = [
 		language: 'en',
 		type: TemplateTypeEnum.EMAIL,
 		content: {
-			subject: '{{ total }} price(s) at or under cost',
+			subject: '{{ total }} price(s) under cost',
 			html: `
-                <p>{{ total }} price(s) have a floor - the min price, or the sale price where no min price is set - at or under what the variant costs, so a sale at that floor earns nothing or loses money. Prices exclude VAT; cost is the weighted average from goods receipts, in {{ base_currency }}. Nothing was changed.</p>
+                <p>{{ total }} price(s) have a floor - the min price, or the sale price where no min price is set - under what the variant costs, so a sale at that floor loses money. Prices exclude VAT; cost is the weighted average from goods receipts, in {{ base_currency }}. Nothing was changed.</p>
                 <table ${table}>
                     <tr><th ${th}>SKU</th><th ${th}>Currency</th><th ${th}>Floor</th><th ${th}>Floor ({{ base_currency }})</th><th ${th}>Cost ({{ base_currency }})</th></tr>
                     {% for row in rows %}

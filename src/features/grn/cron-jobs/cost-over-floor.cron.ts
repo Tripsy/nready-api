@@ -11,9 +11,10 @@ export const EXPECTED_RUN_TIME = 5; // seconds
 const REPORT_LIMIT = 100;
 
 /**
- * Mails the price rows whose floor - `min_price`, or `sale_price` where none is set - is at or
- * under the variant's `cost_price`, to `app.email`. Cost never moves a price on its own (see
- * `product_variant.cost_price`); this is the prompt for a person to reprice.
+ * Mails the price rows whose floor - `min_price`, or `sale_price` where none is set - is under
+ * the variant's `cost_price`, to `app.email`; a floor exactly at cost breaks even and is not
+ * listed. Cost never moves a price on its own (see `product_variant.cost_price`); this is the
+ * prompt for a person to reprice.
  *
  * A daily report of the current state rather than a mail per receipt: the gap stays listed every
  * morning until a price or the cost closes it, and a price edit that opens one is caught as well
