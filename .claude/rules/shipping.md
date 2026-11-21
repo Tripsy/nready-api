@@ -53,9 +53,11 @@ All moves go through `ShippingService.updateStatus`:
   goods); after it the ends are locked (409 `ends_locked` on `updateData`).
 - **Stock moves inside the status transaction, under a row lock**: `shipped` asks
   `moveShippedStock` (FIFO draw from the pickup warehouse, 409 on a shortage), `shipped → returned`
-  asks `restoreReturnedStock`, and a `return` into `delivered` asks `receiveReturnedStock`. All
-  answered by `warehouse-movement` (`shipping.hooks.ts`); absent, nothing is drawn. `shipped →
-  failed` moves nothing - the goods left.
+  asks `restoreReturnedStock`, `shipped → failed` asks `writeOffLostStock` (failed means lost:
+  each sale answered by a `sale_return` + `write_off` on its lot, `qty_remaining` unchanged, the
+  reservation not given back), and a `return` into `delivered` asks `receiveReturnedStock`. All
+  answered by `warehouse-movement` (`shipping.hooks.ts`); absent, nothing is drawn. `failed`
+  before shipping drew nothing and writes nothing off.
 - **A `return` reaches `delivered` only once every line has a `condition`** (409
   `condition_required`, checked under the row lock). Then, after commit, `notifyReturnReceived` -
   answered by `order-return` (§7).

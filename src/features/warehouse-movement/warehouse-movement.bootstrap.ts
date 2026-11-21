@@ -9,6 +9,7 @@ import {
 	registerOrderStockReserver,
 } from '@/features/order/order.hooks';
 import {
+	registerLostStockWriter,
 	registerReturnedStockReceiver,
 	registerReturnedStockRestorer,
 	registerShippedStockMover,
@@ -20,8 +21,8 @@ import { registerStockAvailabilityResolver } from '@/shared/registries/stock-ava
 /**
  * Keeps stock: answers the slots `grn` raises while a receipt is confirmed or canceled (the
  * ledger), the ones `order` raises while an order is placed, re-lined, canceled or completed (the
- * reservations), the ones `shipping` raises as a delivery ships or comes back (both), the one
- * `cart` asks while splitting a checkout across warehouses (availability per site), and the shared
+ * reservations), the ones `shipping` raises as a delivery ships, comes back or is lost (both), the
+ * one `cart` asks while splitting a checkout across warehouses (availability per site), and the shared
  * availability registry `cart` asks while pricing a basket and `product` while telling a visitor
  * whether a variant is in stock. None of them imports this feature - it depends on the first four,
  * and the registry lives in `shared/registries/`.
@@ -62,6 +63,10 @@ export default function registerWarehouseMovementBootstrap() {
 
 	registerReturnedStockRestorer((manager, move) =>
 		warehouseMovementService.returnDelivery(manager, move),
+	);
+
+	registerLostStockWriter((manager, move) =>
+		warehouseMovementService.loseDelivery(manager, move),
 	);
 
 	registerReturnedStockReceiver((manager, move) =>

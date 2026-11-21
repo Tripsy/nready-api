@@ -52,8 +52,9 @@ const VARIANT_COLUMNS = ['variant.id', 'variant.sku', 'variant.product_id'];
  * through the slot that document's feature declares (`grn.hooks.ts`, `shipping.hooks.ts`). A
  * mistake is corrected by posting a reversing row, never by editing one.
  *
- * A `delivery` draws its goods as it ships and puts them back if it comes back undelivered; a
- * client's `return` takes them back in as it arrives (`receiveReturn`). A `relocation` changes
+ * A `delivery` draws its goods as it ships, puts them back if it comes back undelivered, and
+ * writes them off if it is lost (`failed` after shipping); a client's `return` takes them back in
+ * as it arrives (`receiveReturn`). A `relocation` changes
  * nothing yet: moving a lot between warehouses needs a lot that can split across sites, which
  * `grn_item` - one row, one receipt, one warehouse - cannot be.
  */
@@ -288,44 +289,7 @@ export class WarehouseMovementService {
 			return;
 		}
 
-		const lineIds = (
-			await manager.getRepository(ShippingLineEntity).find({
-				select: { id: true },
-				where: { shipping_id: move.shipping_id },
-				withDeleted: true,
-			})
-		).map((line) => line.id);
-
-		if (lineIds.length === 0) {
-			return;
-		}
-
-		const repository = manager.getRepository(WarehouseMovementEntity);
-		const sales = await repository.find({
-			where: {
-				source_type: WarehouseMovementSourceEnum.SHIPPING_LINE,
-				source_id: In(lineIds),
-				movement_type: WarehouseMovementTypeEnum.SALE,
-			},
-			order: { id: 'ASC' },
-		});
-
-		const reversed = new Set(
-			sales.length === 0
-				? []
-				: (
-						await repository.find({
-							select: { reversal_of_id: true },
-							where: {
-								reversal_of_id: In(
-									sales.map((sale) => sale.id),
-								),
-							},
-						})
-					).map((row) => row.reversal_of_id),
-		);
-
-		const open = sales.filter((sale) => !reversed.has(sale.id));
+		const open = await this.openSales(manager, move.shipping_id);
 
 		if (open.length === 0) {
 			return;
@@ -372,6 +336,117 @@ export class WarehouseMovementService {
 				),
 			);
 		}
+	}
+
+	/**
+	 * @description Used through `shipping.hooks.ts` by `shippingService.updateStatus` (`shipped`
+	 * into `failed`), and by `backfillShipments`
+	 *
+	 * The parcel was lost in transit: each `sale` the delivery posted is answered by a `sale_return`
+	 * with `reversal_of_id` set, then a `write_off` of the same units on the same lot at the same
+	 * cost. `qty_remaining` does not move - the goods left the shelf when they shipped, and they
+	 * are not coming back - but the ledger stops counting them as sold. Cost of goods sold and
+	 * shrinkage then read from the movement types alone.
+	 *
+	 * The reservation is left alone: a delivery failed after shipping counts as gone
+	 * (`GONE_DELIVERY_SQL`), so nothing is promised again. Replacement goods go out on a new
+	 * delivery.
+	 *
+	 * `reversal_of_id` on the `sale_return` is what keeps `receiveReturn` from booking a client's
+	 * return into the lot of a sale that never arrived, and what makes a repeat of this call a
+	 * no-op - sales already reversed are skipped.
+	 */
+	public async loseDelivery(
+		manager: EntityManager,
+		move: ShippingStockMove,
+		options: { occurredAt?: Date } = {},
+	): Promise<void> {
+		if (move.scope !== ShippingScopeEnum.DELIVERY) {
+			return;
+		}
+
+		const open = await this.openSales(manager, move.shipping_id);
+
+		if (open.length === 0) {
+			return;
+		}
+
+		const occurredAt = options.occurredAt ?? new Date();
+
+		await manager.save(
+			open.flatMap((sale) => {
+				const base = {
+					unit_cost_base: sale.unit_cost_base,
+					source_type: sale.source_type,
+					source_id: sale.source_id,
+					occurred_at: occurredAt,
+					warehouse_id: sale.warehouse_id,
+					variant_id: sale.variant_id,
+					grn_item_id: sale.grn_item_id,
+					notes: null,
+				};
+
+				return [
+					manager.create(WarehouseMovementEntity, {
+						...base,
+						movement_type: WarehouseMovementTypeEnum.SALE_RETURN,
+						qty: -sale.qty,
+						reversal_of_id: sale.id,
+					}),
+					manager.create(WarehouseMovementEntity, {
+						...base,
+						movement_type: WarehouseMovementTypeEnum.WRITE_OFF,
+						qty: sale.qty,
+						reversal_of_id: null,
+					}),
+				];
+			}),
+		);
+	}
+
+	/** The `sale` rows a delivery posted that no row reverses yet, oldest first. */
+	private async openSales(
+		manager: EntityManager,
+		shippingId: number,
+	): Promise<WarehouseMovementEntity[]> {
+		const lineIds = (
+			await manager.getRepository(ShippingLineEntity).find({
+				select: { id: true },
+				where: { shipping_id: shippingId },
+				withDeleted: true,
+			})
+		).map((line) => line.id);
+
+		if (lineIds.length === 0) {
+			return [];
+		}
+
+		const repository = manager.getRepository(WarehouseMovementEntity);
+		const sales = await repository.find({
+			where: {
+				source_type: WarehouseMovementSourceEnum.SHIPPING_LINE,
+				source_id: In(lineIds),
+				movement_type: WarehouseMovementTypeEnum.SALE,
+			},
+			order: { id: 'ASC' },
+		});
+
+		if (sales.length === 0) {
+			return [];
+		}
+
+		const reversed = new Set(
+			(
+				await repository.find({
+					select: { reversal_of_id: true },
+					where: {
+						reversal_of_id: In(sales.map((sale) => sale.id)),
+					},
+				})
+			).map((row) => row.reversal_of_id),
+		);
+
+		return sales.filter((sale) => !reversed.has(sale.id));
 	}
 
 	/**
@@ -632,10 +707,11 @@ export class WarehouseMovementService {
 	/**
 	 * @description Used in the demo seed
 	 *
-	 * Draws the stock of every delivery that left - `shipped`, `delivered` or `returned` - but has
-	 * no `sale` on the ledger: shipped while this feature was not installed, or written by a seed.
-	 * Short lots are taken as far as they go (`allowShort`): the goods left, and refusing now would
-	 * change nothing. A `returned` delivery is then reversed straight away. Dated at `shipped_at`.
+	 * Draws the stock of every delivery that left - `shipped`, `delivered`, `returned`, or `failed`
+	 * after shipping - but has no `sale` on the ledger: shipped while this feature was not installed,
+	 * or written by a seed. Short lots are taken as far as they go (`allowShort`): the goods left,
+	 * and refusing now would change nothing. A `returned` delivery is then reversed straight away,
+	 * a `failed` one written off. Dated at `shipped_at`.
 	 *
 	 * Run after the reservation backfill, which leaves shipped goods out of what it reserves - so
 	 * the consumption here finds nothing to lower for them and the two agree.
@@ -650,6 +726,7 @@ export class WarehouseMovementService {
 				WHERE shipping.deleted_at IS NULL
 					AND shipping.scope = $1
 					AND shipping.status = ANY($2)
+					AND (shipping.status <> $5 OR shipping.shipped_at IS NOT NULL)
 					AND NOT EXISTS (
 						SELECT 1 FROM warehouse_movement
 						INNER JOIN shipping_line ON shipping_line.id = warehouse_movement.source_id
@@ -665,9 +742,11 @@ export class WarehouseMovementService {
 					ShippingStatusEnum.SHIPPED,
 					ShippingStatusEnum.DELIVERED,
 					ShippingStatusEnum.RETURNED,
+					ShippingStatusEnum.FAILED,
 				],
 				WarehouseMovementSourceEnum.SHIPPING_LINE,
 				limit,
+				ShippingStatusEnum.FAILED,
 			],
 		);
 
@@ -692,6 +771,12 @@ export class WarehouseMovementService {
 
 			if (shipping.status === ShippingStatusEnum.RETURNED) {
 				await this.returnDelivery(manager, move, {
+					occurredAt: shipping.updated_at ?? occurredAt,
+				});
+			}
+
+			if (shipping.status === ShippingStatusEnum.FAILED) {
+				await this.loseDelivery(manager, move, {
 					occurredAt: shipping.updated_at ?? occurredAt,
 				});
 			}

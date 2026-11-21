@@ -320,4 +320,87 @@ describe('WarehouseMovementService - ship and come back undelivered', () => {
 		expect(restoreLots).toHaveBeenCalledTimes(1);
 		expect(restoreForOrder).toHaveBeenCalledTimes(1);
 	});
+
+	it('writes a lost parcel off on the lots it left, leaving lots and promise alone', async () => {
+		const { manager, ledger } = fakeManager(lines, [7]);
+
+		await service.shipDelivery(manager, move);
+		await service.loseDelivery(manager, move);
+
+		const sales = ledger.filter(
+			(row) => row.movement_type === WarehouseMovementTypeEnum.SALE,
+		);
+		const lost = ledger.filter(
+			(row) => row.movement_type !== WarehouseMovementTypeEnum.SALE,
+		);
+
+		// Per sale: the sale reversed, then the same units written off, at its own lot and cost
+		expect(
+			lost.map((row) => [
+				row.movement_type,
+				row.reversal_of_id,
+				row.source_id,
+				row.grn_item_id,
+				row.qty,
+				row.unit_cost_base,
+			]),
+		).toEqual(
+			sales.flatMap((sale) => [
+				[
+					WarehouseMovementTypeEnum.SALE_RETURN,
+					sale.id,
+					sale.source_id,
+					sale.grn_item_id,
+					-sale.qty,
+					sale.unit_cost_base,
+				],
+				[
+					WarehouseMovementTypeEnum.WRITE_OFF,
+					null,
+					sale.source_id,
+					sale.grn_item_id,
+					sale.qty,
+					sale.unit_cost_base,
+				],
+			]),
+		);
+		expect(restoreLots).not.toHaveBeenCalled();
+		expect(restoreForOrder).not.toHaveBeenCalled();
+
+		// Each lot still holds what the ship left it: the loss adds nothing to the ledger sum
+		const added = new Map<number | null, number>();
+
+		for (const row of lost) {
+			added.set(
+				row.grn_item_id,
+				(added.get(row.grn_item_id) ?? 0) + Number(row.qty),
+			);
+		}
+
+		expect([...added.values()]).toEqual([0, 0]);
+	});
+
+	it('writes nothing off twice when the loss is announced again', async () => {
+		const { manager, ledger } = fakeManager(lines, [7]);
+
+		await service.shipDelivery(manager, move);
+		await service.loseDelivery(manager, move);
+		await service.loseDelivery(manager, move);
+
+		expect(
+			ledger.filter(
+				(row) =>
+					row.movement_type === WarehouseMovementTypeEnum.WRITE_OFF,
+			),
+		).toHaveLength(3);
+	});
+
+	it('writes nothing off for a parcel that never shipped', async () => {
+		const { manager, ledger } = fakeManager(lines, [7]);
+
+		await service.loseDelivery(manager, move);
+
+		expect(ledger).toEqual([]);
+		expect(manager.save).not.toHaveBeenCalled();
+	});
 });

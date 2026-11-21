@@ -50,6 +50,7 @@ import {
 	receiveReturnedStock,
 	restoreReturnedStock,
 	type ShippingStockMove,
+	writeOffLostStock,
 } from '@/features/shipping/shipping.hooks';
 import { getShippingRepository } from '@/features/shipping/shipping.repository';
 import {
@@ -948,13 +949,14 @@ export class ShippingService {
 	 * prepared or handed over before then could disagree with what is finally billed. Withdrawing
 	 * it (`failed`, `canceled`) stays open whatever the order's status.
 	 *
-	 * **Stock moves with two of the moves**, inside the same transaction and under a lock on the
-	 * row: into `shipped` the goods are drawn from the pickup warehouse's lots (`moveShippedStock`),
-	 * and from `shipped` into `returned` they are put back (`restoreReturnedStock`). A `return`
-	 * reaching `delivered` takes its goods back in by each line's `condition`
-	 * (`receiveReturnedStock`) - and is refused while a line has none. All are answered by
-	 * `warehouse-movement`; a shortage refuses the move with 409. `failed` after shipping moves
-	 * nothing - the goods did leave, and the status already says they were lost.
+	 * **Stock moves with the moves that carry goods**, inside the same transaction and under a lock
+	 * on the row: into `shipped` the goods are drawn from the pickup warehouse's lots
+	 * (`moveShippedStock`), from `shipped` into `returned` they are put back
+	 * (`restoreReturnedStock`), and from `shipped` into `failed` they are written off as lost
+	 * (`writeOffLostStock`) - off the shelf already, no longer counted as sold. A `return` reaching
+	 * `delivered` takes its goods back in by each line's `condition` (`receiveReturnedStock`) - and
+	 * is refused while a line has none. All are answered by `warehouse-movement`; a shortage refuses
+	 * the move with 409. `failed` before shipping drew nothing, so it writes nothing off.
 	 *
 	 * Every move is announced once written: a delivery arriving can complete the order it
 	 * belongs to, and a failed one stops being billable. A return received is announced a second
@@ -1045,6 +1047,13 @@ export class ShippingService {
 
 			if (newStatus === ShippingStatusEnum.RETURNED) {
 				await restoreReturnedStock(manager, move);
+			}
+
+			if (
+				newStatus === ShippingStatusEnum.FAILED &&
+				locked.status === ShippingStatusEnum.SHIPPED
+			) {
+				await writeOffLostStock(manager, move);
 			}
 
 			if (isReturnReceived) {

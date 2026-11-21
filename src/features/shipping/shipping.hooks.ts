@@ -9,10 +9,10 @@ import { createNotification, createQuery } from '@/helpers/hook.helper';
  *   (`invoice`). See `invoice.hooks.ts` for the invoice-first chain this step belongs to.
  * - **After the commit** - `notifyReturnReceived`, answered by `order-return`: a `return` movement
  *   reached its warehouse, so the return document it carries can move on and its refund be drafted.
- * - **Inside the status transaction** - `moveShippedStock`, `restoreReturnedStock` and
- *   `receiveReturnedStock`, answered by `warehouse-movement`: the goods leave or re-enter stock in
- *   the same transaction that says they moved, and a shortage refuses the move rather than leaving
- *   a shipped parcel nothing was drawn for.
+ * - **Inside the status transaction** - `moveShippedStock`, `restoreReturnedStock`,
+ *   `writeOffLostStock` and `receiveReturnedStock`, answered by `warehouse-movement`: the goods
+ *   leave, re-enter or are written off in the same transaction that says they moved, and a
+ *   shortage refuses the move rather than leaving a shipped parcel nothing was drawn for.
  *
  * Every answering feature depends on `shipping` and registers from its bootstrap. With one absent
  * its slot is empty: movements are billed with no stock kept, kept with nothing billed, or received
@@ -66,6 +66,19 @@ export const registerReturnedStockRestorer = returnedStockRestorer.register;
  * nothing without `warehouse-movement`.
  */
 export const restoreReturnedStock = returnedStockRestorer.ask;
+
+const lostStockWriter = createQuery<
+	[manager: EntityManager, move: ShippingStockMove],
+	void
+>(() => undefined);
+
+export const registerLostStockWriter = lostStockWriter.register;
+
+/**
+ * Books a shipped movement's goods as lost as it fails in transit (`shipped` -> `failed`) - they
+ * stay off the shelf, but are no longer counted as sold; nothing without `warehouse-movement`.
+ */
+export const writeOffLostStock = lostStockWriter.ask;
 
 const returnedStockReceiver = createQuery<
 	[manager: EntityManager, move: ShippingStockMove],
