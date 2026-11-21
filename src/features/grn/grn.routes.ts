@@ -16,6 +16,11 @@ export default async () => {
 				path: '',
 				method: 'post',
 			},
+			// Ahead of `read`: `/:id` would take `cost-over-floor` as an id and refuse it
+			costOverFloor: {
+				path: '/cost-over-floor',
+				method: 'get',
+			},
 			read: {
 				path: '/:id',
 				method: 'get',

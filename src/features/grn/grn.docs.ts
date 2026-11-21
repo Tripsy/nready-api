@@ -292,6 +292,37 @@ export const docs: Record<keyof typeof grnController, ApiInputDocumentation> = {
 			},
 		},
 	}),
+	costOverFloor: helperApiInputDocumentation({
+		description: 'List prices whose floor is at or under cost',
+		withBearerAuth: true,
+		success: {
+			status: 200,
+			description: 'Prices at or under cost',
+			dataSample: {
+				entries: [
+					{
+						variant_id: 92,
+						sku: 'TSH-SOL-M-BLK',
+						cost_price: 50.58,
+						currency: 'EUR',
+						sale_price: 14.8,
+						min_price: 9.9,
+						floor_base: 49.26,
+					},
+				],
+				pagination: { page: 1, limit: 10, total: 1 },
+			},
+		},
+		withAuthErrors: true,
+		withErrors: [422],
+		request: {
+			notes: "One entry per price row (variant and currency) whose floor - min_price, or sale_price when no min_price is set - is at or under the variant's cost_price, so a sale at that floor earns nothing or loses money. Both exclude VAT. cost_price is the weighted average set by confirmed receipts, in the base currency; floor_base is the floor converted to it at the newest exchange rate on or before today, and a currency with no published rate is left out. Live variants and products only. Always tightest first (floor_base - cost_price ascending). Nothing is ever repriced; the same list is mailed to the application address every morning while it is not empty",
+			query: {
+				page: { type: 'number', required: false },
+				limit: { type: 'number', required: false },
+			},
+		},
+	}),
 	statusUpdate: helperApiInputDocumentation({
 		description: 'Confirm or cancel a goods receipt',
 		withBearerAuth: true,

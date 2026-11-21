@@ -34,6 +34,11 @@ export const OrderByEnum = {
 	CREATED_AT: 'created_at',
 } as const;
 
+/** Cost-over-floor is always listed tightest first; the one value keeps `validateFind`'s shape honest. */
+export const CostOverFloorOrderByEnum = {
+	GAP: 'gap',
+} as const;
+
 /*
  * Mirror the column bounds, so an oversized figure answers 422 rather than the masked 500 the
  * database would raise: `numeric(12,2)` for quantities and unit cost, `numeric(10,6)` for the rate,
@@ -295,6 +300,19 @@ export class GrnValidator extends BaseValidator<typeof validatorMessages> {
 				{ required: false },
 			).default(false),
 		},
+	});
+
+	readonly costOverFloor = this.validateFind({
+		orderByEnum: CostOverFloorOrderByEnum,
+		defaultOrderBy: CostOverFloorOrderByEnum.GAP,
+
+		directionEnum: { ASC: OrderDirectionEnum.ASC },
+		defaultDirection: OrderDirectionEnum.ASC,
+
+		defaultLimit: Configuration.get('filter.limit'),
+		defaultPage: 1,
+
+		filterSchema: {},
 	});
 
 	readonly statusUpdate = z.object({

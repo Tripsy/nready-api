@@ -38,6 +38,39 @@ class GrnController extends BaseController {
 		res.status(201).json(res.locals.output);
 	});
 
+	/**
+	 * Price rows whose floor is at or under the variant's cost, tightest first - the list the
+	 * `cost-over-floor` cron mails. Gated as a `find` of receipts, which set that cost. Not
+	 * cached: a receipt, a cancel or a price edit moves it, and a stale gap is the one figure
+	 * this exists to make someone act on.
+	 */
+	public costOverFloor = asyncHandler(async (req: Request, res: Response) => {
+		this.policy.canFind(res.locals.auth);
+
+		const data = this.validate(
+			this.validator.costOverFloor,
+			req.query,
+			res,
+		);
+
+		const [entries, total] = await this.grnService.findCostOverFloor(
+			data.page,
+			data.limit,
+		);
+
+		res.locals.output.data({
+			entries: entries,
+			pagination: {
+				page: data.page,
+				limit: data.limit,
+				total: total,
+			},
+			query: data,
+		});
+
+		res.json(res.locals.output);
+	});
+
 	public read = asyncHandler(async (req: Request, res: Response) => {
 		this.policy.canRead(res.locals.auth);
 

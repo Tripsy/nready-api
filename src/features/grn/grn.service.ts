@@ -37,7 +37,7 @@ import {
 	type WarehouseService,
 	warehouseService,
 } from '@/features/warehouse/warehouse.service';
-import { formatDate } from '@/helpers/date.helper';
+import { createCurrentDate, formatDate } from '@/helpers/date.helper';
 import { roundMoney } from '@/helpers/shop.helper';
 import {
 	assertValidStatusTransition,
@@ -1254,7 +1254,100 @@ export class GrnService {
 			.pagination(data.page, data.limit)
 			.all(true);
 	}
+
+	/**
+	 * @description Used by the `cost-over-floor` cron and `GET /grns/cost-over-floor`
+	 *
+	 * Price rows whose floor no longer covers what the variant costs: `cost_price` at or above
+	 * `min_price`, or `sale_price` where no floor is set - a sale at the lowest price the row
+	 * allows would then earn nothing or lose money. Both figures exclude VAT. Tightest first (`floor_base - cost_price` ascending).
+	 *
+	 * Read from current state, not from a receipt: `cost_price` is re-averaged by every confirm
+	 * and cancel, and a price edit can open or close the gap just as well, so the report stands on
+	 * its own and the receipt path stays untouched.
+	 *
+	 * Cost is in the base currency, a price row in its own: the floor is brought to base at the
+	 * newest rate on or before today, the `exchangeRateService.getRateAsOf` rule. A row in a
+	 * currency with no published rate is left out rather than compared at a made-up rate.
+	 * Live variants and products only; one window count rides on the rows, as in `findLowStock`.
+	 */
+	public async findCostOverFloor(
+		page: number = 1,
+		limit: number = 100,
+		manager: EntityManager = dataSource.manager,
+	): Promise<[CostOverFloor[], number]> {
+		const rows = await manager.query<
+			(Record<keyof CostOverFloor, string> & { total: string })[]
+		>(
+			`
+				SELECT candidate.*, COUNT(*) OVER () AS total FROM (
+					SELECT
+						variant.id AS variant_id,
+						variant.sku,
+						variant.cost_price,
+						price.currency,
+						price.sale_price,
+						price.min_price,
+						ROUND(COALESCE(price.min_price, price.sale_price) * COALESCE(rate.rate, 1), 2) AS floor_base
+					FROM product_price price
+					INNER JOIN product_variant variant
+						ON variant.id = price.variant_id AND variant.deleted_at IS NULL
+					INNER JOIN product
+						ON product.id = variant.product_id AND product.deleted_at IS NULL
+					LEFT JOIN LATERAL (
+						SELECT exchange_rate.rate FROM exchange_rate
+						WHERE exchange_rate.currency = price.currency
+							AND exchange_rate.base_currency = $1
+							AND exchange_rate.rate_date <= $2
+						ORDER BY exchange_rate.rate_date DESC
+						LIMIT 1
+					) rate ON price.currency <> $1
+					WHERE price.deleted_at IS NULL
+						AND variant.cost_price IS NOT NULL
+						AND (price.currency = $1 OR rate.rate IS NOT NULL)
+				) candidate
+				WHERE candidate.cost_price >= candidate.floor_base
+				ORDER BY candidate.floor_base - candidate.cost_price ASC,
+					candidate.variant_id ASC, candidate.currency ASC
+				LIMIT $3 OFFSET $4
+			`,
+			[
+				resolveBaseCurrency(),
+				formatDate(createCurrentDate(true), 'default', {
+					strict: true,
+				}),
+				limit,
+				(page - 1) * limit,
+			],
+		);
+
+		// A page past the end reports 0 rather than the real total - the window count's price
+		return [
+			rows.map((row) => ({
+				variant_id: Number(row.variant_id),
+				sku: row.sku,
+				cost_price: Number(row.cost_price),
+				currency: row.currency,
+				sale_price: Number(row.sale_price),
+				min_price:
+					row.min_price === null ? null : Number(row.min_price),
+				floor_base: Number(row.floor_base),
+			})),
+			rows.length > 0 ? Number(rows[0].total) : 0,
+		];
+	}
 }
+
+/** One price row whose floor, in base currency, no longer covers the variant's cost. */
+export type CostOverFloor = {
+	variant_id: number;
+	sku: string;
+	cost_price: number; // Base currency
+	currency: string; // The price row's
+	sale_price: number;
+	min_price: number | null; // Null - `sale_price` stands in as the floor
+	floor_base: number; // `min_price ?? sale_price`, converted to base
+};
 
 export const grnService = new GrnService(
 	getGrnRepository(),
