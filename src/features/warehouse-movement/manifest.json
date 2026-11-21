@@ -1,8 +1,8 @@
 {
 	"name": "warehouse-movement",
-	"version": "1.3.0",
+	"version": "1.4.0",
 	"relativePath": "/warehouse-movement",
-	"entities": ["warehouse-movement", "stock-reservation"],
+	"entities": ["warehouse-movement", "stock-reservation", "stock-adjustment"],
 	"depends_on": [
 		"grn@^2.0.0",
 		"order@^2.5.0",

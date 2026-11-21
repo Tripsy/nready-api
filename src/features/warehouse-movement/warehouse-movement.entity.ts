@@ -22,7 +22,7 @@ export type WarehouseMovementType =
 export const WarehouseMovementSourceEnum = {
 	GRN_ITEM: 'grn_item',
 	SHIPPING_LINE: 'shipping_line',
-	ADJUSTMENT: 'adjustment', // Entered by hand, no document behind it
+	ADJUSTMENT: 'adjustment', // A `stock_adjustment` - a write-off or a count entered by hand
 } as const;
 
 export type WarehouseMovementSource =

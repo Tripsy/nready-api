@@ -29,6 +29,7 @@ import { termSeed } from '@/features/term/database/term.seed';
 import { userSeed } from '@/features/user/database/user.seed';
 import { vendorSeed } from '@/features/vendor/database/vendor.seed';
 import { warehouseSeed } from '@/features/warehouse/database/warehouse.seed';
+import { stockAdjustmentSeed } from '@/features/warehouse-movement/database/stock-adjustment.seed';
 import { warehouseMovementSeed } from '@/features/warehouse-movement/database/warehouse-movement.seed';
 
 /**
@@ -107,6 +108,10 @@ const seeds: readonly SeedDefinition[] = [
 	// movements through `ShippingService`, and allocates from the `RMA` series - so it follows
 	// `shippingSeed` and `documentSeriesSeed`
 	orderReturnSeed,
+	// Writes off and counts the receipts' lots through `StockAdjustmentService`, touching only sites
+	// with slack over every reservation - so it runs last, after every seed that promises or ships
+	// stock
+	stockAdjustmentSeed,
 ];
 
 function resolveSeeds(

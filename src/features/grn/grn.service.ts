@@ -104,6 +104,17 @@ export type LotPiece = {
 	unit_cost_base: number;
 };
 
+/** One lot of a variant at a warehouse, as a stock count reads it - see `lockSiteLots`. */
+export type SiteLot = {
+	grn_item_id: number;
+	/** What the lot arrived with - the most it may ever hold again. */
+	qty: number;
+	qty_remaining: number;
+	unit_cost_base: number;
+	/** The receiving day, as epoch milliseconds - the FIFO order. */
+	received_at: number;
+};
+
 /** What a confirm or cancel touched, for the caller to drop the caches of once it commits. */
 type StockChange = { productIds: number[] };
 
@@ -748,6 +759,123 @@ export class GrnService {
 				.setParameter('back', totals.get(id))
 				.where('id = :id', { id: id })
 				.execute();
+		}
+	}
+
+	/**
+	 * @description Used by `warehouse-movement` while posting a stock count, inside that transaction
+	 *
+	 * Every lot of one variant at one warehouse, on confirmed receipts, **emptied ones included** - a
+	 * count that finds more than recorded tops up a lot that has room, and a lot sold down to zero has
+	 * the most of it. Locked in id order, as `consumeLots` locks, so a count racing a shipment waits
+	 * rather than reading a figure the shipment is about to change. Returned oldest receipt first.
+	 */
+	public async lockSiteLots(
+		manager: EntityManager,
+		warehouseId: number,
+		variantId: number,
+	): Promise<SiteLot[]> {
+		const lots = await manager
+			.getRepository(GrnItemEntity)
+			.createQueryBuilder('item')
+			.innerJoin(
+				GrnEntity,
+				'grn',
+				'grn.id = item.grn_id AND grn.deleted_at IS NULL AND grn.status = :status',
+				{ status: GrnStatusEnum.CONFIRMED },
+			)
+			.select([
+				'item.id',
+				'item.qty',
+				'item.qty_remaining',
+				'item.unit_cost_base',
+			])
+			.addSelect('grn.received_at', 'received_at')
+			.where('grn.warehouse_id = :warehouseId', {
+				warehouseId: warehouseId,
+			})
+			.andWhere('item.variant_id = :variantId', { variantId: variantId })
+			.orderBy('item.id', 'ASC')
+			.setLock('pessimistic_write', undefined, ['item'])
+			.getRawAndEntities();
+
+		const receivedAt = new Map(
+			lots.raw.map((row: { item_id: number; received_at: Date }) => [
+				Number(row.item_id),
+				new Date(row.received_at).getTime(),
+			]),
+		);
+
+		return lots.entities
+			.map((lot) => ({
+				grn_item_id: lot.id,
+				qty: Number(lot.qty),
+				qty_remaining: Number(lot.qty_remaining),
+				unit_cost_base: Number(lot.unit_cost_base),
+				received_at: receivedAt.get(lot.id) ?? 0,
+			}))
+			.sort(
+				(a, b) =>
+					a.received_at - b.received_at ||
+					a.grn_item_id - b.grn_item_id,
+			);
+	}
+
+	/**
+	 * @description Used by `warehouse-movement` to undo units it put into named lots, inside that
+	 * transaction
+	 *
+	 * The counterpart of `restoreLots`: takes units back out of the lots they were added to, never
+	 * from any other - the ledger rows being reversed name those lots, and drawing from a different
+	 * one would move the cost. Refused with 409 when a lot no longer holds them, because they were
+	 * sold or drawn since. Locked in id order.
+	 */
+	public async withdrawFromLots(
+		manager: EntityManager,
+		pieces: readonly { grn_item_id: number; qty: number }[],
+	): Promise<void> {
+		const totals = new Map<number, number>();
+
+		for (const piece of pieces) {
+			totals.set(
+				piece.grn_item_id,
+				roundMoney((totals.get(piece.grn_item_id) ?? 0) + piece.qty),
+			);
+		}
+
+		const ids = [...totals.keys()].sort((a, b) => a - b);
+
+		if (ids.length === 0) {
+			return;
+		}
+
+		const lots = await manager.getRepository(GrnItemEntity).find({
+			select: { id: true, variant_id: true, qty_remaining: true },
+			where: { id: In(ids) },
+			order: { id: 'ASC' },
+			lock: { mode: 'pessimistic_write' },
+		});
+
+		for (const lot of lots) {
+			const wanted = totals.get(lot.id) ?? 0;
+			const remaining = Number(lot.qty_remaining);
+
+			if (remaining < wanted) {
+				throw new CustomError(
+					409,
+					lang('grn.error.lot_drawn_since', {
+						variant_id: String(lot.variant_id),
+						remaining: String(remaining),
+						requested: String(wanted),
+					}),
+				);
+			}
+
+			await manager.update(
+				GrnItemEntity,
+				{ id: lot.id },
+				{ qty_remaining: roundMoney(remaining - wanted) },
+			);
 		}
 	}
 

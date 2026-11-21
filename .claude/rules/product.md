@@ -533,6 +533,18 @@ What is still open is in TODO.md. Two things settled here because they touch the
   automatically; the return has to ask - it does, through `shipping_line.condition`, and a damaged
   line is written off on its lot as it is received (`shipping.md` §7). Quarantine is not built.
 
+**Stock changed by hand is a `stock_adjustment`** (`warehouse-movement`, `/stock-adjustments`):
+units added or removed at one warehouse, a positive quantity plus a direction, with a reason that
+has to fit it (`STOCK_ADJUSTMENT_REASONS` - remove: audit / damaged / expired / lost / theft /
+sample; add: audit / found / sample_returned / return; a database check holds the same lists). The
+direction is the sign of `qty`, never a column. Removing draws oldest lot first through
+`grnService.consumeLots`, the draw a shipment makes; adding tops up lots with room, newest receipt
+first (`planTopUp`), refused with 409 past that room - a lot never holds more than it arrived with,
+so extra goods come in on a GRN. A loss is posted as `write_off`, an audit and every addition as
+`adjustment`, all with `source_type = 'adjustment'`, `source_id` = the adjustment. Reversing posts
+one opposing movement per row and puts the units back; reservations are never checked, a removal
+records a fact.
+
 **The storefront states a level, never a count.** `GET /public/products/:id/stock`
 (`product-stock.service.ts`) answers `in_stock` / `low_stock` (at or under the variant's own `low_stock_threshold`,
 the comparison the cart makes too; no threshold, never low) / `backorder` / `out_of_stock`, or `null` for a variant that keeps no stock. It asks

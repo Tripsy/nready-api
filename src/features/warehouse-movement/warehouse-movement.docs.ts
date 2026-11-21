@@ -30,7 +30,7 @@ const entitySample = {
 };
 
 const ledgerNote =
-	'Append-only: rows are posted by the documents that move stock - a confirmed goods receipt posts a receipt per line, canceling it posts an adjustment per line with reversal_of_id pointing at the receipt; a delivery shipping posts a sale per lot drawn (oldest lot first, source shipping_line), one coming back undelivered a sale_return reversing each, and a client return arriving a sale_return per lot it goes back into (source the return line, followed by a write_off on the same lot when the line is damaged) - and never changed. qty is signed: positive brings stock in, negative takes it out. unit_cost_base is the lot cost in the base currency. The audit trail, not the balance: on-hand is grn_item.qty_remaining';
+	'Append-only: rows are posted by the documents that move stock - a confirmed goods receipt posts a receipt per line, canceling it posts an adjustment per line with reversal_of_id pointing at the receipt; a delivery shipping posts a sale per lot drawn (oldest lot first, source shipping_line), one coming back undelivered a sale_return reversing each, a client return arriving a sale_return per lot it goes back into (source the return line, followed by a write_off on the same lot when the line is damaged), and stock added or removed by hand an adjustment per lot - a write_off for a loss (source adjustment, the /stock-adjustments row) - and never changed. qty is signed: positive brings stock in, negative takes it out. unit_cost_base is the lot cost in the base currency. The audit trail, not the balance: on-hand is grn_item.qty_remaining';
 
 export const docs: Record<
 	keyof typeof warehouseMovementController,
