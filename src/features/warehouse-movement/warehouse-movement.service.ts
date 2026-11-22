@@ -2,9 +2,10 @@ import { type EntityManager, In, IsNull, Not } from 'typeorm';
 import dataSource from '@/config/data-source.config';
 import { lang } from '@/config/message.setup';
 import { CustomError } from '@/exceptions';
-import { GrnStatusEnum } from '@/features/grn/grn.entity';
+import GrnEntity, { GrnStatusEnum } from '@/features/grn/grn.entity';
 import type { LotMovement, StockReceipt } from '@/features/grn/grn.hooks';
 import { grnService } from '@/features/grn/grn.service';
+import GrnItemEntity from '@/features/grn/grn-item.entity';
 import ProductVariantEntity from '@/features/product/product-variant.entity';
 import ShippingEntity, {
 	ShippingScopeEnum,
@@ -16,6 +17,7 @@ import ShippingLineEntity, {
 } from '@/features/shipping/shipping-line.entity';
 import { stockReservationService } from '@/features/warehouse-movement/stock-reservation.service';
 import WarehouseMovementEntity, {
+	type WarehouseMovementSource,
 	WarehouseMovementSourceEnum,
 	WarehouseMovementTypeEnum,
 } from '@/features/warehouse-movement/warehouse-movement.entity';
@@ -41,6 +43,18 @@ const ENTRY_COLUMNS = [
 ];
 
 const WAREHOUSE_COLUMNS = ['warehouse.id', 'warehouse.code', 'warehouse.name'];
+
+/**
+ * The document a movement's source line belongs to - what a reader opens from the ledger.
+ * `source_id` names a line (`grn_item`, `shipping_line`) or the adjustment itself, so the line
+ * kinds resolve to their parent here. `reference` is what the document is cited by: the GRN
+ * number, the movement's tracking number, none for an adjustment. Null when the source row has
+ * gone since - the ledger keeps no foreign key to it.
+ */
+export type MovementSourceDocument = {
+	id: EntityId;
+	reference: string | null;
+} | null;
 
 // Joined LEFT, so a movement is never dropped from the ledger for what its variant became since
 const VARIANT_COLUMNS = ['variant.id', 'variant.sku', 'variant.product_id'];
@@ -946,10 +960,10 @@ export class WarehouseMovementService {
 	}
 
 	/** @description Used in `find` method from controller */
-	public findByFilter(
+	public async findByFilter(
 		data: ValidatorOutput<WarehouseMovementValidator, 'find'>,
 	) {
-		return this.createLedgerQuery()
+		const [entries, total] = await this.createLedgerQuery()
 			.filterBy('warehouse_id', data.filter.warehouse_id)
 			.filterBy('variant_id', data.filter.variant_id)
 			.filterBy('grn_item_id', data.filter.grn_item_id)
@@ -965,8 +979,97 @@ export class WarehouseMovementService {
 			.orderBy(data.order_by, data.direction)
 			.pagination(data.page, data.limit)
 			.all(true);
+
+		return [await this.withSourceDocuments(entries), total] as const;
+	}
+
+	/**
+	 * Attaches `source_document` to each row. One query per line kind on the page, not per row:
+	 * a page holds at most `limit` source ids, and each lookup is a primary-key `IN` joined to
+	 * its parent.
+	 */
+	private async withSourceDocuments(
+		entries: WarehouseMovementEntity[],
+	): Promise<
+		(WarehouseMovementEntity & {
+			source_document: MovementSourceDocument;
+		})[]
+	> {
+		const idsOf = (sourceType: WarehouseMovementSource): EntityId[] => [
+			...new Set(
+				entries
+					.filter((entry) => entry.source_type === sourceType)
+					.map((entry) => entry.source_id)
+					.filter((id): id is EntityId => id !== null),
+			),
+		];
+
+		const grnItemIds = idsOf(WarehouseMovementSourceEnum.GRN_ITEM);
+		const shippingLineIds = idsOf(
+			WarehouseMovementSourceEnum.SHIPPING_LINE,
+		);
+
+		const [grnItems, shippingLines] = await Promise.all([
+			grnItemIds.length
+				? dataSource
+						.getRepository(GrnItemEntity)
+						.createQueryBuilder('grn_item')
+						.innerJoin(GrnEntity, 'grn', 'grn.id = grn_item.grn_id')
+						.select('grn_item.id', 'line_id')
+						.addSelect('grn.id', 'document_id')
+						.addSelect(
+							"grn.ref_code || '-' || grn.ref_number",
+							'reference',
+						)
+						.where('grn_item.id IN (:...ids)', { ids: grnItemIds })
+						.getRawMany<RawSourceDocument>()
+				: [],
+			shippingLineIds.length
+				? dataSource
+						.getRepository(ShippingLineEntity)
+						.createQueryBuilder('shipping_line')
+						.innerJoin(
+							ShippingEntity,
+							'shipping',
+							'shipping.id = shipping_line.shipping_id',
+						)
+						.select('shipping_line.id', 'line_id')
+						.addSelect('shipping.id', 'document_id')
+						.addSelect('shipping.tracking_number', 'reference')
+						.where('shipping_line.id IN (:...ids)', {
+							ids: shippingLineIds,
+						})
+						.getRawMany<RawSourceDocument>()
+				: [],
+		]);
+
+		const documents = new Map<EntityId, MovementSourceDocument>(
+			[...grnItems, ...shippingLines].map((row) => [
+				row.line_id,
+				{ id: row.document_id, reference: row.reference },
+			]),
+		);
+
+		return entries.map((entry) => {
+			let sourceDocument: MovementSourceDocument = null;
+
+			if (entry.source_id) {
+				sourceDocument =
+					entry.source_type === WarehouseMovementSourceEnum.ADJUSTMENT
+						? { id: entry.source_id, reference: null }
+						: (documents.get(entry.source_id) ?? null);
+			}
+
+			return Object.assign(entry, { source_document: sourceDocument });
+		});
 	}
 }
+
+type RawSourceDocument = {
+	line_id: EntityId;
+	document_id: EntityId;
+	reference: string | null;
+};
 
 export const warehouseMovementService = new WarehouseMovementService(
 	getWarehouseMovementRepository(),

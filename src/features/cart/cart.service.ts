@@ -1419,6 +1419,9 @@ export class CartService {
 				'created_at',
 				'updated_at',
 			])
+			// The shopper's name for the dashboard listing - the id alone names nobody to a reader
+			.join('cart.user', 'user', 'LEFT')
+			.addSelect(['user.id', 'user.name'])
 			.filterBy('user_id', data.filter.user_id)
 			.filterBy('currency', data.filter.currency)
 			.orderBy(data.order_by, data.direction)
