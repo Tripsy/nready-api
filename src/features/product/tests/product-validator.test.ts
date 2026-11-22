@@ -11,7 +11,7 @@ const productValidator = new ProductValidator('product');
 
 type ValidatorMethod = keyof Pick<
 	typeof productValidator,
-	'create' | 'update' | 'find' | 'publicFind' | 'publicRead'
+	'create' | 'update' | 'find' | 'publicFind' | 'publicRead' | 'publicStock'
 >;
 
 const validator = 'ProductValidator';
@@ -21,6 +21,7 @@ const listSchemas: ValidatorMethod[] = [
 	'find',
 	'publicFind',
 	'publicRead',
+	'publicStock',
 ];
 
 /** The valid create payload, with one branch swapped for the case under test. */

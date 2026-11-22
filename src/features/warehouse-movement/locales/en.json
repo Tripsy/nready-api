@@ -1,0 +1,32 @@
+{
+	"validation": {
+		"invalid_warehouse_id": "Warehouse ID is invalid",
+		"invalid_variant_id": "Variant ID is invalid",
+		"invalid_grn_item_id": "Receipt line ID is invalid",
+		"invalid_movement_type": "Movement type is invalid",
+		"invalid_source_type": "Movement source type is invalid",
+		"invalid_source_id": "Movement source ID is invalid",
+		"invalid_reversal_of_id": "Reversed movement ID is invalid",
+		"invalid_qty": "Quantity must be greater than 0, with at most 2 decimals",
+		"invalid_reason": "Adjustment reason is invalid",
+		"invalid_direction": "Pick whether the units are added or removed",
+		"reason_direction": "This reason does not apply to that direction"
+	},
+	"error": {
+		"append_only": "Stock movements are never removed - post a reversing movement instead",
+		"insufficient_stock": "Only {{available}} of {{sku}} left in stock - {{requested}} requested",
+		"return_not_from_warehouse": "{{remaining}} of variant #{{variant_id}} did not leave warehouse #{{warehouse_id}} for this order - receive the return at the warehouse it shipped from",
+		"adjustment_append_only": "Stock adjustments are never removed - reverse one instead",
+		"adjustment_not_found": "Stock adjustment not found",
+		"warehouse_not_found": "Warehouse #{{warehouse_id}} does not exist",
+		"warehouse_inactive": "Warehouse #{{warehouse_id}} is inactive - its stock is not counted, so it cannot be adjusted",
+		"variant_not_found": "Variant #{{variant_id}} does not exist or was removed",
+		"variant_untracked": "Variant #{{variant_id}} does not track stock, so there is nothing to adjust",
+		"no_room_for_surplus": "Adding {{surplus}}, but this warehouse's lots have room for only {{room}} - a lot never holds more than it arrived with; record the rest on a goods receipt",
+		"adjustment_reversed": "This stock adjustment is already reversed"
+	},
+	"success": {
+		"reverse": "Stock adjustment reversed",
+		"create": "Stock adjusted"
+	}
+}

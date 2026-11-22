@@ -395,6 +395,8 @@ type ControllerDeleteSingleType = {
 	route: string;
 	policy: PolicyAbstract;
 	service: DeleteSingleService;
+	/** Spies the success case needs beyond the write itself - e.g. a controller that loads the row first. */
+	arrangeSuccess?: () => void;
 };
 
 export function testControllerDeleteSingle(config: ControllerDeleteSingleType) {
@@ -419,6 +421,7 @@ export function testControllerDeleteSingle(config: ControllerDeleteSingleType) {
 
 		it('should return success', async () => {
 			authorizedSpy(config.policy);
+			config.arrangeSuccess?.();
 
 			jest.spyOn(config.service, 'delete').mockResolvedValue();
 
@@ -441,6 +444,8 @@ type ControllerRestoreSingleType = {
 	route: string;
 	policy: PolicyAbstract;
 	service: RestoreSingleService;
+	/** Spies the success case needs beyond the write itself - e.g. a controller that loads the row first. */
+	arrangeSuccess?: () => void;
 };
 
 export function testControllerRestoreSingle(
@@ -467,6 +472,7 @@ export function testControllerRestoreSingle(
 
 		it('should return success', async () => {
 			authorizedSpy(config.policy);
+			config.arrangeSuccess?.();
 
 			jest.spyOn(config.service, 'restore').mockResolvedValue();
 

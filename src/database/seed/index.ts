@@ -15,9 +15,11 @@ import { commentSeed } from '@/features/comment/database/comment.seed';
 import { complaintSeed } from '@/features/complaint/database/complaint.seed';
 import { discountSeed } from '@/features/discount/database/discount.seed';
 import { documentSeriesSeed } from '@/features/document-series/database/document-series.seed';
+import { grnSeed } from '@/features/grn/database/grn.seed';
 import { imageSeed } from '@/features/image/database/image.seed';
 import { invoiceSeed } from '@/features/invoice/database/invoice.seed';
 import { orderSeed } from '@/features/order/database/order.seed';
+import { orderReturnSeed } from '@/features/order-return/database/order-return.seed';
 import { placeSeed } from '@/features/place/database/place.seed';
 import { productSeed } from '@/features/product/database/product.seed';
 import { ratingSeed } from '@/features/rating/database/rating.seed';
@@ -27,6 +29,8 @@ import { termSeed } from '@/features/term/database/term.seed';
 import { userSeed } from '@/features/user/database/user.seed';
 import { vendorSeed } from '@/features/vendor/database/vendor.seed';
 import { warehouseSeed } from '@/features/warehouse/database/warehouse.seed';
+import { stockAdjustmentSeed } from '@/features/warehouse-movement/database/stock-adjustment.seed';
+import { warehouseMovementSeed } from '@/features/warehouse-movement/database/warehouse-movement.seed';
 
 /**
  * Declaration order is the foreign-key order and is not arbitrary: `place → address`, and
@@ -57,6 +61,9 @@ const seeds: readonly SeedDefinition[] = [
 	// Reads category, term, brand ids; seeds the category attribute definitions
 	// its products answer to before the products themselves
 	productSeed,
+	// Reads warehouse, supplier and stock-tracked variant ids; allocates its numbers from the `NIR`
+	// series, and confirming re-averages `product_variant.cost_price` - so it follows `productSeed`
+	grnSeed,
 	discountSeed,
 	// Reads discount ids alongside client, category and brand ids
 	discountTargetSeed,
@@ -79,6 +86,10 @@ const seeds: readonly SeedDefinition[] = [
 	// Reads orders with their lines, plus warehouse, carrier and client address ids - so it has to
 	// follow `orderSeed`, `warehouseSeed` and `clientAddressSeed`
 	shippingSeed,
+	// Reads the receipts `grnSeed` confirmed and canceled and the orders `orderSeed` placed - seeds
+	// run without the bootstraps that would have posted their movements and reservations, so both
+	// are backfilled
+	warehouseMovementSeed,
 	// Its general movements have no parents, but the payment request it raises per pending order
 	// is priced off that order's lines *and* its delivery - so it follows `orderSeed` and
 	// `shippingSeed`, and still precedes the `invoiceSeed` that settles against its movements
@@ -93,6 +104,14 @@ const seeds: readonly SeedDefinition[] = [
 	// Reads product, product variant and user ids, and the completed orders a verified review
 	// names - so it has to follow `orderSeed`
 	reviewSeed,
+	// Reads the deliveries `shippingSeed` marked delivered and warehouse ids, writes return
+	// movements through `ShippingService`, and allocates from the `RMA` series - so it follows
+	// `shippingSeed` and `documentSeriesSeed`
+	orderReturnSeed,
+	// Writes off and counts the receipts' lots through `StockAdjustmentService`, touching only sites
+	// with slack over every reservation - so it runs last, after every seed that promises or ships
+	// stock
+	stockAdjustmentSeed,
 ];
 
 function resolveSeeds(

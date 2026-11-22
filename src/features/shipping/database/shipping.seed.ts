@@ -6,6 +6,14 @@ import {
 	type SeedSummary,
 } from '@/database/seed/seed.helper';
 import { runSeedFile } from '@/database/seed/seed.runner';
+import {
+	adjust,
+	available,
+	canFill,
+	loadSiteStock,
+	loadTrackedVariantIds,
+	type SiteStock,
+} from '@/database/seed/stock.seed-helper';
 import { addressService } from '@/features/address/address.service';
 import CarrierEntity from '@/features/carrier/carrier.entity';
 import ClientAddressEntity, {
@@ -68,6 +76,10 @@ function shippingStatusFor(orderStatus: OrderStatus): ShippingStatus {
  * Both ends of a dispatched row are frozen through the same services the shipped transition uses,
  * so the frozen copies in the demo data are the real thing rather than hand-built objects that
  * could drift from what the application writes.
+ *
+ * **Each consignment leaves from a site that holds its goods** (`pickSite`) - a pending delivery
+ * picking from empty shelves answers 409 the moment anyone tries to ship it. An order is split only
+ * when two different sites can each send their half; otherwise it travels whole.
  */
 export const shippingSeed: SeedDefinition = {
 	name: 'shipping',
@@ -117,6 +129,12 @@ export const shippingSeed: SeedDefinition = {
 		}
 
 		const carrierIds = carriers.map((carrier) => carrier.id);
+
+		const [stock, tracked] = await Promise.all([
+			loadSiteStock(manager),
+			loadTrackedVariantIds(manager),
+		]);
+		const warehouseIds = warehouses.map((warehouse) => warehouse.id);
 
 		const missing = Math.max(0, TARGET - tableTotal);
 
@@ -172,37 +190,67 @@ export const shippingSeed: SeedDefinition = {
 				orderLines.length > 1 &&
 				warehouses.length > 1;
 
-			const groups = isSplit
-				? [
-						orderLines.slice(0, Math.ceil(orderLines.length / 2)),
-						orderLines.slice(Math.ceil(orderLines.length / 2)),
-					]
-				: [orderLines];
+			const halves = [
+				orderLines.slice(0, Math.ceil(orderLines.length / 2)),
+				orderLines.slice(Math.ceil(orderLines.length / 2)),
+			];
+			const firstSite = isSplit
+				? pickSite(stock, warehouseIds, halves[0], tracked, [])
+				: null;
+			const secondSite =
+				firstSite !== null
+					? pickSite(stock, warehouseIds, halves[1], tracked, [
+							firstSite,
+						])
+					: null;
 
-			for (const [groupIndex, group] of groups.entries()) {
-				const method = randomPick(random, [
+			// Split only across two sites that can each send their half in full
+			const plan: { lines: OrderLineEntity[]; site: number }[] =
+				firstSite !== null && secondSite !== null
+					? [
+							{ lines: halves[0], site: firstSite },
+							{ lines: halves[1], site: secondSite },
+						]
+					: [
+							{
+								lines: orderLines,
+								site:
+									pickSite(
+										stock,
+										warehouseIds,
+										orderLines,
+										tracked,
+										[],
+									) ?? warehouseIds[0],
+							},
+						];
+
+			for (const { lines: group, site } of plan) {
+				const rolled = randomPick(random, [
 					ShippingMethodEnum.COURIER,
 					ShippingMethodEnum.COURIER,
 					ShippingMethodEnum.SELF_PICKUP,
 				]);
 
 				/*
-				 * A pickup is collected from the warehouse, so it has no destination address - but a
-				 * delivery needs one, and the scope's CHECK plus the service both require it. An
-				 * order whose client filed no delivery address therefore ships as a pickup.
+				 * A courier delivery goes to the client's delivery address. A self pickup is collected
+				 * at the warehouse and has no destination (`resolveScopeColumns`), so it is also what
+				 * an order whose client filed no delivery address ships as.
 				 */
+				const method =
+					rolled === ShippingMethodEnum.COURIER && deliveryAddress
+						? ShippingMethodEnum.COURIER
+						: ShippingMethodEnum.SELF_PICKUP;
 				const destinationAddressId =
 					method === ShippingMethodEnum.COURIER
 						? (deliveryAddress?.id ?? null)
 						: null;
 
-				if (!destinationAddressId) {
-					continue;
-				}
-
 				// Two consignments of one order leave from different sites, which is the whole
 				// reason the warehouse sits on the movement rather than on the order
-				const warehouse = warehouses[groupIndex % warehouses.length];
+				const warehouse =
+					warehouses.find((candidate) => candidate.id === site) ??
+					warehouses[0];
 
 				const hasLeft =
 					status === ShippingStatusEnum.DELIVERED ||
@@ -217,13 +265,16 @@ export const shippingSeed: SeedDefinition = {
 						pickup_data: hasLeft
 							? await addressService.getSnapshotById(
 									warehouse.address_id,
+									manager,
 								)
 							: null,
-						destination_data: hasLeft
-							? await clientAddressService.getSnapshotById(
-									destinationAddressId,
-								)
-							: null,
+						destination_data:
+							hasLeft && destinationAddressId
+								? await clientAddressService.getSnapshotById(
+										destinationAddressId,
+										manager,
+									)
+								: null,
 						carrier_id:
 							carrierIds.length > 0
 								? randomPick(random, carrierIds)
@@ -245,6 +296,21 @@ export const shippingSeed: SeedDefinition = {
 						notes: null,
 					}),
 				);
+
+				// What this consignment takes off the site, so the next one plans against the rest; a
+				// failed one never left, so it holds nothing
+				if (stock && status !== ShippingStatusEnum.FAILED) {
+					for (const line of group) {
+						if (tracked.has(line.variant_id)) {
+							adjust(
+								stock,
+								warehouse.id,
+								line.variant_id,
+								-Number(line.quantity),
+							);
+						}
+					}
+				}
 
 				await lineRepository.save(
 					group.map((line) =>
@@ -271,6 +337,41 @@ export const shippingSeed: SeedDefinition = {
 		};
 	},
 };
+
+/**
+ * The site a consignment leaves from: one that can send every stock-tracked line in full, the one
+ * holding the most of them when several can, lowest id on a tie. Null when none can - the caller
+ * then keeps the order whole. Untracked goods do not weigh in. With stock not tracked at all
+ * (`stock` null) the first site that is not excluded answers.
+ */
+function pickSite(
+	stock: SiteStock | null,
+	warehouseIds: readonly number[],
+	lines: readonly OrderLineEntity[],
+	tracked: ReadonlySet<number>,
+	exclude: readonly number[],
+): number | null {
+	const open = warehouseIds.filter((id) => !exclude.includes(id));
+
+	if (!stock) {
+		return open[0] ?? null;
+	}
+
+	const held = (warehouseId: number): number =>
+		lines
+			.filter((line) => tracked.has(line.variant_id))
+			.reduce(
+				(total, line) =>
+					total + available(stock, warehouseId, line.variant_id),
+				0,
+			);
+
+	return (
+		open
+			.filter((id) => canFill(stock, id, lines, tracked))
+			.sort((a, b) => held(b) - held(a) || a - b)[0] ?? null
+	);
+}
 
 if (isDirectRun(import.meta.url)) {
 	await runSeedFile(shippingSeed);

@@ -865,6 +865,10 @@ export class ProductValidator extends BaseValidator<typeof validatorMessages> {
 		},
 	});
 
+	readonly publicStock = z.object({
+		id: this.validateId(this.getMessage('invalid_id', { name: 'id' })),
+	});
+
 	readonly publicRead = z.object({
 		slug: this.validateString(this.getMessage('invalid_slug')).transform(
 			(value) => value.trim().toLowerCase(),

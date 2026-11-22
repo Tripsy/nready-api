@@ -19,5 +19,5 @@
 		"cash-flow",
 		"document-series"
 	],
-	"required_by": ["subscription", "order-settlement"]
+	"required_by": ["subscription", "order-settlement", "order-return"]
 }

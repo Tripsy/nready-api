@@ -87,9 +87,11 @@ register:
 
 ## Chain
 
-- **Checkout** writes order + first delivery + a `pending` `cash_flow` (filed under the client and
+- **Checkout** writes order + its deliveries + a `pending` `cash_flow` (filed under the client and
   the order via `operational_record`), then `notifyOrderPlaced` - which bills nothing. The order
-  stays `pending`, unbilled and editable.
+  stays `pending`, unbilled and editable. A split checkout (several warehouses, `shipping.md` §5)
+  prices **only the first delivery** - the rest are `price = 0`, so `findBillable` never bills them
+  and the payable total stays the one fee the checkout screen showed.
 - **Editing a pending order's lines** restates its still-`pending` payment request at the new
   total, inside the line-replace transaction: `syncOrderPayment` (`order.hooks.ts`, in-transaction
   query) answered by `cart.bootstrap.ts` → `CashFlowService.restatePendingForOrder`. A captured
@@ -151,5 +153,6 @@ register:
   naming the incoming movement it returns (`parent_id`, newest allocation first), completed
   through `completeWithin` (so booked on the ledger as `refund -`) and allocated to the reversal.
   An unpaid original moves no money. Always refunded, never offset against the client's other
-  documents. FIFO and order settlement read
+  documents. A received customer return drafts its reversals automatically (`order-return`,
+  `shipping.md` §7; the delivery fee by value, when `refund_shipping`) - drafted, never issued, so the refund stays an operator's act. FIFO and order settlement read
   originals only (`is_reversal = false`).

@@ -35,7 +35,7 @@ export const errorHandler = (
 	err: Error,
 	req: Request,
 	res: Response,
-	_next: NextFunction,
+	next: NextFunction,
 ): void => {
 	const status = err instanceof CustomError ? err.statusCode : 500;
 
@@ -74,6 +74,18 @@ export const errorHandler = (
 				`${err.name}: ${err.message}`,
 			);
 		}
+	}
+
+	/*
+	 * A response is already on the wire - a handler that failed after
+	 * `requestTimeoutMiddleware` answered, or one that failed mid-stream. A second envelope
+	 * would throw ERR_HTTP_HEADERS_SENT; Express's default handler closes the connection
+	 * instead. The error is still logged above.
+	 */
+	if (res.headersSent) {
+		next(err);
+
+		return;
 	}
 
 	res.status(status);

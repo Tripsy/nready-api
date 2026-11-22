@@ -1,0 +1,61 @@
+{
+	"validation": {
+		"invalid_order_id": "Invalid order",
+		"invalid_reason": "Invalid return reason",
+		"invalid_customer_notes": "Invalid message",
+		"invalid_response": "Invalid response",
+		"invalid_lines": "Name at least one item to return",
+		"duplicate_variant": "An item can appear only once per return - state its quantity instead",
+		"invalid_variant_id": "Invalid variant",
+		"invalid_quantity": "Invalid quantity",
+		"invalid_warehouse_id": "Invalid warehouse",
+		"invalid_client_address_id": "Invalid pickup address",
+		"invalid_carrier_id": "Invalid carrier",
+		"invalid_method": "Invalid shipping method",
+		"invalid_price": "Invalid price",
+		"invalid_vat_rate": "Invalid VAT rate",
+		"price_vat_pair": "State the price and the VAT rate together, or neither for a free return"
+	},
+	"error": {
+		"not_found": "Return not found",
+		"invalid_line": "Variant #{{variant_id}} is not on this order",
+		"over_returnable": "Only {{remaining}} of variant #{{variant_id}} were delivered and are not already being returned",
+		"order_not_returnable": "Only a confirmed or completed order can have goods returned",
+		"window_closed": "Returns can be requested up to {{days}} days after delivery - this order is past that",
+		"status_changed": "The return changed status while it was being edited - reload it and try again",
+		"decided_locked": "The return has been decided - only the notes and the response can still change",
+		"return_in_transit": "The goods are already on their way back - the return can no longer be canceled",
+		"refund_not_received": "A refund is drafted once the returned goods have arrived",
+		"refund_already_raised": "A refund has already been drafted for this return",
+		"nothing_to_refund": "Nothing to refund - no issued invoice of the order billed these goods, or they were already reversed",
+		"delete_locked": "An approved return has moved goods and money - it cannot be deleted",
+		"wrong_warehouse": "Variant #{{variant_id}} was not delivered from warehouse #{{warehouse_id}} - a stocked item goes back to the warehouse it left from",
+		"destination_required": "None of these goods left from a warehouse on a delivered delivery - state the warehouse they go back to",
+		"cancel_decided": "The return has already been decided and can no longer be withdrawn",
+		"refund_shipping_locked": "The refund has already been drafted, or the return was rejected or canceled - the delivery fee can no longer be added to or taken out of it"
+	},
+	"label": {
+		"movement_notes": "Return {{reference}}",
+		"reversal_notes": "Goods returned - {{reference}}",
+		"fee_reversal_notes": "Delivery fee refunded - {{reference}}"
+	},
+	"success": {
+		"create": "Return created successfully",
+		"request": "Return requested - we will let you know once it is reviewed",
+		"update": "Return updated successfully",
+		"delete": "Return deleted successfully",
+		"restore": "Return restored successfully",
+		"approve": "Return approved - the return shipment was created",
+		"refund": "Refund drafted - issue the reversal to pay it back",
+		"status_update": "Return status updated successfully",
+		"cancel": "Return request withdrawn"
+	},
+	"history": {
+		"created": "Return #{{entity_id}} created by user #{{auth_id}}",
+		"updated": "Return #{{entity_id}} updated by user #{{auth_id}}",
+		"deleted": "Return(s) {{entity_ids}} marked as deleted by user #{{auth_id}}",
+		"removed": "Return(s) {{entity_ids}} removed by user #{{auth_id}}",
+		"restored": "Return(s) {{entity_ids}} restored by user #{{auth_id}}",
+		"status": "Return #{{entity_id}} updated from {{oldStatus}} to {{newStatus}} by user #{{auth_id}}"
+	}
+}

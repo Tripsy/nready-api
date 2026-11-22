@@ -115,6 +115,7 @@ class ProductVariantService {
 			.filterBy('product.type', data.filter.type)
 			.filterBy('product.composition', data.filter.composition)
 			.filterBy('product.brand_id', data.filter.brand_id)
+			.filterBy('product_variant.track_stock', data.filter.track_stock)
 			.filterByTerm(data.filter.term)
 			.filterBySellable(data.filter.is_sellable);
 

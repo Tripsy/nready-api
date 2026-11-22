@@ -2,7 +2,7 @@
 paths:
   - "src/features/product/**"
   - "src/features/order/order-line.entity.ts"
-  - "src/features/order-shipping/**"
+  - "src/features/shipping/shipping-line.entity.ts"
   - "src/features/cart/**"
 ---
 
@@ -487,14 +487,14 @@ These need the service layer. None of them can be pushed into a constraint.
    component wearing a prompt; the count spans two tables, so only the service can take it.
 7. **No nested bundles**, and no bundle that contains one of its own variants.
 8. **Bundle apportionment reconciles to the charged total**, remainder to the largest share (§8.3).
-9. **Shipment allocation must not exceed what was ordered.** The sum of
-   `order_shipping_line.quantity` across every shipment of one `order_line` has to stay
-   within that line's `quantity`. Nothing stops shipping 15 of an ordered 14 - and with stock
-   tracking on, the surplus consumes real lots.
-10. **A bundle is shipped by its children, never its header.** `order_shipping_line` points at
-   `order_line`, and for a bundle the header line carries no variant worth picking - the
-   component lines hold the real, stockable variants. Allocating the header would leave the stock
-   movement with nothing to consume.
+9. **Shipment allocation must not exceed what was ordered.** The sum of `shipping_line.quantity`
+   per variant across every movement of an order has to stay within what the order holds of that
+   variant - shipping 15 of an ordered 14 would, with stock tracking on, consume real lots.
+   `ShippingService.assertLinesAllocatable` holds it (`shipping.md` §3).
+10. **A bundle is shipped by its children, never its header.** For a bundle the header line
+   carries no variant worth picking - the component lines hold the real, stockable variants - so
+   `toShippingLines` and `syncLinesForOrder` leave the header out. Shipping it would leave the
+   stock movement with nothing to consume.
 
 11. **A list-backed attribute definition has at least one option**, and a recorded `value_term_id`
     is one of them. `value_type = 'term'` implies rows in `product_category_attribute_option`, which
@@ -511,23 +511,47 @@ These need the service layer. None of them can be pushed into a constraint.
 
 ## 11. Stock lives elsewhere
 
-`warehouse` and `grn` are their own features and own every stock table - `warehouse`, `grn`,
-`grn_item`, `warehouse_movement`. Nothing about quantity belongs in `product`; the catalog's only
-part in it is `product_variant.track_stock` (§2).
+`warehouse`, `grn` and `warehouse-movement` are their own features and own every stock table -
+`warehouse`, `grn`, `grn_item`, `warehouse_movement`, `stock_reservation`. Nothing about quantity
+belongs in `product`; the catalog's only part in it is `product_variant.track_stock` (§2).
 
-The entities exist; none of the behaviour does. FIFO allocation, the weighted-average cost
-recompute on receipt, cancellation reversals and reconciliation are all still unwritten, and the
-full design is in the README TODO. Two things settled here because they touch the catalog:
+Receiving is `GrnService`: confirming a receipt opens its lots and re-averages `cost_price`;
+canceling a confirmed one is refused once a lot has been drawn from. `warehouse-movement` keeps the
+ledger and the reservations through hooks in `grn`, `order`, `shipping` and `cart` - an order
+reserves on placement, a delivery draws its lots FIFO as it ships, and a nightly cron reports drift.
+What is still open is in TODO.md. Two things settled here because they touch the catalog:
 
-- **Stock leaves on shipment, not on order confirmation.** `order_shipping` carries the
-  `warehouse_id`, so one order can ship from two warehouses, and a lot cannot be picked before the
-  warehouse holding it is known. The movement's source is an `order_shipping_line`;
-  `order_line` carries no lot reference at all, because one line routinely spans several lots.
+- **Stock leaves on shipment, not on order confirmation.** Each `shipping` row carries its
+  `pickup_warehouse_id`, so one order can ship from several warehouses, and a lot cannot be picked
+  before the warehouse holding it is known. The movement's source is a `shipping_line` (by
+  variant); `order_line` carries no lot reference at all, because one line routinely spans several
+  lots. Which warehouses a checkout leaves from is `shipping.md` §5.
 - **A damaged return must not go back into its lot.** A customer return normally re-enters the lot
   it was picked from, at the cost it left with - the movement records its source, so the lot is
   known. Damaged goods are the exception: returning them to stock means they get picked and sold
   again. They belong in a write-off, or in a quarantine location. Nothing detects this
-  automatically; the return has to ask.
+  automatically; the return has to ask - it does, through `shipping_line.condition`, and a damaged
+  line is written off on its lot as it is received (`shipping.md` §7). Quarantine is not built.
+
+**Stock changed by hand is a `stock_adjustment`** (`warehouse-movement`, `/stock-adjustments`):
+units added or removed at one warehouse, a positive quantity plus a direction, with a reason that
+has to fit it (`STOCK_ADJUSTMENT_REASONS` - remove: audit / damaged / expired / lost / theft /
+sample; add: audit / found / sample_returned / return; a database check holds the same lists). The
+direction is the sign of `qty`, never a column. Removing draws oldest lot first through
+`grnService.consumeLots`, the draw a shipment makes; adding tops up lots with room, newest receipt
+first (`planTopUp`), refused with 409 past that room - a lot never holds more than it arrived with,
+so extra goods come in on a GRN. A loss is posted as `write_off`, an audit and every addition as
+`adjustment`, all with `source_type = 'adjustment'`, `source_id` = the adjustment. Reversing posts
+one opposing movement per row and puts the units back; reservations are never checked, a removal
+records a fact.
+
+**The storefront states a level, never a count.** `GET /public/products/:id/stock`
+(`product-stock.service.ts`) answers `in_stock` / `low_stock` (at or under the variant's own `low_stock_threshold`,
+the comparison the cart makes too; no threshold, never low) / `backorder` / `out_of_stock`, or `null` for a variant that keeps no stock. It asks
+`shared/registries/stock-availability.registry.ts`, the same slot the cart prices against, and is
+never cached - the product read beside it is. A bundle states one level from its components: the
+worst always-included one, each choice as its best candidate, optional tick boxes ignored -
+"none left" counted in whole bundles, "low" in the component's own units.
 
 ## 12. Category-declared attributes
 

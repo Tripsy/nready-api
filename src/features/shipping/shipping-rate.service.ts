@@ -14,6 +14,8 @@ import {
 	type ShippingScope,
 	ShippingScopeEnum,
 } from '@/features/shipping/shipping.entity';
+import { VatCategoryEnum } from '@/features/vat-rate/vat-rate.entity';
+import { vatRateService } from '@/features/vat-rate/vat-rate.service';
 import { roundMoney } from '@/helpers/shop.helper';
 
 /** What a movement costs before any discount. */
@@ -58,12 +60,15 @@ export type ShippingQuoteInput = {
  * undercharge every incomplete one.
  *
  * The configured price is VAT-inclusive and in the base currency, so it is converted first and then
- * split into a net price at the standard rate - the net is what the row stores, and grossing it back
+ * split into a net price at `vatRate` - the `standard` rate, which the caller resolves
+ * (`VatRateService`) so this stays a pure function of its arguments - the net is what the row stores, and grossing it back
  * up lands on the configured figure to the cent.
  */
-export function quoteShipping(input: ShippingQuoteInput): ShippingQuote {
+export function quoteShipping(
+	input: ShippingQuoteInput,
+	vatRate: number,
+): ShippingQuote {
 	const settings = Configuration.get('shipping');
-	const vatRate = Configuration.get('vat.standard');
 
 	if (input.scope === ShippingScopeEnum.RELOCATION) {
 		return {
@@ -149,7 +154,9 @@ export class ShippingRateService {
 			now?: Date;
 		},
 	): Promise<ShippingPricing> {
-		const quote = quoteShipping(input);
+		const vatRate = await vatRateService.resolverFor(buyer.now);
+
+		const quote = quoteShipping(input, vatRate(VatCategoryEnum.STANDARD));
 
 		const resolved = await this.discountResolution.resolveForShipping({
 			clientId: buyer.clientId,

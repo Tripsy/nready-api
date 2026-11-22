@@ -5,11 +5,13 @@ import { lang } from '@/config/message.setup';
 import { Configuration } from '@/config/settings.config';
 import { BadRequestError, NotFoundError } from '@/exceptions';
 import CartEntity, { CART_TTL_SECONDS } from '@/features/cart/cart.entity';
+import { resolveWarehouseAvailability } from '@/features/cart/cart.hooks';
 import {
 	getCartItemRepository,
 	getCartRepository,
 } from '@/features/cart/cart.repository';
 import type { CartValidator } from '@/features/cart/cart.validator';
+import { planDeliveries } from '@/features/cart/cart-fulfillment';
 import CartItemEntity from '@/features/cart/cart-item.entity';
 import {
 	type CartLine,
@@ -1075,12 +1077,19 @@ export class CartService {
 	 * verified-buyer badge for a purchase they never made. Somebody else's client answers the
 	 * same 404 a missing one does.
 	 *
-	 * **The delivery choice becomes the order's first `shipping` row**, written through
+	 * **The delivery choice becomes the order's `shipping` rows**, written through
 	 * `ShippingService.createWithin` in the same transaction, so an order never exists without
-	 * saying how it travels and the row obeys the rules a back-office create does. It leaves from
-	 * the active default warehouse, carries every physical item of the order (`toShippingLines`),
-	 * and is priced from the flat-rate table (`ShippingRateService`) with the best shipping discount
-	 * for this buyer applied. The client's contact details are copied onto it.
+	 * saying how it travels and each row obeys the rules a back-office create does. Together they
+	 * carry every physical item of the order (`toShippingLines`), priced from the flat-rate table
+	 * (`ShippingRateService`) with the best shipping discount for this buyer applied. The client's
+	 * contact details are copied onto each.
+	 *
+	 * **One delivery whenever one warehouse can send everything** - the active default when it
+	 * can. A courier order no single site can fill is split across the fewest sites that can
+	 * (`planDeliveries`, from the per-site figures `resolveWarehouseAvailability` answers). Only the
+	 * first delivery is priced; the others are written at zero, so the shopper pays the one fee
+	 * the checkout screen showed and no second shipping document is billed. A self pickup always
+	 * leaves from the default.
 	 *
 	 * An order with nothing physical in it - only digital products or services - raises no
 	 * shipment: there is nothing to pick, and an empty parcel would sit in the dispatch queue.
@@ -1214,32 +1223,68 @@ export class CartService {
 			});
 
 			if (deliveryPricing && shippingLines.length > 0) {
-				await this.shippingService.createWithin(manager, {
-					// A checkout always produces the same kind of movement: stock leaving a
-					// warehouse for the client. A relocation or a return is raised elsewhere
-					scope: ShippingScopeEnum.DELIVERY,
-					order_id: order.id,
-					method: data.delivery_method,
-					pickup_warehouse_id: warehouse.id,
-					// Null for a pickup: the goods are collected from the warehouse
-					destination_client_address_id:
-						deliveryAddressId ?? undefined,
-					price: deliveryPricing.price,
-					vat_rate: deliveryPricing.vat_rate,
-					operational_cost: deliveryPricing.operational_cost,
-					discount: deliveryPricing.discount,
-					discount_reduction: deliveryPricing.discount_reduction,
-					currency: pricing.currency,
-					exchange_rate: exchangeRate,
-					contact_name:
-						client.contact_name ??
-						client.person_name ??
-						client.company_name ??
-						undefined,
-					contact_phone: client.contact_phone ?? undefined,
-					contact_email: client.contact_email ?? undefined,
-					lines: shippingLines,
-				});
+				/*
+				 * Read here rather than before the transaction: the order has just reserved its
+				 * stock, which locked the tracked variants, so a racing checkout plans from the
+				 * figures this one leaves. A self pickup is collected from one site - the default
+				 * - and is never split.
+				 */
+				const groups =
+					data.delivery_method === ShippingMethodEnum.COURIER
+						? planDeliveries(
+								shippingLines,
+								await resolveWarehouseAvailability(
+									manager,
+									shippingLines.map(
+										(line) => line.variant_id,
+									),
+								),
+								warehouse.id,
+							)
+						: [
+								{
+									warehouse_id: warehouse.id,
+									lines: shippingLines,
+								},
+							];
+
+				for (const [index, group] of groups.entries()) {
+					// The first delivery carries the fee the shopper agreed to; the rest travel
+					// free, so a split never moves the payable total or bills a second fee
+					const charged = index === 0;
+
+					await this.shippingService.createWithin(manager, {
+						// A checkout always produces the same kind of movement: stock leaving a
+						// warehouse for the client. A relocation or a return is raised elsewhere
+						scope: ShippingScopeEnum.DELIVERY,
+						order_id: order.id,
+						method: data.delivery_method,
+						pickup_warehouse_id: group.warehouse_id,
+						// Null for a pickup: the goods are collected from the warehouse
+						destination_client_address_id:
+							deliveryAddressId ?? undefined,
+						price: charged ? deliveryPricing.price : 0,
+						vat_rate: deliveryPricing.vat_rate,
+						// Unknown until the operator books the extra parcel
+						operational_cost: charged
+							? deliveryPricing.operational_cost
+							: undefined,
+						discount: charged ? deliveryPricing.discount : null,
+						discount_reduction: charged
+							? deliveryPricing.discount_reduction
+							: 0,
+						currency: pricing.currency,
+						exchange_rate: exchangeRate,
+						contact_name:
+							client.contact_name ??
+							client.person_name ??
+							client.company_name ??
+							undefined,
+						contact_phone: client.contact_phone ?? undefined,
+						contact_email: client.contact_email ?? undefined,
+						lines: group.lines,
+					});
+				}
 			}
 
 			/*

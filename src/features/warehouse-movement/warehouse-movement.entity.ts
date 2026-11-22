@@ -22,7 +22,7 @@ export type WarehouseMovementType =
 export const WarehouseMovementSourceEnum = {
 	GRN_ITEM: 'grn_item',
 	SHIPPING_LINE: 'shipping_line',
-	ADJUSTMENT: 'adjustment', // Entered by hand, no document behind it
+	ADJUSTMENT: 'adjustment', // A `stock_adjustment` - a write-off or a count entered by hand
 } as const;
 
 export type WarehouseMovementSource =
@@ -104,6 +104,7 @@ export default class WarehouseMovementEntity extends EntityAppendOnlyAbstract {
 		scale: 2,
 		nullable: false,
 		comment: 'Signed quantity; positive is inbound, negative is outbound',
+		transformer: numericTransformer,
 	})
 	qty!: number;
 

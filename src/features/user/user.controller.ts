@@ -26,6 +26,8 @@ class UserController extends BaseController {
 
 		const data = this.validate(this.validator.create, req.body, res);
 
+		this.policy.canAssignRole(res.locals.auth, data);
+
 		const entry = await this.userService.create(data);
 
 		res.locals.output.data(entry);
@@ -72,6 +74,9 @@ class UserController extends BaseController {
 
 		const existingEntry = await this.userService.findById(data.id, false);
 
+		this.policy.canManageTarget(res.locals.auth, existingEntry);
+		this.policy.canAssignRole(res.locals.auth, data, existingEntry);
+
 		const entry = await this.userService.updateData(existingEntry, data);
 
 		res.locals.output.message(lang('user.success.update'));
@@ -85,6 +90,10 @@ class UserController extends BaseController {
 
 		const data = this.validate(this.validator.delete, req.params, res);
 
+		const existingEntry = await this.userService.findById(data.id, false);
+
+		this.policy.canManageTarget(res.locals.auth, existingEntry);
+
 		await this.userService.delete(data.id);
 
 		res.locals.output.message(lang('user.success.delete'));
@@ -96,6 +105,10 @@ class UserController extends BaseController {
 		this.policy.canRestore(res.locals.auth);
 
 		const data = this.validate(this.validator.restore, req.params, res);
+
+		const existingEntry = await this.userService.findById(data.id, true);
+
+		this.policy.canManageTarget(res.locals.auth, existingEntry);
 
 		await this.userService.restore(data.id);
 
@@ -137,6 +150,8 @@ class UserController extends BaseController {
 		);
 
 		const existingEntry = await this.userService.findById(data.id, false);
+
+		this.policy.canManageTarget(res.locals.auth, existingEntry);
 
 		await this.userService.updateStatus(existingEntry, data.status);
 

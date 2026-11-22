@@ -131,6 +131,9 @@ export const productInputPayloads = {
 			},
 		],
 	},
+	publicStock: {
+		id: 1,
+	},
 	publicRead: {
 		slug: 'pizza-margherita',
 		language: 'en',

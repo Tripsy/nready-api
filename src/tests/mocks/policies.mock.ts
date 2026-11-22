@@ -20,3 +20,8 @@ export function authorizedSpy(policy: PolicyAbstract) {
 	jest.spyOn(policy, 'isAdmin').mockReturnValue(false);
 	jest.spyOn(policy, 'hasPermission').mockReturnValue(true);
 }
+
+export function adminSpy(policy: PolicyAbstract) {
+	jest.spyOn(policy, 'isAuthenticated').mockReturnValue(true);
+	jest.spyOn(policy, 'isAdmin').mockReturnValue(true);
+}

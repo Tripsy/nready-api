@@ -1,0 +1,9 @@
+{
+	"name": "vat-rate",
+	"version": "1.0.0",
+	"is_core": true,
+	"relativePath": "/vat-rate",
+	"entities": ["vat-rate"],
+	"depends_on": [],
+	"required_by": ["cart", "order", "product", "shipping"]
+}

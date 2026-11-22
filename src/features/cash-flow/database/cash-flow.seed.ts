@@ -206,20 +206,27 @@ async function seedOrderPayments(
 
 	const payable = orders.filter((order) => Number(order.total_gross) > 0);
 
+	// An empty list would render as `IN ()`, which Postgres refuses - a book with no payable
+	// pending order has nothing to look up
 	const existing = new Set(
-		(
-			await manager
-				.getRepository(CashFlowEntity)
-				.createQueryBuilder('cash_flow')
-				.select(['cash_flow.external_reference'])
-				.where('cash_flow.external_reference IN (:...references)', {
-					references: payable.map((order) =>
-						orderPaymentReference(order.order_id),
-					),
-				})
-				.withDeleted()
-				.getMany()
-		).map((entry) => entry.external_reference),
+		payable.length === 0
+			? []
+			: (
+					await manager
+						.getRepository(CashFlowEntity)
+						.createQueryBuilder('cash_flow')
+						.select(['cash_flow.external_reference'])
+						.where(
+							'cash_flow.external_reference IN (:...references)',
+							{
+								references: payable.map((order) =>
+									orderPaymentReference(order.order_id),
+								),
+							},
+						)
+						.withDeleted()
+						.getMany()
+				).map((entry) => entry.external_reference),
 	);
 
 	const pending = payable.filter(

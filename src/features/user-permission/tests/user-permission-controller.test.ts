@@ -12,7 +12,11 @@ import {
 import userPermissionRoutes from '@/features/user-permission/user-permission.routes';
 import { userPermissionService } from '@/features/user-permission/user-permission.service';
 import { withDebugResponse } from '@/tests/jest-controller.setup';
-import { authorizedSpy, notAuthorizedSpy } from '@/tests/mocks/policies.mock';
+import {
+	adminSpy,
+	authorizedSpy,
+	notAuthorizedSpy,
+} from '@/tests/mocks/policies.mock';
 
 let app: Express;
 
@@ -48,8 +52,20 @@ describe(`${controller} - create`, () => {
 		}, response);
 	});
 
-	it('should return success', async () => {
+	it('should fail for an operator holding the permission', async () => {
 		authorizedSpy(permissionPolicy);
+
+		const response = await request(app)
+			.post(route)
+			.send(userPermissionInputPayloads.create);
+
+		withDebugResponse(() => {
+			expect(response.status).toBe(403);
+		}, response);
+	});
+
+	it('should return success', async () => {
+		adminSpy(permissionPolicy);
 
 		jest.spyOn(userPermissionService, 'create').mockResolvedValue([
 			{ permission_id: 1, message: 'created' },
@@ -89,8 +105,18 @@ describe(`${controller} - delete`, () => {
 		}, response);
 	});
 
-	it('should return success', async () => {
+	it('should fail for an operator holding the permission', async () => {
 		authorizedSpy(permissionPolicy);
+
+		const response = await request(app).delete(route).send();
+
+		withDebugResponse(() => {
+			expect(response.status).toBe(403);
+		}, response);
+	});
+
+	it('should return success', async () => {
+		adminSpy(permissionPolicy);
 
 		jest.spyOn(userPermissionService, 'delete').mockResolvedValue();
 
@@ -123,8 +149,18 @@ describe(`${controller} - restore`, () => {
 		}, response);
 	});
 
-	it('should return success', async () => {
+	it('should fail for an operator holding the permission', async () => {
 		authorizedSpy(permissionPolicy);
+
+		const response = await request(app).patch(route).send();
+
+		withDebugResponse(() => {
+			expect(response.status).toBe(403);
+		}, response);
+	});
+
+	it('should return success', async () => {
+		adminSpy(permissionPolicy);
 
 		jest.spyOn(userPermissionService, 'restore').mockResolvedValue();
 

@@ -4,5 +4,5 @@
 	"relativePath": "/exchange-rate",
 	"entities": ["exchange-rate"],
 	"depends_on": [],
-	"required_by": ["cash-flow", "order"]
+	"required_by": ["cash-flow", "order", "grn"]
 }

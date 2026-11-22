@@ -107,6 +107,11 @@ export class ProductVariantValidator extends BaseValidator<
 				this.getMessage('invalid_boolean'),
 				{ required: false },
 			),
+			// Stock-tracked variants only - what a goods receipt may name
+			track_stock: this.validateBoolean(
+				this.getMessage('invalid_boolean'),
+				{ required: false },
+			),
 			is_deleted: this.validateBoolean(
 				this.getMessage('invalid_boolean'),
 				{ required: false },

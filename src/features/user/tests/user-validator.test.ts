@@ -27,4 +27,17 @@ describe(validator, () => {
 			}, validated);
 		});
 	});
+
+	// The UI's form sends a blank field as null - an update leaving the password unchanged
+	it('update() accepts a payload with no password', () => {
+		const validated = userValidator.update.safeParse({
+			...userInputPayloads.update,
+			password: null,
+			password_confirm: null,
+		});
+
+		withDebugValidated(() => {
+			expect(validated.success).toBe(true);
+		}, validated);
+	});
 });

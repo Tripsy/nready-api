@@ -15,19 +15,22 @@ import {
  * 30, 21% VAT) are what the comments describe.
  */
 const settings = Configuration.get('shipping');
-const vatRate = Configuration.get('vat.standard');
+const vatRate = 21;
 const net = (gross: number) =>
 	Math.round((gross / (1 + vatRate / 100)) * 100) / 100;
 
 describe('quoteShipping', () => {
 	it('charges a domestic courier delivery the domestic rate, split into net at standard VAT', () => {
 		expect(
-			quoteShipping({
-				scope: ShippingScopeEnum.DELIVERY,
-				method: ShippingMethodEnum.COURIER,
-				countryCode: settings.domesticCountry.toLowerCase(),
-				exchangeRate: 1,
-			}),
+			quoteShipping(
+				{
+					scope: ShippingScopeEnum.DELIVERY,
+					method: ShippingMethodEnum.COURIER,
+					countryCode: settings.domesticCountry.toLowerCase(),
+					exchangeRate: 1,
+				},
+				vatRate,
+			),
 		).toEqual({
 			price: net(settings.price.domestic),
 			vat_rate: vatRate,
@@ -36,35 +39,44 @@ describe('quoteShipping', () => {
 	});
 
 	it('charges an address in another country the international rate', () => {
-		const quote = quoteShipping({
-			scope: ShippingScopeEnum.DELIVERY,
-			method: ShippingMethodEnum.COURIER,
-			countryCode: 'HU',
-			exchangeRate: 1,
-		});
+		const quote = quoteShipping(
+			{
+				scope: ShippingScopeEnum.DELIVERY,
+				method: ShippingMethodEnum.COURIER,
+				countryCode: 'HU',
+				exchangeRate: 1,
+			},
+			vatRate,
+		);
 
 		expect(quote.price).toBe(net(settings.price.international));
 	});
 
 	it('charges an address that resolves to no country the international rate', () => {
-		const quote = quoteShipping({
-			scope: ShippingScopeEnum.DELIVERY,
-			method: ShippingMethodEnum.COURIER,
-			countryCode: null,
-			exchangeRate: 1,
-		});
+		const quote = quoteShipping(
+			{
+				scope: ShippingScopeEnum.DELIVERY,
+				method: ShippingMethodEnum.COURIER,
+				countryCode: null,
+				exchangeRate: 1,
+			},
+			vatRate,
+		);
 
 		expect(quote.price).toBe(net(settings.price.international));
 	});
 
 	it('prices a return like a delivery, with the return operational cost', () => {
 		expect(
-			quoteShipping({
-				scope: ShippingScopeEnum.RETURN,
-				method: ShippingMethodEnum.COURIER,
-				countryCode: settings.domesticCountry,
-				exchangeRate: 1,
-			}),
+			quoteShipping(
+				{
+					scope: ShippingScopeEnum.RETURN,
+					method: ShippingMethodEnum.COURIER,
+					countryCode: settings.domesticCountry,
+					exchangeRate: 1,
+				},
+				vatRate,
+			),
 		).toEqual({
 			price: net(settings.price.domestic),
 			vat_rate: vatRate,
@@ -74,12 +86,15 @@ describe('quoteShipping', () => {
 
 	it('charges nothing for a relocation but keeps its operational cost', () => {
 		expect(
-			quoteShipping({
-				scope: ShippingScopeEnum.RELOCATION,
-				method: ShippingMethodEnum.COURIER,
-				countryCode: null,
-				exchangeRate: 1,
-			}),
+			quoteShipping(
+				{
+					scope: ShippingScopeEnum.RELOCATION,
+					method: ShippingMethodEnum.COURIER,
+					countryCode: null,
+					exchangeRate: 1,
+				},
+				vatRate,
+			),
 		).toEqual({
 			price: 0,
 			vat_rate: vatRate,
@@ -89,22 +104,28 @@ describe('quoteShipping', () => {
 
 	it('makes a self pickup free, with no operational cost', () => {
 		expect(
-			quoteShipping({
-				scope: ShippingScopeEnum.DELIVERY,
-				method: ShippingMethodEnum.SELF_PICKUP,
-				countryCode: settings.domesticCountry,
-				exchangeRate: 1,
-			}),
+			quoteShipping(
+				{
+					scope: ShippingScopeEnum.DELIVERY,
+					method: ShippingMethodEnum.SELF_PICKUP,
+					countryCode: settings.domesticCountry,
+					exchangeRate: 1,
+				},
+				vatRate,
+			),
 		).toEqual({ price: 0, vat_rate: vatRate, operational_cost: 0 });
 	});
 
 	it('converts the base-currency price into the sale currency', () => {
-		const quote = quoteShipping({
-			scope: ShippingScopeEnum.DELIVERY,
-			method: ShippingMethodEnum.COURIER,
-			countryCode: settings.domesticCountry,
-			exchangeRate: 5,
-		});
+		const quote = quoteShipping(
+			{
+				scope: ShippingScopeEnum.DELIVERY,
+				method: ShippingMethodEnum.COURIER,
+				countryCode: settings.domesticCountry,
+				exchangeRate: 5,
+			},
+			vatRate,
+		);
 
 		expect(quote.price).toBe(net(settings.price.domestic / 5));
 	});
@@ -113,12 +134,15 @@ describe('quoteShipping', () => {
 describe('withShippingTotals', () => {
 	it('grosses a domestic quote back up to the configured VAT-inclusive price', () => {
 		const pricing = withShippingTotals(
-			quoteShipping({
-				scope: ShippingScopeEnum.DELIVERY,
-				method: ShippingMethodEnum.COURIER,
-				countryCode: settings.domesticCountry,
-				exchangeRate: 1,
-			}),
+			quoteShipping(
+				{
+					scope: ShippingScopeEnum.DELIVERY,
+					method: ShippingMethodEnum.COURIER,
+					countryCode: settings.domesticCountry,
+					exchangeRate: 1,
+				},
+				vatRate,
+			),
 			null,
 			0,
 		);

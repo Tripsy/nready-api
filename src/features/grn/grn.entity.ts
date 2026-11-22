@@ -46,9 +46,9 @@ const ENTITY_TABLE_NAME = 'grn';
  * the authoritative on-hand figure, so every unit has to belong to a lot with a cost.
  *
  * **Stock moves only on confirmation.** A draft can be edited freely because it has changed
- * nothing. Confirming writes `warehouse_movement` rows, opens the lots and recomputes
- * `product_variant.cost_price`; canceling a confirmed receipt posts reversing movements rather
- * than deleting anything.
+ * nothing. Confirming opens the lots and recomputes `product_variant.cost_price`; canceling a
+ * confirmed receipt closes them again rather than deleting anything. Both also post
+ * `warehouse_movement` rows when that feature is installed - see `grn.hooks.ts`.
  */
 @Entity({
 	name: ENTITY_TABLE_NAME,

@@ -22,9 +22,15 @@ class UserPermissionController extends BaseController {
 	}
 
 	public create = asyncHandler(async (req: Request, res: Response) => {
-		this.policy.canCreate(res.locals.auth);
+		this.policy.canGrant(res.locals.auth);
 
-		const data = this.validate(this.validator.create, req.body, res);
+		// `user_id` comes from the path (`/:user_id`); spread last so a body value cannot
+		// redirect the write to another user
+		const data = this.validate(
+			this.validator.create,
+			{ ...req.body, user_id: req.params.user_id },
+			res,
+		);
 
 		const results = await this.userPermissionService.create(data);
 
@@ -35,7 +41,7 @@ class UserPermissionController extends BaseController {
 	});
 
 	public delete = asyncHandler(async (req: Request, res: Response) => {
-		this.policy.canDelete(res.locals.auth);
+		this.policy.canGrant(res.locals.auth);
 
 		const data = this.validate(this.validator.delete, req.params, res);
 
@@ -50,7 +56,7 @@ class UserPermissionController extends BaseController {
 	});
 
 	public restore = asyncHandler(async (req: Request, res: Response) => {
-		this.policy.canRestore(res.locals.auth);
+		this.policy.canGrant(res.locals.auth);
 
 		const data = this.validate(this.validator.restore, req.params, res);
 

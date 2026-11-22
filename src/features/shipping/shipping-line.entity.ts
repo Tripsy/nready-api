@@ -4,6 +4,23 @@ import type ShippingEntity from '@/features/shipping/shipping.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import { numericTransformer } from '@/shared/transformers/numeric.transformer';
 
+/**
+ * What a returned unit is fit for once the warehouse has looked at it - stated per line of a
+ * `return` movement, and only there.
+ *
+ * It decides where the goods land in stock (`warehouse-movement`): a `resellable` line goes back
+ * into the lot it was sold from, a `damaged` one is put back and written off in the same breath,
+ * so the ledger shows it came home and why it is not on the shelf. Nothing infers it - a return
+ * reaches `delivered` only once every line says (`ShippingService.updateStatus`).
+ */
+export const ShippingLineConditionEnum = {
+	RESELLABLE: 'resellable',
+	DAMAGED: 'damaged',
+} as const;
+
+export type ShippingLineCondition =
+	(typeof ShippingLineConditionEnum)[keyof typeof ShippingLineConditionEnum];
+
 const ENTITY_TABLE_NAME = 'shipping_line';
 
 @Entity({
@@ -60,6 +77,17 @@ export default class ShippingLineEntity extends EntityAbstract {
 		transformer: numericTransformer,
 	})
 	quantity!: number;
+
+	// Null on a `delivery` or a `relocation`, whose goods are not inspected; on a `return`, null until
+	// the warehouse has looked at them. The scope lives on the parent row, so the service keeps it
+	// null elsewhere - a row-level check cannot see it
+	@Column({
+		type: 'enum',
+		enum: ShippingLineConditionEnum,
+		nullable: true,
+		comment: 'What a returned unit is fit for; return movements only',
+	})
+	condition!: ShippingLineCondition | null;
 
 	// OTHER
 	@Column('text', { nullable: true })

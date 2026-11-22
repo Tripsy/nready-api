@@ -9,15 +9,13 @@ import {
 } from '@/database/seed/seed.helper';
 import { runSeedFile } from '@/database/seed/seed.runner';
 import BrandEntity from '@/features/brand/brand.entity';
-import CategoryEntity, {
-	CategoryTypeEnum,
-} from '@/features/category/category.entity';
 import CategoryContentEntity from '@/features/category/category-content.entity';
 import ProductEntity, {
 	ProductCompositionEnum,
 	ProductSaleStatusEnum,
 	ProductTypeEnum,
 	ProductUnitEnum,
+	type ProductVatCategory,
 	ProductVatCategoryEnum,
 	ProductWorkflowEnum,
 } from '@/features/product/product.entity';
@@ -43,6 +41,8 @@ import ProductVariantEntity from '@/features/product/product-variant.entity';
 import ProductVariantAttributeEntity from '@/features/product/product-variant-attribute.entity';
 import TermEntity, { TermTypeEnum } from '@/features/term/term.entity';
 import TermContentEntity from '@/features/term/term-content.entity';
+import { vatRateService } from '@/features/vat-rate/vat-rate.service';
+import { apportion, roundMoney } from '@/helpers/shop.helper';
 import {
 	type MeasureUnit,
 	MeasureUnitEnum,
@@ -57,30 +57,350 @@ import {
  * pizza with a drink. They are what a page, a filter or a bundle editor is developed against,
  * because every value in them means something and the arithmetic is checkable by eye.
  *
- * **Filler** products are generated, and exist only so lists, pagination and the facet filters
- * have volume behind them. Nothing should ever be demonstrated on one.
+ * **Filler** products fill out the rest of the catalog, so lists, pagination and the facet
+ * filters have volume behind them. Each is still a plausible item - its own category, shelf
+ * price and description - but the features worth demonstrating (variant axes, reference prices,
+ * bundles) live on the curated half.
  *
  * Curated first in the run, so the readable rows carry the low ids.
  */
-const FILLER_TARGET = 30;
+/**
+ * The VAT class a seeded product takes unless it names its own. Goods sold in Romania are
+ * `standard` (21% from 2025-08-01); food and drinks without added sugar are `reduced` (11%) and
+ * say so on their own entry. A sweetened soft drink (NC 2202) stays standard.
+ */
+export const DEFAULT_VAT_CATEGORY: ProductVatCategory =
+	ProductVatCategoryEnum.STANDARD;
 
-const FILLER_NAMES: readonly string[] = [
-	'Meridian 32 Monitor',
-	'Tessellate Desk Mat',
-	'Basalt Laptop Stand',
-	'Solstice Bookshelf Speaker',
-	'Portico Laser Printer',
-	'Vellum Document Scanner',
-	'Kestrel Webcam',
-	'Anvil Cable Sleeve',
-	'Ferrite Charging Cable',
-	'Cobalt Power Strip',
-	'Marlin Docking Station',
-	'Junction Ethernet Switch',
-	'Pallas Studio Microphone',
-	'Cirrus Air Purifier',
-	'Thicket Garden Trimmer',
+/** A share of a price and the VAT rate it is taxed at - one per component of a bundle. */
+type TaxedPart = { weight: number; rate: number };
+
+/**
+ * The gross of a net price as pricing computes it: a simple product is `sale` plus its VAT, and a
+ * bundle's price is apportioned over its parts by weight with each share taxed at its own rate
+ * (`ProductService.attachGrossPrices`).
+ */
+function grossOf(net: number, parts: readonly TaxedPart[]): number {
+	const shares = apportion(
+		net,
+		parts.map((part) => part.weight),
+	);
+
+	return roundMoney(
+		net +
+			shares.reduce(
+				(sum, share, index) =>
+					sum + roundMoney((share * parts[index].rate) / 100),
+				0,
+			),
+	);
+}
+
+/**
+ * The net price whose gross is the shelf figure, at one rate or over a bundle's parts. Not every
+ * figure has an exact net - at 11%, 39 lei falls between 38.99 and 39.01; at 21%, so do 21 and
+ * 80 - so the closest wins and the shelf would show a ban off. The seeded prices are ones that
+ * land exactly.
+ */
+export function netFromGross(
+	gross: number,
+	rate: number | readonly TaxedPart[],
+): number {
+	if (gross === 0) {
+		return 0;
+	}
+
+	const parts = typeof rate === 'number' ? [{ weight: 1, rate }] : rate;
+	const weightSum = parts.reduce((sum, part) => sum + part.weight, 0);
+	const averageRate =
+		weightSum > 0
+			? parts.reduce((sum, part) => sum + part.weight * part.rate, 0) /
+				weightSum
+			: (parts[0]?.rate ?? 0);
+
+	const guess = Math.round((gross * 10000) / (100 + averageRate));
+
+	let best = guess / 100;
+
+	for (const step of [0, -1, 1, -2, 2, -3, 3]) {
+		const net = (guess + step) / 100;
+
+		if (grossOf(net, parts) === gross) {
+			return net;
+		}
+
+		if (
+			Math.abs(grossOf(net, parts) - gross) <
+			Math.abs(grossOf(best, parts) - gross)
+		) {
+			best = net;
+		}
+	}
+
+	return best;
+}
+
+/** A generated product: what it is, where it is filed and what it sells for. */
+export type FillerProduct = {
+	name: string;
+	category_slug: string;
+	description: string;
+	/** The shelf price, VAT included, in RON; stored net (`netFromGross`). */
+	gross: number;
+	/** The product-scope `color`, where the category asks it. */
+	color?: string;
+	/** The product-scope `capacity` in millilitres, for the `home-and-garden` items that hold something. */
+	capacity?: number;
+	/** Offers the extended-warranty question at order time - the electronics worth insuring. */
+	warranty?: boolean;
+};
+
+/**
+ * One generated product per entry, so nothing is listed twice. Every one is goods, so they all
+ * take `DEFAULT_VAT_CATEGORY`, and each sells in a single variant: the variant axes worth
+ * demonstrating (storage, the size x color grid) live on the curated half.
+ */
+export const FILLER_PRODUCTS: readonly FillerProduct[] = [
+	{
+		name: 'Meridian 32 Monitor',
+		category_slug: 'monitors',
+		description:
+			'32-inch 4K IPS monitor with USB-C power delivery and a height-adjustable stand.',
+		gross: 2499,
+		color: 'black',
+		warranty: true,
+	},
+	{
+		name: 'Tessellate Desk Mat',
+		category_slug: 'accessories',
+		description: 'Felt desk mat, 90 x 40 cm, with a non-slip cork base.',
+		gross: 129,
+	},
+	{
+		name: 'Basalt Laptop Stand',
+		category_slug: 'accessories',
+		description:
+			'Aluminium laptop stand with six height settings, folds flat for the bag.',
+		gross: 199,
+	},
+	{
+		name: 'Solstice Bookshelf Speaker',
+		category_slug: 'speakers',
+		description:
+			'Pair of powered bookshelf speakers with Bluetooth and an optical input.',
+		gross: 879,
+		color: 'black',
+		warranty: true,
+	},
+	{
+		name: 'Portico Laser Printer',
+		category_slug: 'printers',
+		description: 'Mono laser printer, 30 pages a minute, duplex and Wi-Fi.',
+		gross: 1049,
+		color: 'white',
+		warranty: true,
+	},
+	{
+		name: 'Vellum Document Scanner',
+		category_slug: 'printers',
+		description:
+			'Duplex sheet-fed scanner, 35 pages a minute, scans straight to PDF.',
+		gross: 1299,
+		color: 'black',
+		warranty: true,
+	},
+	{
+		name: 'Kestrel Webcam',
+		category_slug: 'accessories',
+		description:
+			'1080p webcam with autofocus, a privacy shutter and two microphones.',
+		gross: 349,
+	},
+	{
+		name: 'Anvil Cable Sleeve',
+		category_slug: 'cables',
+		description:
+			'Braided sleeve, 1.5 m, that gathers the cables behind a desk.',
+		gross: 45,
+	},
+	{
+		name: 'Ferrite Charging Cable',
+		category_slug: 'cables',
+		description: 'USB-C to USB-C cable, 2 m, 100 W charging.',
+		gross: 59,
+	},
+	{
+		name: 'Cobalt Power Strip',
+		category_slug: 'accessories',
+		description:
+			'Six-socket power strip with surge protection and two USB ports.',
+		gross: 89,
+	},
+	{
+		name: 'Marlin Docking Station',
+		category_slug: 'accessories',
+		description:
+			'Thunderbolt dock: two displays, Ethernet, card reader and 96 W charging.',
+		gross: 949,
+		color: 'silver',
+		warranty: true,
+	},
+	{
+		name: 'Junction Ethernet Switch',
+		category_slug: 'electronics',
+		description: 'Eight-port gigabit switch in a fanless metal case.',
+		gross: 199,
+	},
+	{
+		name: 'Pallas Studio Microphone',
+		category_slug: 'audio',
+		description:
+			'USB condenser microphone with a cardioid pattern and a headphone output.',
+		gross: 649,
+		color: 'black',
+		warranty: true,
+	},
+	{
+		name: 'Cirrus Air Purifier',
+		category_slug: 'home-and-garden',
+		description:
+			'HEPA air purifier for rooms up to 40 square metres, quiet night mode.',
+		gross: 1199,
+		color: 'white',
+		warranty: true,
+	},
+	{
+		name: 'Thicket Garden Trimmer',
+		category_slug: 'power-tools',
+		description:
+			'Cordless hedge trimmer, 50 cm blade, battery and charger included.',
+		gross: 499,
+		color: 'green',
+		warranty: true,
+	},
+	{
+		name: 'Orbit 24 Monitor',
+		category_slug: 'monitors',
+		description: '24-inch Full HD monitor, 100 Hz, with a slim bezel.',
+		gross: 649,
+		color: 'black',
+		warranty: true,
+	},
+	{
+		name: 'Cedar Laptop Sleeve',
+		category_slug: 'accessories',
+		description:
+			'Padded sleeve for 14-inch laptops, with a pocket for the charger.',
+		gross: 149,
+	},
+	{
+		name: 'Aria Desk Lamp',
+		category_slug: 'lighting',
+		description:
+			'LED desk lamp with dimming, three color temperatures and a USB port.',
+		gross: 229,
+		color: 'white',
+	},
+	{
+		name: 'Tempo Soundbar',
+		category_slug: 'speakers',
+		description: '2.1 soundbar with a wireless subwoofer and HDMI eARC.',
+		gross: 1399,
+		color: 'black',
+		warranty: true,
+	},
+	{
+		name: 'Inkwell Inkjet Printer',
+		category_slug: 'printers',
+		description: 'Colour inkjet all-in-one with refillable ink tanks.',
+		gross: 599,
+		color: 'white',
+		warranty: true,
+	},
+	{
+		name: 'Lumen LED Bulb Pack',
+		category_slug: 'lighting',
+		description: 'Four E27 LED bulbs, 9 W, warm white.',
+		gross: 79,
+	},
+	{
+		name: 'Drift Wireless Earbuds',
+		category_slug: 'headphones',
+		description:
+			'True wireless earbuds with noise cancelling and a wireless charging case.',
+		gross: 399,
+		color: 'white',
+	},
+	{
+		name: 'Granite Cordless Drill',
+		category_slug: 'power-tools',
+		description:
+			'18 V drill driver with two batteries, a charger and a case.',
+		gross: 699,
+		color: 'green',
+		warranty: true,
+	},
+	{
+		name: 'Brook Watering Can',
+		category_slug: 'home-and-garden',
+		description: 'Galvanised steel watering can with a brass rose.',
+		gross: 65,
+		capacity: 5000,
+	},
+	{
+		name: 'Ember Electric Kettle',
+		category_slug: 'home-and-garden',
+		description: 'Stainless steel kettle with temperature control.',
+		gross: 239,
+		color: 'silver',
+		capacity: 1700,
+	},
+	{
+		name: 'Halyard HDMI Cable',
+		category_slug: 'cables',
+		description: 'HDMI 2.1 cable, 2 m, rated for 4K at 120 Hz.',
+		gross: 65,
+	},
+	{
+		name: 'Vector Gaming Mouse',
+		category_slug: 'mice',
+		description: 'Wired gaming mouse, 26,000 DPI sensor, 58 g.',
+		gross: 299,
+		color: 'black',
+	},
+	{
+		name: 'Lattice Low-Profile Keyboard',
+		category_slug: 'keyboards',
+		description:
+			'Wireless low-profile keyboard that pairs with three devices.',
+		gross: 399,
+		color: 'silver',
+	},
+	{
+		name: 'Beacon Smart Plug',
+		category_slug: 'electronics',
+		description: 'Wi-Fi smart plug with energy monitoring and schedules.',
+		gross: 79,
+		color: 'white',
+	},
+	{
+		name: 'Summit Over-Ear Headphones',
+		category_slug: 'headphones',
+		description:
+			'Over-ear wireless headphones with noise cancelling and 40 hours of battery.',
+		gross: 949,
+		color: 'black',
+		warranty: true,
+	},
 ];
+
+/** The extended-warranty answers, at their shelf price (VAT included). */
+export const FILLER_WARRANTY: readonly { label: string; gross: number }[] = [
+	{ label: 'One extra year', gross: 99 },
+	{ label: 'Two extra years', gross: 179 },
+];
+
+const FILLER_TARGET = FILLER_PRODUCTS.length;
 
 /** Terms are stored lower-cased, so the seed matches on the same form the term seed writes. */
 const termKey = (type: string, value: string): string =>
@@ -233,7 +553,11 @@ const DEFINITIONS: readonly {
 	},
 ];
 
-/** Sale price per market. Both currencies are quoted outright - no rate is applied to a price. */
+/**
+ * A shelf price per market, **VAT included** - what a shopper reads, as a Romanian retail price
+ * has to be shown. Both currencies are quoted outright, no exchange rate applied; the seed stores
+ * each net, at the product's VAT rate (`curatedPricing`).
+ */
 type Money = { RON: number; EUR: number };
 
 /** A value answering one definition, in whichever of the two forms that definition takes. */
@@ -271,9 +595,10 @@ type CuratedOptionGroup = {
 /**
  * What a bundle contains, named by the component SKUs seeded above it.
  *
- * `delta` adjusts the component's *own* price, so a component the bundle price already covers
- * carries its whole price back as a negative and adds nothing - which is how the two menus
- * below are priced.
+ * `charge` is what including the component adds to the bundle price, VAT included - omitted, it
+ * adds nothing, the bundle price already covering it. The stored `price_delta` adjusts the
+ * component's *own* net price, so the seed writes it as the charge's net less that price
+ * (`curatedPricing`).
  */
 type CuratedBundle = {
 	/** Exactly one candidate is taken from each; two is the fewest that makes it a choice. */
@@ -281,7 +606,7 @@ type CuratedBundle = {
 		prompt: string;
 		candidates: readonly {
 			sku: string;
-			delta: Money;
+			charge?: Money;
 			is_default?: boolean;
 		}[];
 	}[];
@@ -291,7 +616,7 @@ type CuratedBundle = {
 		quantity?: number;
 		is_optional?: boolean;
 		is_default?: boolean;
-		delta?: Money;
+		charge?: Money;
 	}[];
 };
 
@@ -302,6 +627,8 @@ type CuratedProduct = {
 	/** Romanian wording, so the language switcher has a second row to render. */
 	ro: { slug: string; label: string; description: string };
 	category_slug: string;
+	/** Omitted for goods; see `DEFAULT_VAT_CATEGORY`. */
+	vat_category?: ProductVatCategory;
 	brand?: string;
 	tags?: readonly string[];
 	workflow?: (typeof ProductWorkflowEnum)[keyof typeof ProductWorkflowEnum];
@@ -361,7 +688,7 @@ const tshirtVariants = (): readonly CuratedVariant[] =>
 			},
 			reference: {
 				RON: TSHIRT_BASE.RON + size.surcharge.RON + 20,
-				EUR: TSHIRT_BASE.EUR + size.surcharge.EUR + 4,
+				EUR: TSHIRT_BASE.EUR + size.surcharge.EUR + 5,
 			},
 			attributes: [
 				{ label: 'size', term: size.term },
@@ -398,8 +725,8 @@ const CURATED: readonly CuratedProduct[] = [
 		variants: [
 			{
 				sku: 'AUR14-512',
-				prices: { RON: 4999, EUR: 999 },
-				reference: { RON: 5499, EUR: 1099 },
+				prices: { RON: 4949, EUR: 999 },
+				reference: { RON: 5449, EUR: 1089 },
 				attributes: [{ label: 'storage', term: '512 gb' }],
 				track_stock: true,
 			},
@@ -478,7 +805,7 @@ const CURATED: readonly CuratedProduct[] = [
 		variants: [
 			{
 				sku: 'NWK-65',
-				prices: { RON: 449, EUR: 89 },
+				prices: { RON: 439, EUR: 89 },
 				track_stock: true,
 			},
 		],
@@ -501,7 +828,7 @@ const CURATED: readonly CuratedProduct[] = [
 		variants: [
 			{
 				sku: 'QUI-BT6',
-				prices: { RON: 179, EUR: 35 },
+				prices: { RON: 179, EUR: 34.5 },
 				track_stock: true,
 			},
 		],
@@ -524,7 +851,7 @@ const CURATED: readonly CuratedProduct[] = [
 		variants: [
 			{
 				sku: 'CAS-HUB7',
-				prices: { RON: 249, EUR: 49 },
+				prices: { RON: 239, EUR: 48 },
 				track_stock: true,
 			},
 		],
@@ -577,6 +904,7 @@ const CURATED: readonly CuratedProduct[] = [
 				'Rosii San Marzano, fior di latte si busuioc pe blat copt pe piatra.',
 		},
 		category_slug: 'pizza',
+		vat_category: ProductVatCategoryEnum.REDUCED,
 		tags: ['Vegetarian', 'Best Seller'],
 		workflow: ProductWorkflowEnum.READY,
 		attributes: [{ label: 'spice level', term: 'mild' }],
@@ -600,16 +928,16 @@ const CURATED: readonly CuratedProduct[] = [
 				min_select: 0,
 				max_select: null,
 				options: [
-					{ label: 'Extra cheese', delta: { RON: 6, EUR: 1.2 } },
-					{ label: 'Mushrooms', delta: { RON: 4, EUR: 0.8 } },
-					{ label: 'Olives', delta: { RON: 4, EUR: 0.8 } },
+					{ label: 'Extra cheese', delta: { RON: 7, EUR: 1.5 } },
+					{ label: 'Mushrooms', delta: { RON: 5, EUR: 1 } },
+					{ label: 'Olives', delta: { RON: 5, EUR: 1 } },
 				],
 			},
 		],
 		variants: [
 			{
 				sku: 'PIZ-MAR-25',
-				prices: { RON: 32, EUR: 6.5 },
+				prices: { RON: 35, EUR: 7.5 },
 				attributes: [
 					{
 						label: 'diameter',
@@ -620,7 +948,7 @@ const CURATED: readonly CuratedProduct[] = [
 			},
 			{
 				sku: 'PIZ-MAR-32',
-				prices: { RON: 42, EUR: 8.5 },
+				prices: { RON: 45, EUR: 9.5 },
 				attributes: [
 					{
 						label: 'diameter',
@@ -642,6 +970,7 @@ const CURATED: readonly CuratedProduct[] = [
 				'Salam picant, ardei iute si mozzarella, coapta rapid.',
 		},
 		category_slug: 'pizza',
+		vat_category: ProductVatCategoryEnum.REDUCED,
 		tags: ['Spicy'],
 		workflow: ProductWorkflowEnum.READY,
 		attributes: [{ label: 'spice level', term: 'hot' }],
@@ -665,16 +994,16 @@ const CURATED: readonly CuratedProduct[] = [
 				min_select: 0,
 				max_select: null,
 				options: [
-					{ label: 'Extra cheese', delta: { RON: 6, EUR: 1.2 } },
-					{ label: 'Pepperoni', delta: { RON: 7, EUR: 1.4 } },
-					{ label: 'Olives', delta: { RON: 4, EUR: 0.8 } },
+					{ label: 'Extra cheese', delta: { RON: 7, EUR: 1.5 } },
+					{ label: 'Pepperoni', delta: { RON: 8, EUR: 1.5 } },
+					{ label: 'Olives', delta: { RON: 5, EUR: 1 } },
 				],
 			},
 		],
 		variants: [
 			{
 				sku: 'PIZ-DIA-25',
-				prices: { RON: 38, EUR: 7.5 },
+				prices: { RON: 42, EUR: 8.5 },
 				attributes: [
 					{
 						label: 'diameter',
@@ -685,7 +1014,7 @@ const CURATED: readonly CuratedProduct[] = [
 			},
 			{
 				sku: 'PIZ-DIA-32',
-				prices: { RON: 48, EUR: 9.5 },
+				prices: { RON: 52, EUR: 10.5 },
 				attributes: [
 					{
 						label: 'diameter',
@@ -708,6 +1037,7 @@ const CURATED: readonly CuratedProduct[] = [
 				'Mozzarella, gorgonzola, pecorino si taleggio, finisata cu miere.',
 		},
 		category_slug: 'pizza',
+		vat_category: ProductVatCategoryEnum.REDUCED,
 		tags: ['Vegetarian'],
 		workflow: ProductWorkflowEnum.READY,
 		attributes: [{ label: 'spice level', term: 'mild' }],
@@ -729,7 +1059,7 @@ const CURATED: readonly CuratedProduct[] = [
 		variants: [
 			{
 				sku: 'PIZ-QUA-32',
-				prices: { RON: 50, EUR: 10 },
+				prices: { RON: 55, EUR: 11 },
 				attributes: [
 					{
 						label: 'diameter',
@@ -750,11 +1080,12 @@ const CURATED: readonly CuratedProduct[] = [
 			description: 'Cola rece la doza de 330 ml.',
 		},
 		category_slug: 'drinks',
+		// A sweetened soft drink (NC 2202) stays at the standard rate
 		workflow: ProductWorkflowEnum.READY,
 		variants: [
 			{
 				sku: 'DRK-COLA-330',
-				prices: { RON: 8, EUR: 1.6 },
+				prices: { RON: 9, EUR: 2 },
 				attributes: [
 					{
 						label: 'volume',
@@ -775,12 +1106,13 @@ const CURATED: readonly CuratedProduct[] = [
 			description: 'Apa minerala natural carbogazoasa, sticla de 500 ml.',
 		},
 		category_slug: 'drinks',
+		vat_category: ProductVatCategoryEnum.REDUCED,
 		tags: ['Eco Friendly'],
 		workflow: ProductWorkflowEnum.READY,
 		variants: [
 			{
 				sku: 'DRK-WATER-500',
-				prices: { RON: 6, EUR: 1.2 },
+				prices: { RON: 8, EUR: 1.5 },
 				attributes: [
 					{
 						label: 'volume',
@@ -801,12 +1133,13 @@ const CURATED: readonly CuratedProduct[] = [
 			description: 'Suc de portocale stors proaspat, 250 ml.',
 		},
 		category_slug: 'drinks',
+		vat_category: ProductVatCategoryEnum.REDUCED,
 		tags: ['New Arrival'],
 		workflow: ProductWorkflowEnum.READY,
 		variants: [
 			{
 				sku: 'DRK-JUICE-250',
-				prices: { RON: 10, EUR: 2 },
+				prices: { RON: 12, EUR: 2.5 },
 				attributes: [
 					{
 						label: 'volume',
@@ -827,6 +1160,7 @@ const CURATED: readonly CuratedProduct[] = [
 			description: 'Sos rece de usturoi cu iaurt, cupa de 50 ml.',
 		},
 		category_slug: 'sauces',
+		vat_category: ProductVatCategoryEnum.REDUCED,
 		workflow: ProductWorkflowEnum.READY,
 		attributes: [{ label: 'spice level', term: 'mild' }],
 		variants: [
@@ -846,6 +1180,7 @@ const CURATED: readonly CuratedProduct[] = [
 			description: 'Sos de ardei iute fermentat, cupa de 50 ml.',
 		},
 		category_slug: 'sauces',
+		vat_category: ProductVatCategoryEnum.REDUCED,
 		tags: ['Spicy'],
 		workflow: ProductWorkflowEnum.READY,
 		attributes: [{ label: 'spice level', term: 'hot' }],
@@ -858,9 +1193,8 @@ const CURATED: readonly CuratedProduct[] = [
 	},
 
 	/*
-	 * The bundles. Both are priced so the arithmetic reads at a glance: a candidate the menu
-	 * price already covers carries its whole price back as a delta and adds nothing, and the
-	 * pricier alternative carries the *same* delta, so what it adds is exactly the upgrade.
+	 * The bundles. Each is cheaper than its parts bought alone - the reference says by how much -
+	 * and a pricier alternative or an extra states what it adds as its `charge`.
 	 */
 	{
 		slug: 'pizza-night-menu',
@@ -874,6 +1208,7 @@ const CURATED: readonly CuratedProduct[] = [
 				'O pizza de 32 cm si o bautura, cu un sos alaturi daca vrei.',
 		},
 		category_slug: 'pizza',
+		vat_category: ProductVatCategoryEnum.REDUCED,
 		tags: ['Best Seller'],
 		workflow: ProductWorkflowEnum.READY,
 		bundle: {
@@ -881,25 +1216,17 @@ const CURATED: readonly CuratedProduct[] = [
 				{
 					prompt: 'Choose your pizza',
 					candidates: [
-						{
-							sku: 'PIZ-MAR-32',
-							delta: { RON: -42, EUR: -8.5 },
-							is_default: true,
-						},
-						// 48 - 42 = 6 RON to move up to the Diavola
-						{ sku: 'PIZ-DIA-32', delta: { RON: -42, EUR: -8.5 } },
+						{ sku: 'PIZ-MAR-32', is_default: true },
+						// 52 alone against the Margherita's 45: the menu asks 5 of the 7
+						{ sku: 'PIZ-DIA-32', charge: { RON: 5, EUR: 1 } },
 					],
 				},
 				{
 					prompt: 'Choose your drink',
 					candidates: [
-						{
-							sku: 'DRK-COLA-330',
-							delta: { RON: -8, EUR: -1.6 },
-							is_default: true,
-						},
-						// 10 - 8 = 2 RON for the juice instead
-						{ sku: 'DRK-JUICE-250', delta: { RON: -8, EUR: -1.6 } },
+						{ sku: 'DRK-COLA-330', is_default: true },
+						// 12 alone against the cola's 9
+						{ sku: 'DRK-JUICE-250', charge: { RON: 3, EUR: 0.5 } },
 					],
 				},
 			],
@@ -908,16 +1235,17 @@ const CURATED: readonly CuratedProduct[] = [
 					sku: 'SAU-GARLIC-50',
 					is_optional: true,
 					is_default: true,
-					// 5 - 2 = 3 RON: cheaper inside the menu than bought alone
-					delta: { RON: -2, EUR: -0.4 },
+					// 3 against 5 bought alone
+					charge: { RON: 3, EUR: 0.6 },
 				},
 			],
 		},
 		variants: [
 			{
 				sku: 'MENU-PIZZA-NIGHT',
-				prices: { RON: 55, EUR: 11 },
-				reference: { RON: 65, EUR: 13 },
+				prices: { RON: 49, EUR: 10 },
+				// What the default pizza and drink cost bought separately
+				reference: { RON: 54, EUR: 11.5 },
 			},
 		],
 	},
@@ -943,20 +1271,137 @@ const CURATED: readonly CuratedProduct[] = [
 				{
 					sku: 'CAS-HUB7',
 					is_optional: true,
-					// 249 - 50 = 199 RON to add the hub to the kit
-					delta: { RON: -50, EUR: -10 },
+					// 199 against 239 bought alone
+					charge: { RON: 199, EUR: 39 },
 				},
 			],
 		},
 		variants: [
 			{
 				sku: 'KIT-DESK',
-				prices: { RON: 549, EUR: 109 },
-				reference: { RON: 628, EUR: 124 },
+				prices: { RON: 539, EUR: 108 },
+				// What the keyboard and mouse cost bought separately
+				reference: { RON: 618, EUR: 123.5 },
 			},
 		],
 	},
 ];
+
+/** The money columns the seed writes, worked out from the shelf figures in `CURATED`. */
+export type CuratedPricing = ReturnType<typeof curatedPricing>;
+
+/**
+ * Turns `CURATED`'s shelf figures into the net values the rows store, at the rates `vatRate`
+ * answers - the deployment's own, read from `vat_rate`.
+ *
+ * - A variant, reference or option figure is netted at its product's rate.
+ * - A bundle component's `price_delta` adjusts the component's own net price, so it is the
+ *   charge's net less that price: a component the bundle price already covers gives its whole price
+ *   back and adds nothing.
+ * - A bundle's own price is apportioned over its default kit (`attachGrossPrices`) and each
+ *   share taxed at its component's rate, so it is netted over those parts together.
+ */
+export function curatedPricing(
+	vatRate: (category: ProductVatCategory) => number,
+) {
+	const bySku = new Map(
+		CURATED.flatMap((entry) =>
+			entry.variants.map((spec) => [spec.sku, { entry, spec }] as const),
+		),
+	);
+
+	const lookup = (sku: string) => {
+		const found = bySku.get(sku);
+
+		if (!found) {
+			throw new Error(`No curated variant "${sku}"`);
+		}
+
+		return found;
+	};
+
+	const rateOf = (entry: CuratedProduct): number =>
+		vatRate(entry.vat_category ?? DEFAULT_VAT_CATEGORY);
+
+	/** The parts the price of variant `sku` is taxed over: one for a product, its kit for a bundle. */
+	const partsOf = (sku: string, currency: keyof Money): TaxedPart[] => {
+		const { entry } = lookup(sku);
+
+		if (entry.bundle) {
+			const kit: { sku: string; units: number }[] = [
+				...(entry.bundle.groups ?? []).map((group) => ({
+					sku: (
+						group.candidates.find(
+							(candidate) => candidate.is_default,
+						) ?? group.candidates[0]
+					).sku,
+					units: 1,
+				})),
+				...(entry.bundle.components ?? [])
+					.filter((component) => !component.is_optional)
+					.map((component) => ({
+						sku: component.sku,
+						units: component.quantity ?? 1,
+					})),
+			];
+
+			return kit.map((part) => ({
+				weight: variantNet(part.sku, currency) * part.units,
+				rate: rateOf(lookup(part.sku).entry),
+			}));
+		}
+
+		return [{ weight: 1, rate: rateOf(entry) }];
+	};
+
+	const variantNet = (sku: string, currency: keyof Money): number =>
+		netFromGross(lookup(sku).spec.prices[currency], partsOf(sku, currency));
+
+	return {
+		variantNet,
+		/**
+		 * Pricing grosses a reference by the sale price's own ratio (`reference * saleGross /
+		 * sale`), not by its rate, so the net is the one that ratio scales onto the shelf figure.
+		 */
+		referenceNet: (sku: string, currency: keyof Money): number | null => {
+			const figure = lookup(sku).spec.reference?.[currency];
+
+			if (figure === undefined) {
+				return null;
+			}
+
+			const sale = variantNet(sku, currency);
+			const ratio = grossOf(sale, partsOf(sku, currency)) / sale;
+			const guess = Math.round((figure / ratio) * 100);
+
+			for (const step of [0, -1, 1, -2, 2]) {
+				const net = (guess + step) / 100;
+
+				if (roundMoney(net * ratio) === figure) {
+					return net;
+				}
+			}
+
+			return guess / 100;
+		},
+		optionDelta: (
+			entry: CuratedProduct,
+			delta: Money,
+			currency: keyof Money,
+		): number => netFromGross(delta[currency], rateOf(entry)),
+		bundleItemDelta: (
+			sku: string,
+			charge: Money | undefined,
+			currency: keyof Money,
+		): number =>
+			roundMoney(
+				netFromGross(
+					charge?.[currency] ?? 0,
+					rateOf(lookup(sku).entry),
+				) - variantNet(sku, currency),
+			),
+	};
+}
 
 export const productSeed: SeedDefinition = {
 	name: 'product',
@@ -1000,16 +1445,6 @@ export const productSeed: SeedDefinition = {
 		const definitionOptionRepository = manager.getRepository(
 			ProductCategoryAttributeOptionEntity,
 		);
-
-		// Product categories only: an article category linked to a product would file it under a
-		// tree the storefront never shows
-		const categories = await manager.getRepository(CategoryEntity).find({
-			select: { id: true },
-			where: { type: CategoryTypeEnum.PRODUCT },
-			order: { id: 'ASC' },
-		});
-
-		const categoryIds = categories.map((category) => category.id);
 
 		const categoryContents = await manager
 			.getRepository(CategoryContentEntity)
@@ -1161,23 +1596,28 @@ export const productSeed: SeedDefinition = {
 		let alreadyPresent = 0;
 		let inserted = 0;
 
+		// Every price in the seed is a shelf figure; the rows store it net, at the deployment's rates
+		const vatRate = await vatRateService.resolverFor();
+		const pricing = curatedPricing(vatRate);
+
 		/** One price row per market, from the sale price and whatever else the entry quotes. */
 		const savePrices = async (
 			variant_id: number,
-			prices: Money,
-			reference?: Money,
+			sku: string,
 		): Promise<void> => {
 			await priceRepository.save(
-				(['RON', 'EUR'] as const).map((currency) =>
-					priceRepository.create({
+				(['RON', 'EUR'] as const).map((currency) => {
+					const salePrice = pricing.variantNet(sku, currency);
+
+					return priceRepository.create({
 						variant_id,
 						currency,
-						sale_price: prices[currency],
-						reference_price: reference?.[currency] ?? null,
+						sale_price: salePrice,
+						reference_price: pricing.referenceNet(sku, currency),
 						// The floor a discount may not drop below - 20% off the sale price
-						min_price: Number((prices[currency] * 0.8).toFixed(2)),
-					}),
-				),
+						min_price: Number((salePrice * 0.8).toFixed(2)),
+					});
+				}),
 			);
 		};
 
@@ -1273,7 +1713,7 @@ export const productSeed: SeedDefinition = {
 						? ProductCompositionEnum.BUNDLE
 						: ProductCompositionEnum.SIMPLE,
 					unit: ProductUnitEnum.PIECE,
-					vat_category: ProductVatCategoryEnum.STANDARD,
+					vat_category: entry.vat_category ?? DEFAULT_VAT_CATEGORY,
 					// A bundle names no brand: what it contains comes from several of them
 					brand_id: isBundle
 						? null
@@ -1354,13 +1794,18 @@ export const productSeed: SeedDefinition = {
 						low_stock_threshold:
 							!isBundle && spec.track_stock ? 5 : null,
 						allow_backorder: false,
-						cost_price: Number((spec.prices.RON * 0.6).toFixed(2)),
+						// Roughly what the shop paid for it
+						cost_price: Number(
+							(pricing.variantNet(spec.sku, 'RON') * 0.6).toFixed(
+								2,
+							),
+						),
 					}),
 				);
 
 				variantIdBySku.set(spec.sku, variant.id);
 
-				await savePrices(variant.id, spec.prices, spec.reference);
+				await savePrices(variant.id, spec.sku);
 
 				for (const attribute of spec.attributes ?? []) {
 					await saveAttribute({ variant_id: variant.id }, attribute);
@@ -1411,7 +1856,11 @@ export const productSeed: SeedDefinition = {
 								option_id: saved.id,
 								currency,
 								// Signed: declining an upgrade legitimately reduces the price
-								price_delta: option.delta[currency],
+								price_delta: pricing.optionDelta(
+									entry,
+									option.delta,
+									currency,
+								),
 							}),
 						),
 					);
@@ -1466,7 +1915,11 @@ export const productSeed: SeedDefinition = {
 								bundleItemPriceRepository.create({
 									item_id: item.id,
 									currency,
-									price_delta: candidate.delta[currency],
+									price_delta: pricing.bundleItemDelta(
+										candidate.sku,
+										candidate.charge,
+										currency,
+									),
 								}),
 							),
 						);
@@ -1493,15 +1946,17 @@ export const productSeed: SeedDefinition = {
 						}),
 					);
 
-					if (component.delta) {
+					if (component.charge) {
 						await bundleItemPriceRepository.save(
 							(['RON', 'EUR'] as const).map((currency) =>
 								bundleItemPriceRepository.create({
 									item_id: item.id,
 									currency,
-									price_delta: (component.delta as Money)[
-										currency
-									],
+									price_delta: pricing.bundleItemDelta(
+										component.sku,
+										component.charge,
+										currency,
+									),
 								}),
 							),
 						);
@@ -1518,14 +1973,9 @@ export const productSeed: SeedDefinition = {
 		 * counting, so the curated menus above are the only ones, and the filler exists purely
 		 * to give the lists and the facets rows to work with.
 		 */
-		const colorValues = ['red', 'blue', 'green', 'black', 'silver'];
-		const sizeValues = ['small', 'medium', 'large'];
-
 		const warrantyPromptId = textId('Extended warranty');
 
-		const warrantyOptions = ['One extra year', 'Two extra years'];
-
-		for (let index = 0; index < FILLER_TARGET; index++) {
+		for (const [index, spec] of FILLER_PRODUCTS.entries()) {
 			const slug = `product-${sequenceLabel(index)}`;
 
 			if (existingSlugs.has(slug)) {
@@ -1547,34 +1997,28 @@ export const productSeed: SeedDefinition = {
 					type: ProductTypeEnum.PHYSICAL,
 					composition: ProductCompositionEnum.SIMPLE,
 					unit: ProductUnitEnum.PIECE,
-					vat_category: ProductVatCategoryEnum.STANDARD,
+					vat_category: DEFAULT_VAT_CATEGORY,
 					brand_id: brandIds.length
 						? randomPick(random, brandIds)
 						: null,
 				}),
 			);
 
-			const pass = Math.floor(index / FILLER_NAMES.length);
-			const baseName = FILLER_NAMES[index % FILLER_NAMES.length];
-			const label = pass ? `${baseName} (Mk ${pass + 1})` : baseName;
-
 			await contentRepository.save(
 				contentRepository.create({
 					product_id: product.id,
 					language: 'en',
 					slug,
-					label,
-					description: `${label} - demo catalog entry ${sequenceLabel(index)}.`,
+					label: spec.name,
+					description: spec.description,
 					meta: {
-						title: label,
-						description: `${label} - specifications and price`,
+						title: spec.name,
+						description: spec.description,
 					},
 				}),
 			);
 
-			const category_id = categoryIds.length
-				? randomPick(random, categoryIds)
-				: null;
+			const category_id = categoryIdBySlug.get(spec.category_slug);
 
 			if (category_id) {
 				await categoryLinkRepository.save(
@@ -1604,89 +2048,49 @@ export const productSeed: SeedDefinition = {
 				);
 			}
 
-			const variantCount = randomInt(random, 1, 3);
-			const basePrice = randomInt(random, 20, 900) + 0.99;
+			const rate = vatRate(DEFAULT_VAT_CATEGORY);
+			const salePrice = netFromGross(spec.gross, rate);
 
-			for (
-				let variantIndex = 0;
-				variantIndex < variantCount;
-				variantIndex++
-			) {
-				const variant = await variantRepository.save(
-					variantRepository.create({
-						product_id: product.id,
-						sku: `${variantSku}-V${variantIndex + 1}`,
-						position: variantIndex,
-						is_default: variantIndex === 0,
-						track_stock: index % 3 === 0,
-						low_stock_threshold: index % 3 === 0 ? 5 : null,
-						allow_backorder: false,
-						cost_price: Number((basePrice * 0.6).toFixed(2)),
-					}),
-				);
+			const variant = await variantRepository.save(
+				variantRepository.create({
+					product_id: product.id,
+					sku: `${variantSku}-V1`,
+					position: 0,
+					is_default: true,
+					track_stock: index % 3 === 0,
+					low_stock_threshold: index % 3 === 0 ? 5 : null,
+					allow_backorder: false,
+					cost_price: Number((salePrice * 0.6).toFixed(2)),
+				}),
+			);
 
-				// Filler is quoted in the app currency alone; the curated half is what carries
-				// a second market
-				await priceRepository.save(
-					priceRepository.create({
-						variant_id: variant.id,
-						currency: 'RON',
-						sale_price: Number(
-							(basePrice + variantIndex * 25).toFixed(2),
-						),
-						reference_price: Number(
-							(basePrice + variantIndex * 25 + 30).toFixed(2),
-						),
-						min_price: Number((basePrice * 0.8).toFixed(2)),
-					}),
-				);
+			// Filler is quoted in the app currency alone, with no reference price; the curated
+			// half is what carries a second market and a saving to show
+			await priceRepository.save(
+				priceRepository.create({
+					variant_id: variant.id,
+					currency: 'RON',
+					sale_price: salePrice,
+					reference_price: null,
+					min_price: Number((salePrice * 0.8).toFixed(2)),
+				}),
+			);
 
-				const sizeTermId = valueId(
-					sizeValues[variantIndex] ?? 'medium',
-				);
-
-				if (variantCount > 1 && sizeTermId) {
-					await variantAttributeRepository.save(
-						variantAttributeRepository.create({
-							variant_id: variant.id,
-							attribute_label_id: labelId('size') as number,
-							value_term_id: sizeTermId,
-						}),
-					);
-				}
-			}
-
-			const colorTermId = valueId(randomPick(random, colorValues));
-			const colorLabelId = labelId('color');
-
-			if (colorTermId && colorLabelId) {
-				await attributeRepository.save(
-					attributeRepository.create({
-						product_id: product.id,
-						attribute_label_id: colorLabelId,
-						value_term_id: colorTermId,
-					}),
+			if (spec.color) {
+				await saveAttribute(
+					{ product_id: product.id },
+					{ label: 'color', term: spec.color },
 				);
 			}
 
-			// Every fifth product carries a capacity, so the numeric facet has rows to answer
-			// with. `value_base` is the figure in the dimension's base unit - the same
-			// conversion the service applies on write
-			const capacityLabelId = labelId('capacity');
-
-			if (capacityLabelId && index % 5 === 0) {
-				const capacity = randomInt(random, 2, 20) * 100;
-
-				await attributeRepository.save(
-					attributeRepository.create({
-						product_id: product.id,
-						attribute_label_id: capacityLabelId,
-						value_numeric: capacity,
-						value_base: toBaseUnit(
-							capacity,
-							MeasureUnitEnum.MILLILITRE,
-						),
-					}),
+			if (spec.capacity !== undefined) {
+				await saveAttribute(
+					{ product_id: product.id },
+					{
+						label: 'capacity',
+						value: spec.capacity,
+						unit: MeasureUnitEnum.MILLILITRE,
+					},
 				);
 			}
 
@@ -1706,10 +2110,9 @@ export const productSeed: SeedDefinition = {
 				);
 			}
 
-			// Every fourth product asks a question at order time. `min_select` 0 and
-			// `max_select` 1 is the optional single choice - there is no `is_required` flag to
-			// agree with
-			if (index % 4 === 0 && warrantyPromptId) {
+			// The electronics worth insuring ask about an extended warranty at order time.
+			// `min_select` 0 and `max_select` 1 is the optional single choice
+			if (spec.warranty && warrantyPromptId) {
 				const group = await optionGroupRepository.save(
 					optionGroupRepository.create({
 						product_id: product.id,
@@ -1720,14 +2123,14 @@ export const productSeed: SeedDefinition = {
 					}),
 				);
 
-				for (const [optionIndex, value] of warrantyOptions.entries()) {
-					const optionTermId = textId(value);
+				for (const [optionIndex, option] of FILLER_WARRANTY.entries()) {
+					const optionTermId = textId(option.label);
 
 					if (!optionTermId) {
 						continue;
 					}
 
-					const option = await optionRepository.save(
+					const saved = await optionRepository.save(
 						optionRepository.create({
 							option_group_id: group.id,
 							label_id: optionTermId,
@@ -1738,9 +2141,10 @@ export const productSeed: SeedDefinition = {
 
 					await optionPriceRepository.save(
 						optionPriceRepository.create({
-							option_id: option.id,
+							option_id: saved.id,
 							currency: 'RON',
-							price_delta: (optionIndex + 1) * 99,
+							// A delta is taxed with the line it joins, so it is net like the price
+							price_delta: netFromGross(option.gross, rate),
 						}),
 					);
 				}

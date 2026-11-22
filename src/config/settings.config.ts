@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { hostname } from 'node:os';
+import { APP_VERSION } from '@/config/app-version';
 import { getObjectValue, type ObjectValue } from '@/helpers/objects.helper';
 import { SOURCE_EXTENSION } from '@/helpers/system.helper';
 import type { LogDataLevel } from '@/shared/types/log-data.type';
@@ -29,9 +30,20 @@ function loadSettings() {
 				10,
 			),
 			name: process.env.APP_NAME || 'nready-api',
+			version: APP_VERSION,
 			email: process.env.APP_EMAIL || 'hello@example.com',
 			timezone: process.env.APP_TIMEZONE || 'UTC',
 			currency: process.env.APP_CURRENCY || 'RON',
+			/** Socket idle time (ms) after which a request is answered with a 503. */
+			request_timeout: parseInt(
+				process.env.REQUEST_TIMEOUT || '60000',
+				10,
+			),
+			/** Grace period (ms) for a graceful shutdown before the process is forced out. */
+			shutdown_timeout: parseInt(
+				process.env.FORCE_SHUTDOWN_TIMEOUT || '10000',
+				10,
+			),
 		},
 		language: {
 			default: process.env.APP_LANGUAGE_DEFAULT || 'ro',
@@ -209,23 +221,6 @@ function loadSettings() {
 			termMinLength: 3,
 		},
 		/*
-		 * The percentage each `ProductVatCategoryEnum` class resolves to. The product declares a
-		 * class, not a rate, because the rate is a function of jurisdiction and date - so it is
-		 * resolved when a line is priced and snapshot onto `order_line.vat_rate` at
-		 * confirmation, and a later rate change cannot move an invoice already issued.
-		 *
-		 * Defaults are the Romanian rates. A deployment in another jurisdiction overrides them
-		 * through the environment; nothing here is derived from the currency, which says where the
-		 * money is quoted rather than which tax authority applies.
-		 */
-		vat: {
-			standard: Number(process.env.VAT_RATE_STANDARD ?? 21),
-			reduced: Number(process.env.VAT_RATE_REDUCED ?? 11),
-			second_reduced: Number(process.env.VAT_RATE_SECOND_REDUCED ?? 5),
-			zero: 0,
-			exempt: 0,
-		},
-		/*
 		 * What moving goods costs, by the kind of movement. Every figure is in the base currency
 		 * (`app.currency`); a quote in another currency is converted at the order's exchange rate.
 		 *
@@ -280,6 +275,14 @@ function loadSettings() {
 			 * out - which is the point: payment terms are part of what was agreed on the day.
 			 */
 			dueDays: Number(process.env.INVOICE_DUE_DAYS ?? 14),
+		},
+		orderReturn: {
+			/*
+			 * How long a buyer may ask to send goods back, counted from the order's last delivery
+			 * arriving. 14 days is the EU right of withdrawal. Applies to the storefront only - an
+			 * operator raising a return in the back office is not held to it.
+			 */
+			windowDays: Number(process.env.ORDER_RETURN_WINDOW_DAYS ?? 14),
 		},
 		shipping: {
 			domesticCountry: (

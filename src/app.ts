@@ -1,12 +1,18 @@
+/*
+ * Also loaded first by `server.ts`. Kept here because tests enter through `createApp()` and
+ * never import `server.ts`, and TypeORM's decorators need the metadata API before any entity
+ * module evaluates.
+ */
 import 'reflect-metadata';
-import 'dotenv/config';
+import { randomUUID } from 'node:crypto';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import type { Request, Response } from 'express';
 import express from 'express';
 import helmet from 'helmet';
 import qs from 'qs';
-import { v4 as uuid } from 'uuid';
+import dataSource from '@/config/data-source.config';
+import { getRedisClient } from '@/config/init-redis.config';
 import { Configuration } from '@/config/settings.config';
 import { createCurrentDate } from '@/helpers/date.helper';
 import authMiddleware from '@/middleware/auth.middleware';
@@ -20,10 +26,43 @@ import languageMiddleware from '@/middleware/language.middleware';
 import { notFoundHandler } from '@/middleware/not-found-handler.middleware';
 import { outputHandler } from '@/middleware/output-handler.middleware';
 import { requestContextMiddleware } from '@/middleware/request-context.middleware';
-import { getSystemLogger } from '@/providers/logger.provider';
+import { requestTimeoutMiddleware } from '@/middleware/request-timeout.middleware';
 
-// Used for `req.setTimeout`
-const REQUEST_TIMEOUT = Number(process.env.REQUEST_TIMEOUT) || 60000; // 60 seconds
+/** How long `/ready` waits on each dependency before calling it down. */
+const READINESS_CHECK_TIMEOUT = 2000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+	let timer: NodeJS.Timeout | undefined;
+
+	const timeout = new Promise<never>((_resolve, reject) => {
+		timer = setTimeout(
+			() => reject(new Error(`Timed out after ${ms}ms`)),
+			ms,
+		);
+	});
+
+	return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+/*
+ * Database and Redis are the two dependencies no request can do without. Redis is judged by
+ * its connection status rather than a PING: ioredis queues commands while reconnecting, so a
+ * PING against a down Redis would wait out the retries instead of answering.
+ */
+async function checkReadiness(): Promise<Record<string, boolean>> {
+	const database = dataSource.isInitialized
+		? await withTimeout(
+				dataSource.query('SELECT 1'),
+				READINESS_CHECK_TIMEOUT,
+			)
+				.then(() => true)
+				.catch(() => false)
+		: false;
+
+	const redis = getRedisClient().status === 'ready';
+
+	return { database, redis };
+}
 
 export async function createApp() {
 	const app = express();
@@ -42,19 +81,13 @@ export async function createApp() {
 			},
 
 			/**
-			 * Stop browsers from sniffing MIME types.
-			 * Prevents some XSS attacks.
-			 */
-			noSniff: true,
-
-			/**
-			 * Prevent browser from sending cross-domain requests automatically.
-			 * A must for secure APIs.
+			 * Send no `Referer` header when a browser follows a link out of a response,
+			 * so API URLs (and any tokens in their query) never leak to a third party.
 			 */
 			referrerPolicy: { policy: 'no-referrer' },
 
 			/**
-			 * Not relevant for APIs
+			 * Forbid framing outright - nothing here is meant to render in an iframe.
 			 */
 			frameguard: { action: 'deny' },
 
@@ -62,15 +95,11 @@ export async function createApp() {
 			 * HSTS only in production.
 			 * WARNING: Never enable in dev or localhost.
 			 */
-			hsts:
-				process.env.NODE_ENV === 'production'
-					? { maxAge: 31536000, includeSubDomains: true }
-					: false,
+			hsts: Configuration.isEnvironment('production')
+				? { maxAge: 31536000, includeSubDomains: true }
+				: false,
 
-			/**
-			 * Hide "X-Powered-By: Express"
-			 */
-			hidePoweredBy: true,
+			// `noSniff` and `hidePoweredBy` are helmet defaults and stay on
 		}),
 	);
 
@@ -107,12 +136,31 @@ export async function createApp() {
 	reportClientKeyState();
 	app.use(clientKeyMiddleware);
 
+	/*
+	 * Probes - ahead of parsing, auth and the feature routers, none of which they need, so a
+	 * probe never pays for a token check. Both answer raw JSON, outside the envelope.
+	 */
+	app.get('/health', (_req, res) => {
+		res.status(200).json({
+			status: 'OK',
+			timestamp: createCurrentDate().toISOString(),
+			uptime: process.uptime(),
+		});
+	});
+
+	app.get('/ready', async (_req, res) => {
+		const checks = await checkReadiness();
+		const ready = Object.values(checks).every(Boolean);
+
+		res.status(ready ? 200 : 503).json({ ready, checks });
+	});
+
 	// Compression
 	app.use(
 		compression({
 			threshold: 1024,
 			filter: (req: Request, res: Response): boolean => {
-				// skip for small responses
+				// Opt-out header; small responses are skipped by `threshold`
 				const skip = req.get('x-no-compression');
 
 				if (skip) {
@@ -129,24 +177,17 @@ export async function createApp() {
 	app.use(express.json({ limit: '10mb' }));
 	app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-	// Request ID middleware
+	// Request ID and build version on every response
 	app.use((_req, res, next) => {
-		res.locals.request_id = uuid();
+		res.locals.request_id = randomUUID();
 		res.setHeader('X-Request-ID', res.locals.request_id);
+		res.setHeader('X-App-Version', Configuration.get('app.version'));
 
 		next();
 	});
 
 	// Request timeout
-	app.use((req, res, next) => {
-		req.setTimeout(REQUEST_TIMEOUT, () => {
-			getSystemLogger().warn(
-				`Request timeout: ${req.method} ${req.url} (${res.locals.request_id})`,
-			);
-		});
-
-		next();
-	});
+	app.use(requestTimeoutMiddleware);
 
 	// Middleware
 	app.set('query parser', (str: string) =>
@@ -166,20 +207,6 @@ export async function createApp() {
 	const { initRoutes } = await import('@/config/routes.setup');
 	const router = await initRoutes();
 	app.use(router);
-
-	// Route - health
-	app.get('/health', (_req, res) => {
-		res.status(200).json({
-			status: 'OK',
-			timestamp: createCurrentDate().toISOString(),
-			uptime: process.uptime(),
-		});
-	});
-
-	// Route - ready
-	app.get('/ready', (_req, res) => {
-		res.status(200).json({ ready: true });
-	});
 
 	// Error handlers (must be last)
 	app.use(notFoundHandler);

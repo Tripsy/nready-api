@@ -1,6 +1,6 @@
 {
 	"name": "shipping",
-	"version": "3.5.0",
+	"version": "3.8.0",
 	"relativePath": "/shipping",
 	"entities": ["shipping", "shipping-line"],
 	"depends_on": [
@@ -10,7 +10,14 @@
 		"discount",
 		"warehouse",
 		"client-address",
-		"product"
+		"product",
+		"vat-rate"
 	],
-	"required_by": ["cart", "invoice", "order-settlement"]
+	"required_by": [
+		"cart",
+		"invoice",
+		"order-settlement",
+		"warehouse-movement",
+		"order-return"
+	]
 }

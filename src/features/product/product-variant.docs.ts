@@ -126,6 +126,12 @@ export const docs: Record<
 						required: false,
 						condition: "the parent product's sellable window",
 					},
+					track_stock: {
+						type: 'boolean',
+						required: false,
+						condition:
+							'whether the variant tracks stock - `true` lists what a goods receipt may name',
+					},
 					is_deleted: {
 						type: 'boolean',
 						required: false,

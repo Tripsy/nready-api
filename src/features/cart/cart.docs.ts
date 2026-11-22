@@ -23,7 +23,7 @@ const readSample: Record<string, unknown> = {
  * is computed, not stored.
  */
 export const PRICING_NOTE =
-	'`pricing` is resolved against the catalog at read time and is stored nowhere - a cart holds references, not prices, so the figures here are what the lines would cost right now rather than what they cost when the shopper added them. A line carrying `issue` cannot be bought and contributes nothing to the totals';
+	"`pricing` is resolved against the catalog at read time and is stored nowhere - a cart holds references, not prices, so the figures here are what the lines would cost right now rather than what they cost when the shopper added them. A line carrying `issue` cannot be bought and contributes nothing to the totals. With warehouse-movement installed, a stock-tracked variant the basket asks for beyond what is available to sell (on hand less what orders reserve) flags every line of it `insufficient_stock` unless it is sold on backorder - and a short component flags its whole bundle. `stock_available` states what is left, floored at 0, only when the line is short or at or under the variant's low-stock threshold; null otherwise, and always on a bundle header";
 
 export const docs: Record<keyof typeof cartController, ApiInputDocumentation> =
 	{

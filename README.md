@@ -42,7 +42,7 @@ The database is **PostgreSQL**, using **TypeORM** as the ORM layer.
 A ready-to-use Docker environment is provided for quick [setup](#-setup).
 
 This project is still a work in progress, and the next goals are:
-   - Stock handling - goods receipts (`grn`) and warehouse movements are entity-only so far
+   - Stock handling - goods receipts (`grn`) confirm and cancel with FIFO lots and a weighted-average cost; an optional stock feature (`warehouse-movement`) keeps an append-only ledger of every receipt and its reversal, and reserves stock for orders from the moment they are placed (available = on hand - reserved, refused with 409 when short unless the variant allows backorders), and splits a courier checkout across the fewest warehouses that can fill it (one delivery whenever a single site can, extra parcels free), and draws a delivery's goods from the oldest lots as it ships (put back if it returns undelivered); stock added or removed by hand with a reason - damaged, lost, a shelf audit, a sample come back (`/stock-adjustments`) - moves the lots and posts to the ledger, each reversible as a whole; a nightly reconcile mails any drift between lots, ledger and reservations, and a morning digest lists variants under their low-stock threshold; relocations are still to come
    - Subscriptions - entity-only so far
    - Returns
    - Create documentation
@@ -125,7 +125,7 @@ Meanwhile, we're open to suggestions / feedback, and if you find this project us
 - [x] Testing (powered by Jest & Supertest)
 - [x] Documentation provided for APIs endpoints (`*.docs.ts`, served at `/public/api-docs` when `API_DOCS_ENABLED=true`)
 - [x] Packaged features, installable via CLI with version-aware dependency resolution
-- [x] Document numbering from one continuous series per document type (orders, invoices)
+- [x] Document numbering from one continuous series per document type (orders, invoices, receipts, returns)
 - [x] Demo seeds for every feature owning a table
 - [x] Development environment available (Docker)
 - [x] Production image and compose stack, with a one-shot migration step and a dedicated scheduler
@@ -165,10 +165,11 @@ Meanwhile, we're open to suggestions / feedback, and if you find this project us
 - [x] discount
 - [x] document-series
 - [x] exchange-rate
-- [ ] grn
+- [x] grn
 - [x] image
 - [x] invoice
 - [x] order
+- [x] order-return
 - [x] order-settlement
 - [x] place
 - [x] product
@@ -178,8 +179,10 @@ Meanwhile, we're open to suggestions / feedback, and if you find this project us
 - [x] stats
 - [ ] subscription
 - [x] term
+- [x] vat-rate
 - [x] vendor
 - [x] warehouse
+- [x] warehouse-movement
 
 Unchecked features hold their entities only - no routes, services or seeds yet.
 
@@ -194,6 +197,7 @@ Unchecked features hold their entities only - no routes, services or seeds yet.
 - **client-ledger** - what each client owes, reconciled by a cron
 - **shipping** - delivery, return and relocation movements, prepared when the order is confirmed
 - **order-settlement** - optional; moves an order's status as its invoices and deliveries settle. Without it billing runs the same and orders change status by hand
+- **order-return** - optional; a buyer asks to send delivered goods back (within `ORDER_RETURN_WINDOW_DAYS`), an operator approves - which writes the `return` shipping movement - and once it arrives the goods re-enter stock by condition (resellable back into their lot, damaged written off) and a draft invoice reversal is raised for the operator to issue, which is what refunds the money
 
 Each step announces itself through a hook the next one answers, so the dependencies run one way.
 
@@ -253,6 +257,7 @@ Every variable is commented there. The ones worth a look on a first run:
 - `MAIL_*` - outgoing email
 - `COMPANY_*`, `INVOICE_DUE_DAYS` - the seller details printed on invoices
 - `SHIPPING_*` - the flat shipping rates
+- `ORDER_RETURN_WINDOW_DAYS` - how long after delivery a buyer may ask for a return
 - `OAUTH_*` - social sign-in; a provider with an empty client id is disabled
 
 ### 6. Database
@@ -335,11 +340,15 @@ $ docker compose -f docker-compose.prod.yml up -d --build
 ```
 
 On an empty database, create the database itself first - `migrate` creates the `system` and `logs`
-schemas and everything inside them. Then, once, the reference data and the first administrator:
+schemas and everything inside them. Then, once, the reference data and the first administrator. The document series (`INV`, `ORD`,
+`NIR`, `S`, `RMA`) are what every order, invoice, receipt and return numbers from; the seed only adds
+the ones missing, so it is safe to re-run, and a code can be changed in the dashboard before the
+first document is raised:
 
 ```
 $ docker compose -f docker-compose.prod.yml run --rm api node src/features/template/database/template.seed.js
 $ docker compose -f docker-compose.prod.yml run --rm api node src/features/permission/database/permission.seed.js
+$ docker compose -f docker-compose.prod.yml run --rm api node src/features/document-series/database/document-series.seed.js
 $ docker compose -f docker-compose.prod.yml run --rm -e ADMIN_EMAIL=... -e ADMIN_PASSWORD=... api node src/features/account/database/admin.seed.js
 ```
 

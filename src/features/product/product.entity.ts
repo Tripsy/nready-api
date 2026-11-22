@@ -16,6 +16,10 @@ import type ProductContentEntity from '@/features/product/product-content.entity
 import type ProductOptionGroupEntity from '@/features/product/product-option-group.entity';
 import type ProductTagEntity from '@/features/product/product-tag.entity';
 import type ProductVariantEntity from '@/features/product/product-variant.entity';
+import {
+	type VatCategory,
+	VatCategoryEnum,
+} from '@/features/vat-rate/vat-rate.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import type { StatusTransitions } from '@/shared/types/common.type';
 
@@ -121,23 +125,17 @@ export const UNITS_BY_TYPE: Record<ProductType, readonly ProductUnit[]> = {
 
 /**
  * The VAT *class* a product declares. The *rate* it resolves to is a function of jurisdiction and
- * date, so it is worked out when the order line is written and snapshot there
- * (`order_line.vat_rate`).
+ * date, held in `vat_rate` and looked up when a line is priced, then snapshot onto
+ * `order_line.vat_rate`. The list itself lives in `vat-rate.entity.ts` (`VatCategoryEnum`), the
+ * feature that resolves it; this is the name the catalog code uses for it.
  *
- * Stored as a plain `varchar`, not a Postgres enum, even though the list lives here: the set is
- * jurisdiction-specific and grows, and `ALTER TYPE ... ADD VALUE` cannot run inside a transaction
- * block. Adding a class stays a code change instead of becoming a special-cased migration.
+ * Stored as a plain `varchar`, not a Postgres enum: the set is jurisdiction-specific and grows,
+ * and `ALTER TYPE ... ADD VALUE` cannot run inside a transaction block. Adding a class stays a
+ * code change instead of becoming a special-cased migration.
  */
-export const ProductVatCategoryEnum = {
-	STANDARD: 'standard',
-	REDUCED: 'reduced',
-	SECOND_REDUCED: 'second_reduced',
-	ZERO: 'zero',
-	EXEMPT: 'exempt',
-} as const;
+export const ProductVatCategoryEnum = VatCategoryEnum;
 
-export type ProductVatCategory =
-	(typeof ProductVatCategoryEnum)[keyof typeof ProductVatCategoryEnum];
+export type ProductVatCategory = VatCategory;
 
 const ENTITY_TABLE_NAME = 'product';
 

@@ -15,6 +15,8 @@ export const docs: Record<
 > = {
 	find: helperApiInputDocumentation({
 		description: 'List every documented route module',
+		withBearerAuth: true,
+		withAuthErrors: true,
 		success: {
 			status: 200,
 			description: 'Documentation catalog',
@@ -41,11 +43,13 @@ export const docs: Record<
 			},
 		},
 		request: {
-			notes: '`authorization` summarizes the module - `none`, `partial` or `required` - from the per-action flag, so a module mounted under `/public` that still asks for a token is not mistaken for an open one. Takes no input and never changes between requests: the registry is filled once, at boot, from the `<module>.docs.ts` sitting beside each route file',
+			notes: 'Admin only. `authorization` summarizes the module - `none`, `partial` or `required` - from the per-action flag, so a module mounted under `/public` that still asks for a token is not mistaken for an open one. Takes no input and never changes between requests: the registry is filled once, at boot, from the `<module>.docs.ts` sitting beside each route file',
 		},
 	}),
 	read: helperApiInputDocumentation({
 		description: 'Read the documentation of one route module',
+		withBearerAuth: true,
+		withAuthErrors: true,
 		success: {
 			status: 200,
 			description: 'Route module documentation',
@@ -74,7 +78,7 @@ export const docs: Record<
 		},
 		withErrors: [404, 422],
 		request: {
-			notes: 'A module with no `<module>.docs.ts` answers 404. The name is the route file, not the feature folder: a feature holding more than one module documents each under its own name - `article` and `article-public` both exist',
+			notes: 'Admin only. A module with no `<module>.docs.ts` answers 404. The name is the route file, not the feature folder: a feature holding more than one module documents each under its own name - `article` and `article-public` both exist',
 			params: {
 				feature: {
 					type: 'string',

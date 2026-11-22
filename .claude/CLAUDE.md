@@ -33,9 +33,10 @@ context yet. Read the relevant one *before* proposing an approach in that area, 
 | `discount.md` | Discount scopes and targets, the two resolution passes and how they stack, the gross `min_order_value` base, order-wide apportionment, where the money sits on a line | `src/features/discount/**`, `cart-pricing.service.ts`, `order-discount.service.ts` |
 | `error-handling.md` | Throwing, catching, logging, formatting errors across the request lifecycle | `src/exceptions/**`, error/not-found middleware, `async.handler.ts` |
 | `feature-installer.md` | Feature packaging, the `manifest.json` contract, `depends_on`/`required_by` version ranges, install/remove/upgrade checks | `cli/feature.ts`, `cli/helpers/version.ts`, `**/manifest.json` |
-| `settlement.md` | Typed invoices, the invoice-first order → invoice → payment chain, FIFO allocation by client, the client ledger | `order`/`invoice`/`order-settlement`/`cash-flow`/`shipping` features, `cart.service.ts`, the `*.hooks.ts` chain |
+| `settlement.md` | Typed invoices, the invoice-first order → invoice → payment chain, FIFO allocation by client, the client ledger - shipping only as its fee is billed (the movement itself is `shipping.md`) | `order`/`invoice`/`order-settlement`/`cash-flow`/`shipping` features, `cart.service.ts`, the `*.hooks.ts` chain |
 | `ui-contract.md` | Keeping `../nready-ui` services and mirrored enums in step with the API | `*.controller.ts`, `*.routes.ts`, `*.entity.ts`, `*.enum.ts` |
-| `product.md` | The product / variant / option / bundle split, availability windows, order-line arithmetic | `src/features/product/**`, `order-line.entity.ts`, `order-shipping/**` |
+| `product.md` | The product / variant / option / bundle split, availability windows, order-line arithmetic | `src/features/product/**`, `order-line.entity.ts`, `shipping-line.entity.ts`, `src/features/cart/**` |
+| `shipping.md` | Delivery / relocation / return scopes, status lifecycle and the `shipped` freeze, line allocation, fees, checkout's warehouse split, return authorizations (`order-return`) | `src/features/shipping/**`, `src/features/order-return/**`, `cart.service.ts`, `cart-fulfillment.ts`, `cart.hooks.ts`, stock-reservation / warehouse-movement services |
 | `validation.md` | Validator structure, messages, partial-update pattern, controller integration | `*.validator.ts`, feature/shared `locales/*.json` |
 | `testing.md` | Test layout, reusable builders, mocking conventions | `src/tests/**`, `features/**/tests/*.test.ts`, `*.mock.ts` |
 | `typescript.md` | TS conventions, linting rules, code organization | every `.ts` |
@@ -200,7 +201,8 @@ factories in `helpers/hook.helper.ts` - `createNotification` (after commit, logs
 - **`src/shared/registries/` - polymorphic slots only**, asked by several features of one optional
   answerer (or the reverse), so no feature can own them: `target-participation.registry.ts`
   (`comment` / `rating` / `complaint` ask, `article` answers about its own rows) and
-  `target-image.registry.ts` (`article` / `product` ask, `image` provides). Don't add a registry
+  `target-image.registry.ts` (`article` / `product` ask, `image` provides) and
+  `stock-availability.registry.ts` (`cart` / `product` ask, `warehouse-movement` answers). Don't add a registry
   here when one feature raises the hook - give it a `.hooks.ts`.
 
 ### Configuration
@@ -234,7 +236,7 @@ normalized by `error-handler.middleware.ts`. User-facing strings come from `lang
   the schema gets `undefined` and the endpoint rejects every request with `invalid_id`. This has
   shipped twice.
 - **Never derive a document reference from `MAX(ref_number) + 1`.** `ref_code` / `ref_number` on
-  `invoice`, `order` and `grn` - and `subscription.ref_code` - come from
+  `invoice`, `order`, `grn` and `order_return` - and `subscription.ref_code` - come from
   `documentSeriesService.allocate(manager, document_type)`, called with the caller's
   `EntityManager` so the counter moves and rolls back with the document itself. One series per
   document type, counting continuously - there is no yearly reset.

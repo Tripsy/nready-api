@@ -75,7 +75,7 @@ const scopeNote = `scope decides what every other reference means, and cannot be
 const endsNote = `Both ends are frozen into pickup_data and destination_data when the movement reaches ${ShippingStatusEnum.SHIPPED}, and neither can be moved after that (409)`;
 
 const allocationNote =
-	'lines say what physically travels, by variant and quantity. On a movement with an order behind it, each variant must appear on that order (400 otherwise) and the quantity may not exceed what the order still has unshipped for that variant across its other movements (409) - counted per variant, since a line names no order line. A relocation is measured against stock on hand instead and is not checked here. Sending lines replaces the whole set';
+	'lines say what physically travels, by variant and quantity. On a movement with an order behind it, each variant must appear on that order (400 otherwise) and the quantity may not exceed what the order still has unshipped for that variant across its other movements (409) - counted per variant, since a line names no order line. A return is capped instead by what the delivered deliveries of the order carried, less what its other live returns bring back (409 over_returned). A relocation is measured against stock on hand and is not checked here. Each line of a return takes a condition - resellable or damaged - which is dropped on every other scope. Sending lines replaces the whole set';
 
 /**
  * A movement of goods: out to a client, between two warehouses, or back from a client.
@@ -178,7 +178,7 @@ export const docs: Record<
 					type: 'array',
 					required: false,
 					condition:
-						'each entry: variant_id, product_id, quantity, optional notes',
+						'each entry: variant_id, product_id, quantity, optional condition (return only: resellable / damaged), optional notes',
 				},
 			},
 			sample: {
@@ -419,7 +419,7 @@ export const docs: Record<
 		withAuthErrors: true,
 		withErrors: [400, 404, 409, 422],
 		request: {
-			notes: `Allowed moves: ${statusTransitionNote}. A repeat of the current status answers 400, anything else 409. ${endsNote}, and the same move stamps shipped_at; ${ShippingStatusEnum.DELIVERED} stamps delivered_at. Neither stamp is ever rewritten`,
+			notes: `Allowed moves: ${statusTransitionNote}. A repeat of the current status answers 400, anything else 409. ${endsNote}, and the same move stamps shipped_at; ${ShippingStatusEnum.DELIVERED} stamps delivered_at. Neither stamp is ever rewritten. With warehouse-movement installed, a delivery moving to ${ShippingStatusEnum.SHIPPED} draws its stock-tracked lines from the pickup warehouse's lots, oldest first, and lowers the order's reservation - 409 when the warehouse holds less than a line asks, backorder or not; ${ShippingStatusEnum.SHIPPED} to ${ShippingStatusEnum.RETURNED} puts the goods back into the same lots. ${ShippingStatusEnum.FAILED} after shipping moves no stock. A return moving to ${ShippingStatusEnum.DELIVERED} needs a condition on every line (409 otherwise) and takes its goods back into the lots the order's sales drew from at the destination warehouse - resellable lines restocked, damaged ones written off on the same lot; 409 when the goods did not leave that warehouse`,
 			params: {
 				id: {
 					type: 'number',

@@ -33,6 +33,10 @@ const SERIES: readonly SeriesRow[] = [
 		document_type: DocumentTypeEnum.SUBSCRIPTION,
 		code: 'S',
 	},
+	{
+		document_type: DocumentTypeEnum.ORDER_RETURN,
+		code: 'RMA',
+	},
 ];
 
 export const documentSeriesSeed: SeedDefinition = {

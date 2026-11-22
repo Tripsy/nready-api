@@ -5,6 +5,10 @@ import {
 	productService,
 } from '@/features/product/product.service';
 import { ProductValidator } from '@/features/product/product.validator';
+import {
+	type ProductStockService,
+	productStockService,
+} from '@/features/product/product-stock.service';
 import asyncHandler from '@/helpers/async.handler';
 import { type CacheProvider, cacheProvider } from '@/providers/cache.provider';
 import { BaseController } from '@/shared/abstracts/controller.abstract';
@@ -19,6 +23,7 @@ class ProductPublicController extends BaseController {
 		private validator: ProductValidator,
 		private cache: CacheProvider,
 		private productService: ProductService,
+		private productStockService: ProductStockService,
 	) {
 		super();
 	}
@@ -61,6 +66,24 @@ class ProductPublicController extends BaseController {
 		res.json(res.locals.output);
 	});
 
+	/**
+	 * Read apart from `read` so the level is never cached with the product - see
+	 * `ProductStockService.getPublicStock`.
+	 */
+	public stock = asyncHandler(async (req: Request, res: Response) => {
+		const data = this.validate(
+			this.validator.publicStock,
+			{ id: req.params.id },
+			res,
+		);
+
+		res.locals.output.data({
+			entries: await this.productStockService.getPublicStock(data.id),
+		});
+
+		res.json(res.locals.output);
+	});
+
 	public find = asyncHandler(async (req: Request, res: Response) => {
 		const data = this.validate(this.validator.publicFind, req.query, res);
 
@@ -89,4 +112,5 @@ export const productPublicController = new ProductPublicController(
 	new ProductValidator('product'),
 	cacheProvider,
 	productService,
+	productStockService,
 );

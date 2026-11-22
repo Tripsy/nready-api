@@ -2,6 +2,7 @@ import {
 	type DeepPartial,
 	type EntityManager,
 	In,
+	IsNull,
 	MoreThan,
 	Not,
 } from 'typeorm';
@@ -42,7 +43,15 @@ import ShippingEntity, {
 	ShippingStatusEnum,
 	STATUS_TRANSITIONS,
 } from '@/features/shipping/shipping.entity';
-import { notifyShippingChanged } from '@/features/shipping/shipping.hooks';
+import {
+	moveShippedStock,
+	notifyReturnReceived,
+	notifyShippingChanged,
+	receiveReturnedStock,
+	restoreReturnedStock,
+	type ShippingStockMove,
+	writeOffLostStock,
+} from '@/features/shipping/shipping.hooks';
 import { getShippingRepository } from '@/features/shipping/shipping.repository';
 import {
 	paramsUpdateList,
@@ -54,6 +63,8 @@ import {
 	type ShippingRateService,
 	shippingRateService,
 } from '@/features/shipping/shipping-rate.service';
+import { VatCategoryEnum } from '@/features/vat-rate/vat-rate.entity';
+import { vatRateService } from '@/features/vat-rate/vat-rate.service';
 import {
 	type WarehouseService,
 	warehouseService,
@@ -129,6 +140,17 @@ const ADVANCING_STATUSES = [
 	ShippingStatusEnum.SHIPPED,
 	ShippingStatusEnum.DELIVERED,
 ] as const;
+
+/**
+ * A return in one of these brought nothing back, so it no longer claims any of the order's
+ * delivered goods - another return may be raised for them. `returned` on a return is the parcel
+ * bounced back to the client, so the goods are with them again.
+ */
+const RETURN_RELEASED_STATUSES: readonly ShippingStatus[] = [
+	ShippingStatusEnum.FAILED,
+	ShippingStatusEnum.RETURNED,
+	ShippingStatusEnum.CANCELED,
+];
 
 /** Movements that never carried anything, so nothing is billed or asked for them. */
 const UNBILLED_STATUSES = [
@@ -404,6 +426,12 @@ export class ShippingService {
 	 * lists the same variant on two lines is therefore treated as one pool, which is also how a
 	 * picker would read it.
 	 *
+	 * **Two pools, one per direction.** Outbound lines (`delivery`) are capped by what the order
+	 * holds, counted over the order's other outbound movements. A `return` is capped by what has
+	 * actually arrived - lines of `delivered` deliveries - less what the order's other live returns
+	 * already bring back; a `failed` or `canceled` return brought nothing and releases its claim.
+	 * Counting returns in the outbound pool would refuse any return of an order shipped in full.
+	 *
 	 * Skipped entirely when there is no order: a relocation is measured against stock on hand, which
 	 * is `grn_item.qty_remaining`'s job and not this table's.
 	 *
@@ -414,6 +442,7 @@ export class ShippingService {
 	private async assertLinesAllocatable(
 		manager: EntityManager,
 		orderId: number | null,
+		scope: ShippingScope,
 		lines: ShippingLinePayload,
 		excludeShippingId?: number,
 	): Promise<void> {
@@ -436,35 +465,23 @@ export class ShippingService {
 			);
 		}
 
-		const allocated = await manager
-			.getRepository(ShippingLineEntity)
-			.createQueryBuilder('line')
-			.innerJoin(
-				ShippingEntity,
-				'shipping',
-				'shipping.id = line.shipping_id AND shipping.deleted_at IS NULL',
-			)
-			.where('shipping.order_id = :orderId', { orderId: orderId })
-			.andWhere('line.deleted_at IS NULL')
-			.andWhere(
-				excludeShippingId
-					? 'line.shipping_id != :excludeShippingId'
-					: '1 = 1',
-				excludeShippingId
-					? { excludeShippingId: excludeShippingId }
-					: {},
-			)
-			.select('line.variant_id', 'variant_id')
-			.addSelect('SUM(line.quantity)', 'allocated')
-			.groupBy('line.variant_id')
-			.getRawMany<{ variant_id: number; allocated: string }>();
+		const isReturn = scope === ShippingScopeEnum.RETURN;
 
-		const allocatedByVariant = new Map(
-			allocated.map((row) => [
-				Number(row.variant_id),
-				Number(row.allocated),
-			]),
-		);
+		const [allocatedByVariant, deliveredByVariant] = await Promise.all([
+			this.sumLinesByVariant(manager, orderId, {
+				scopes: isReturn
+					? [ShippingScopeEnum.RETURN]
+					: [ShippingScopeEnum.DELIVERY],
+				excludeStatuses: isReturn ? RETURN_RELEASED_STATUSES : [],
+				excludeShippingId: excludeShippingId,
+			}),
+			isReturn
+				? this.sumLinesByVariant(manager, orderId, {
+						scopes: [ShippingScopeEnum.DELIVERY],
+						statuses: [ShippingStatusEnum.DELIVERED],
+					})
+				: Promise.resolve(null),
+		]);
 
 		for (const line of lines) {
 			const ordered = orderedByVariant.get(line.variant_id);
@@ -479,19 +496,119 @@ export class ShippingService {
 				);
 			}
 
-			const remaining =
-				ordered - (allocatedByVariant.get(line.variant_id) ?? 0);
+			const cap = deliveredByVariant
+				? (deliveredByVariant.get(line.variant_id) ?? 0)
+				: ordered;
+			const remaining = roundMoney(
+				cap - (allocatedByVariant.get(line.variant_id) ?? 0),
+			);
 
 			if (line.quantity > remaining) {
 				throw new CustomError(
 					409,
-					lang('shipping.error.over_allocated', {
-						variant_id: String(line.variant_id),
-						remaining: String(remaining),
-					}),
+					lang(
+						isReturn
+							? 'shipping.error.over_returned'
+							: 'shipping.error.over_allocated',
+						{
+							variant_id: String(line.variant_id),
+							remaining: String(Math.max(remaining, 0)),
+						},
+					),
 				);
 			}
 		}
+	}
+
+	/**
+	 * What the order's non-deleted movements of the given scopes carry, per variant - narrowed to
+	 * the listed statuses, or with the excluded ones left out.
+	 */
+	private async sumLinesByVariant(
+		manager: EntityManager,
+		orderId: number,
+		options: {
+			scopes: readonly ShippingScope[];
+			statuses?: readonly ShippingStatus[];
+			excludeStatuses?: readonly ShippingStatus[];
+			excludeShippingId?: number;
+		},
+	): Promise<Map<number, number>> {
+		const query = manager
+			.getRepository(ShippingLineEntity)
+			.createQueryBuilder('line')
+			.innerJoin(
+				ShippingEntity,
+				'shipping',
+				'shipping.id = line.shipping_id AND shipping.deleted_at IS NULL',
+			)
+			.where('shipping.order_id = :orderId', { orderId: orderId })
+			.andWhere('shipping.scope IN (:...scopes)', {
+				scopes: options.scopes,
+			})
+			.andWhere('line.deleted_at IS NULL');
+
+		if (options.statuses && options.statuses.length > 0) {
+			query.andWhere('shipping.status IN (:...statuses)', {
+				statuses: options.statuses,
+			});
+		}
+
+		if (options.excludeStatuses && options.excludeStatuses.length > 0) {
+			query.andWhere('shipping.status NOT IN (:...excludeStatuses)', {
+				excludeStatuses: options.excludeStatuses,
+			});
+		}
+
+		if (options.excludeShippingId) {
+			query.andWhere('line.shipping_id != :excludeShippingId', {
+				excludeShippingId: options.excludeShippingId,
+			});
+		}
+
+		const rows = await query
+			.select('line.variant_id', 'variant_id')
+			.addSelect('SUM(line.quantity)', 'quantity')
+			.groupBy('line.variant_id')
+			.getRawMany<{ variant_id: number; quantity: string }>();
+
+		return new Map(
+			rows.map((row) => [Number(row.variant_id), Number(row.quantity)]),
+		);
+	}
+
+	/**
+	 * @description Used by `order-return` to say what of an order can still be sent back
+	 *
+	 * Per variant: delivered (lines of `delivered` deliveries) less what the order's live returns
+	 * already carry - the same pool `assertLinesAllocatable` caps a return against.
+	 */
+	public async getReturnableByVariant(
+		orderId: number,
+		manager: EntityManager = dataSource.manager,
+	): Promise<Map<number, number>> {
+		const [delivered, returning] = await Promise.all([
+			this.sumLinesByVariant(manager, orderId, {
+				scopes: [ShippingScopeEnum.DELIVERY],
+				statuses: [ShippingStatusEnum.DELIVERED],
+			}),
+			this.sumLinesByVariant(manager, orderId, {
+				scopes: [ShippingScopeEnum.RETURN],
+				excludeStatuses: RETURN_RELEASED_STATUSES,
+			}),
+		]);
+
+		const returnable = new Map<number, number>();
+
+		for (const [variantId, quantity] of delivered) {
+			const left = roundMoney(quantity - (returning.get(variantId) ?? 0));
+
+			if (left > 0) {
+				returnable.set(variantId, left);
+			}
+		}
+
+		return returnable;
 	}
 
 	/**
@@ -504,6 +621,7 @@ export class ShippingService {
 	private async writeLines(
 		manager: EntityManager,
 		shippingId: number,
+		scope: ShippingScope,
 		lines: ShippingLinePayload,
 	): Promise<void> {
 		await manager
@@ -521,6 +639,11 @@ export class ShippingService {
 					variant_id: line.variant_id,
 					product_id: line.product_id,
 					quantity: line.quantity,
+					// Only goods coming back are inspected; anything else sent is dropped
+					condition:
+						scope === ShippingScopeEnum.RETURN
+							? (line.condition ?? null)
+							: null,
 					notes: line.notes ?? null,
 				}),
 			),
@@ -541,9 +664,7 @@ export class ShippingService {
 	public async create(
 		data: ValidatorOutput<ShippingValidator, 'create'>,
 	): Promise<ShippingEntity> {
-		await this.checkReferences(data);
-
-		const input = await this.withRateDefaults(data);
+		const input = await this.prepareCreate(data);
 
 		const entry = await dataSource.transaction((manager) =>
 			this.createWithin(manager, input),
@@ -555,6 +676,21 @@ export class ShippingService {
 		});
 
 		return entry;
+	}
+
+	/**
+	 * @description Used by `create`, and by `order-return`, which writes the return movement inside
+	 * its own approval transaction through `createWithin`
+	 *
+	 * Everything a back-office create does before its transaction opens: every id resolved (404 on
+	 * one that names nothing) and the figures left out filled from the rate table.
+	 */
+	public async prepareCreate(
+		data: ValidatorOutput<ShippingValidator, 'create'>,
+	): Promise<ShippingCreateInput> {
+		await this.checkReferences(data);
+
+		return this.withRateDefaults(data);
 	}
 
 	/**
@@ -591,16 +727,21 @@ export class ShippingService {
 				? await this.orderService.resolveExchangeRate(data.currency)
 				: 1;
 
-		const quote = quoteShipping({
-			scope: data.scope,
-			method: data.method,
-			countryCode: await this.shippingRateService.resolveCountryCode(
-				data.scope === ShippingScopeEnum.RETURN
-					? data.pickup_client_address_id
-					: data.destination_client_address_id,
-			),
-			exchangeRate: exchangeRate,
-		});
+		const vatRate = await vatRateService.resolverFor();
+
+		const quote = quoteShipping(
+			{
+				scope: data.scope,
+				method: data.method,
+				countryCode: await this.shippingRateService.resolveCountryCode(
+					data.scope === ShippingScopeEnum.RETURN
+						? data.pickup_client_address_id
+						: data.destination_client_address_id,
+				),
+				exchangeRate: exchangeRate,
+			},
+			vatRate(VatCategoryEnum.STANDARD),
+		);
 
 		return {
 			...data,
@@ -630,6 +771,7 @@ export class ShippingService {
 		await this.assertLinesAllocatable(
 			manager,
 			columns.order_id,
+			data.scope,
 			data.lines,
 		);
 
@@ -657,7 +799,7 @@ export class ShippingService {
 			}),
 		);
 
-		await this.writeLines(manager, entry.id, data.lines);
+		await this.writeLines(manager, entry.id, data.scope, data.lines);
 
 		return entry;
 	}
@@ -741,6 +883,7 @@ export class ShippingService {
 				await this.assertLinesAllocatable(
 					manager,
 					entry.order_id,
+					entry.scope,
 					data.lines,
 					entry.id,
 				);
@@ -749,7 +892,12 @@ export class ShippingService {
 			const shipping = await manager.save(entry);
 
 			if (data.lines) {
-				await this.writeLines(manager, shipping.id, data.lines);
+				await this.writeLines(
+					manager,
+					shipping.id,
+					shipping.scope,
+					data.lines,
+				);
 			}
 
 			return shipping;
@@ -801,8 +949,18 @@ export class ShippingService {
 	 * prepared or handed over before then could disagree with what is finally billed. Withdrawing
 	 * it (`failed`, `canceled`) stays open whatever the order's status.
 	 *
+	 * **Stock moves with the moves that carry goods**, inside the same transaction and under a lock
+	 * on the row: into `shipped` the goods are drawn from the pickup warehouse's lots
+	 * (`moveShippedStock`), from `shipped` into `returned` they are put back
+	 * (`restoreReturnedStock`), and from `shipped` into `failed` they are written off as lost
+	 * (`writeOffLostStock`) - off the shelf already, no longer counted as sold. A `return` reaching
+	 * `delivered` takes its goods back in by each line's `condition` (`receiveReturnedStock`) - and
+	 * is refused while a line has none. All are answered by `warehouse-movement`; a shortage refuses
+	 * the move with 409. `failed` before shipping drew nothing, so it writes nothing off.
+	 *
 	 * Every move is announced once written: a delivery arriving can complete the order it
-	 * belongs to, and a failed one stops being billable.
+	 * belongs to, and a failed one stops being billable. A return received is announced a second
+	 * time, to `order-return` (`notifyReturnReceived`).
 	 */
 	public async updateStatus(
 		entry: ShippingEntity,
@@ -854,16 +1012,98 @@ export class ShippingService {
 			entry.delivered_at = entry.delivered_at ?? new Date();
 		}
 
-		entry.status = newStatus;
+		const isReturnReceived =
+			entry.scope === ShippingScopeEnum.RETURN &&
+			newStatus === ShippingStatusEnum.DELIVERED;
 
-		const saved = await this.update(entry);
+		const saved = await dataSource.transaction(async (manager) => {
+			// Read again under the lock: two requests shipping the same movement would otherwise
+			// both draw its goods from stock
+			const locked = await manager
+				.getRepository(ShippingEntity)
+				.findOneOrFail({
+					select: { id: true, status: true },
+					where: { id: entry.id },
+					lock: { mode: 'pessimistic_write' },
+				});
+
+			assertValidStatusTransition(
+				STATUS_TRANSITIONS,
+				locked.status,
+				newStatus,
+			);
+
+			const move: ShippingStockMove = {
+				shipping_id: entry.id,
+				order_id: entry.order_id,
+				scope: entry.scope,
+				pickup_warehouse_id: entry.pickup_warehouse_id,
+				destination_warehouse_id: entry.destination_warehouse_id,
+			};
+
+			if (newStatus === ShippingStatusEnum.SHIPPED) {
+				await moveShippedStock(manager, move);
+			}
+
+			if (newStatus === ShippingStatusEnum.RETURNED) {
+				await restoreReturnedStock(manager, move);
+			}
+
+			if (
+				newStatus === ShippingStatusEnum.FAILED &&
+				locked.status === ShippingStatusEnum.SHIPPED
+			) {
+				await writeOffLostStock(manager, move);
+			}
+
+			if (isReturnReceived) {
+				await this.assertReturnInspected(manager, entry.id);
+				await receiveReturnedStock(manager, move);
+			}
+
+			entry.status = newStatus;
+
+			return manager.save(entry);
+		});
+
+		await cleanEntityCache(ShippingEntity, saved.id);
 
 		await notifyShippingChanged({
 			shipping_id: saved.id,
 			order_id: saved.order_id,
 		});
 
+		if (isReturnReceived && saved.order_id) {
+			await notifyReturnReceived({
+				shipping_id: saved.id,
+				order_id: saved.order_id,
+			});
+		}
+
 		return saved;
+	}
+
+	/**
+	 * A return is received line by line into stock by what each line's goods are fit for, so it
+	 * cannot arrive while any line has not been looked at. Read inside the status transaction, behind
+	 * the row lock, so a line edit racing the move cannot slip an uninspected line past it.
+	 */
+	private async assertReturnInspected(
+		manager: EntityManager,
+		shippingId: number,
+	): Promise<void> {
+		const uninspected = await manager
+			.getRepository(ShippingLineEntity)
+			.count({
+				where: { shipping_id: shippingId, condition: IsNull() },
+			});
+
+		if (uninspected > 0) {
+			throw new CustomError(
+				409,
+				lang('shipping.error.condition_required'),
+			);
+		}
 	}
 
 	/**
@@ -1005,6 +1245,7 @@ export class ShippingService {
 		await this.writeLines(
 			manager,
 			delivery.id,
+			ShippingScopeEnum.DELIVERY,
 			[...byVariant.values()].map((line) => ({
 				...line,
 				notes: notes.get(line.variant_id) ?? undefined,
@@ -1299,7 +1540,8 @@ export class ShippingService {
 	 * return against it happened in. The order is resolved through `OrderService.findOwnById` first,
 	 * so somebody else's order answers the same 404 as a missing one and no row of theirs is read.
 	 *
-	 * Unpaginated: an order has one delivery and rarely more than a return beside it.
+	 * Unpaginated: an order has a delivery per warehouse it leaves from - one, or a few when
+	 * checkout split it - and rarely more than a return beside them.
 	 */
 	public async findForOwnOrder(
 		orderId: number,

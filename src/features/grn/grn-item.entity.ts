@@ -65,6 +65,7 @@ export default class GrnItemEntity extends EntityAbstract {
 		scale: 2,
 		nullable: false,
 		comment: 'Quantity received; never changes once confirmed',
+		transformer: numericTransformer,
 	})
 	qty!: number;
 
@@ -77,6 +78,7 @@ export default class GrnItemEntity extends EntityAbstract {
 		nullable: false,
 		default: 0,
 		comment: 'Quantity still in this lot; 0 means the lot is closed',
+		transformer: numericTransformer,
 	})
 	qty_remaining!: number;
 
