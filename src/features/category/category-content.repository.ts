@@ -8,6 +8,7 @@ import type {
 } from '@/features/category/category.entity';
 import CategoryContentEntity from '@/features/category/category-content.entity';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export class CategoryContentQuery extends RepositoryAbstract<CategoryContentEntity> {
 	constructor(repository: Repository<CategoryContentEntity>) {
@@ -25,7 +26,7 @@ export const CategoryContentRepository = dataSource
 		async checkSlugLanguageConflict(
 			manager: EntityManager,
 			contents: CategoryContentInput[],
-			category_id: number,
+			category_id: EntityId,
 			type: CategoryType,
 		) {
 			const pairs = Array.from(
@@ -71,7 +72,7 @@ export const CategoryContentRepository = dataSource
 		async saveContent(
 			manager: EntityManager,
 			contents: CategoryContentInput[],
-			category_id: number,
+			category_id: EntityId,
 			type: CategoryType,
 		) {
 			if (!contents.length) {

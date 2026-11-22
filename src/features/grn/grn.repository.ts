@@ -18,8 +18,8 @@ export class GrnQuery extends RepositoryAbstract<GrnEntity> {
 	/**
 	 * The list's one search box.
 	 *
-	 * - A bare number is read as the receipt's own number in its series *or* its id - what an
-	 *   operator types off a printed NIR, and the id nobody sees.
+	 * - A bare number is read as the receipt's own number in its series - what an operator types
+	 *   off a printed NIR.
 	 * - A written reference (`NIR-42`) matches through `IDX_grn_ref`.
 	 * - Anything else searches the supplier's document number, the string printed on the delivery
 	 *   note the goods arrived with.
@@ -32,10 +32,7 @@ export class GrnQuery extends RepositoryAbstract<GrnEntity> {
 		}
 
 		if (!Number.isNaN(Number(value))) {
-			return this.filterAny([
-				{ column: 'ref_number', value: Number(value), operator: '=' },
-				{ column: 'id', value: Number(value), operator: '=' },
-			]);
+			return this.filterBy('ref_number', Number(value));
 		}
 
 		if (value.length < Configuration.get('filter.termMinLength')) {

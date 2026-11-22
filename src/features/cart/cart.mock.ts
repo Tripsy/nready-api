@@ -3,13 +3,14 @@ import { OrderByEnum } from '@/features/cart/cart.validator';
 import type { CartPricing } from '@/features/cart/cart-pricing.service';
 import { createFutureDate, createPastDate } from '@/helpers/date.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 /** One cart row, as the dashboard listing returns it. */
 export function getCartEntityMock(): CartEntity {
 	return {
-		id: 9,
+		id: mockId(9),
 		token: '3f1c8b5e-2a44-4f8d-9c11-8d2e6b0a7c34',
-		user_id: 7,
+		user_id: mockId(7),
 		currency: 'RON',
 		expires_at: createFutureDate(30 * 24 * 60 * 60),
 		created_at: createPastDate(86400),
@@ -30,9 +31,9 @@ export function getCartPricingMock(): CartPricing {
 		currency: 'RON',
 		lines: [
 			{
-				id: 31,
-				variant_id: 41,
-				product_id: 17,
+				id: mockId(31),
+				variant_id: mockId(41),
+				product_id: mockId(17),
 				sku: 'PIZZA-MARG-30',
 				label: 'Pizza Margherita',
 				slug: 'pizza-margherita',
@@ -59,7 +60,7 @@ export function getCartPricingMock(): CartPricing {
 						type: 'percent',
 						conditions: null,
 						value: 10,
-						discount_id: 4,
+						discount_id: mockId(4),
 						reduction: 7.6,
 					},
 				],
@@ -68,9 +69,9 @@ export function getCartPricingMock(): CartPricing {
 				issue: null,
 			},
 			{
-				id: 32,
-				variant_id: 55,
-				product_id: 21,
+				id: mockId(32),
+				variant_id: mockId(55),
+				product_id: mockId(21),
 				sku: 'DESSERT-TIRAMISU',
 				label: 'Tiramisu',
 				slug: 'tiramisu',
@@ -100,10 +101,10 @@ export function getCartPricingMock(): CartPricing {
 
 export const cartInputPayloads = {
 	addItem: {
-		variant_id: 41,
-		product_id: 17,
+		variant_id: mockId(41),
+		product_id: mockId(17),
 		quantity: 2,
-		options: [8],
+		options: [mockId(8)],
 		notes: null,
 	},
 	find: {
@@ -112,7 +113,7 @@ export const cartInputPayloads = {
 		order_by: OrderByEnum.UPDATED_AT,
 		direction: OrderDirectionEnum.DESC,
 		filter: {
-			user_id: 7,
+			user_id: mockId(7),
 		},
 	},
 };

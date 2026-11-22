@@ -41,7 +41,7 @@ export const docs: Record<keyof typeof cartController, ApiInputDocumentation> =
 				notes: PRICING_NOTE,
 				params: {
 					id: {
-						type: 'number',
+						type: 'string',
 						required: true,
 					},
 				},
@@ -85,7 +85,7 @@ export const docs: Record<keyof typeof cartController, ApiInputDocumentation> =
 						condition: `one of ${Object.values(OrderDirectionEnum).join(', ')}`,
 					},
 					'filter[user_id]': {
-						type: 'number',
+						type: 'string',
 						required: false,
 					},
 					'filter[currency]': {
@@ -111,7 +111,7 @@ export const docs: Record<keyof typeof cartController, ApiInputDocumentation> =
 				notes: 'Permanent. The lines go with it through the cascade, and nothing brings either back - a cart has no state between live and gone, so the shopper simply starts a new one on their next visit',
 				params: {
 					id: {
-						type: 'number',
+						type: 'string',
 						required: true,
 					},
 				},

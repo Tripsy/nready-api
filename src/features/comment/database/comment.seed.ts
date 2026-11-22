@@ -20,6 +20,7 @@ import CommentEntity, {
 } from '@/features/comment/comment.entity';
 import UserEntity from '@/features/user/user.entity';
 import { hashIp } from '@/helpers/security.helper';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /** Articles to spread comments over; enough to give a moderation listing something to page. */
 const TARGET_ARTICLES = 6;
@@ -50,11 +51,11 @@ const ROOT_STATUSES: readonly CommentStatus[] = [
  * seeded row - a comment is deliberately free to repeat every one of its other values - and the
  * text is deterministic in the indices it is built from, so a re-run rebuilds exactly the same keys.
  */
-function rootContent(articleId: number, index: number): string {
+function rootContent(articleId: EntityId, index: number): string {
 	return `Seeded comment ${sequenceLabel(index)} on article ${articleId}.`;
 }
 
-function replyContent(articleId: number, index: number): string {
+function replyContent(articleId: EntityId, index: number): string {
 	return `Seeded reply ${sequenceLabel(index)} on article ${articleId}.`;
 }
 
@@ -143,7 +144,7 @@ export const commentSeed: SeedDefinition = {
 			order: { id: 'ASC' },
 		});
 
-		const rootByArticle = new Map<number, number>();
+		const rootByArticle = new Map<EntityId, EntityId>();
 
 		for (const root of threadRoots) {
 			if (!rootByArticle.has(root.entity_id)) {
@@ -208,7 +209,7 @@ export const commentSeed: SeedDefinition = {
  */
 async function syncReplyCounts(
 	manager: EntityManager,
-	parentIds: number[],
+	parentIds: EntityId[],
 ): Promise<void> {
 	if (parentIds.length === 0) {
 		return;
@@ -228,11 +229,11 @@ async function syncReplyCounts(
 }
 
 type BuildCommentOptions = {
-	articleId: number;
+	articleId: EntityId;
 	content: string;
 	status: CommentStatus;
 	index: number;
-	userIds: number[];
+	userIds: EntityId[];
 	random: Random;
 };
 

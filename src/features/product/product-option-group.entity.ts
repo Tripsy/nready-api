@@ -7,12 +7,13 @@ import {
 	JoinColumn,
 	ManyToOne,
 	OneToMany,
-	PrimaryGeneratedColumn,
 	UpdateDateColumn,
 } from 'typeorm';
 import type ProductEntity from '@/features/product/product.entity';
 import type ProductOptionEntity from '@/features/product/product-option.entity';
 import type TermEntity from '@/features/term/term.entity';
+import { EntityIdAbstract } from '@/shared/abstracts/entity-id.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 const ENTITY_TABLE_NAME = 'product_option_group';
 
@@ -42,21 +43,18 @@ const ENTITY_TABLE_NAME = 'product_option_group';
 // Not `EntityAbstract`: this table carries no `deleted_at`, like the two levels below it. A group
 // is written only through the product form's Options tab, and dropping it from that form deletes
 // it outright - taking its answers and their deltas with it through the cascades
-export default class ProductOptionGroupEntity {
+export default class ProductOptionGroupEntity extends EntityIdAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
 
-	@PrimaryGeneratedColumn({ type: 'int' })
-	id!: number;
+	@Column('uuid', { nullable: false })
+	product_id!: EntityId;
 
-	@Column('int', { nullable: false })
-	product_id!: number;
-
-	@Column('int', {
+	@Column('uuid', {
 		nullable: false,
 		comment: 'Term holding the multilingual prompt, e.g. "Choose a side"',
 	})
-	label_id!: number;
+	label_id!: EntityId;
 
 	@Column('int', {
 		nullable: false,

@@ -8,15 +8,17 @@ import {
 	registerStockAvailabilityResolver,
 	type VariantAvailability,
 } from '@/shared/registries/stock-availability.registry';
+import type { EntityId } from '@/shared/types/entity-id.type';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 function line(overrides: Partial<CartLine>): CartLine {
 	return {
-		id: 1,
+		id: mockId(1),
 		parent_id: null,
 		bundle_item_id: null,
 		is_bundle: false,
-		variant_id: 7,
-		product_id: 3,
+		variant_id: mockId(7),
+		product_id: mockId(3),
 		sku: null,
 		label: null,
 		slug: null,
@@ -63,18 +65,20 @@ describe('CartPricingService - applyStock', () => {
 			}
 		).applyStock(lines);
 
-	/** Answers the availability the cart asks `warehouse-movement` for. */
+	/**
+	 * Answers the availability the cart asks `warehouse-movement` for, keyed by the fixture
+	 * number each variant's `mockId` was built from.
+	 */
 	const answering = (availability: Record<number, VariantAvailability>) => {
-		const resolver = jest.fn(
-			async (variantIds: readonly number[]) =>
-				new Map(
-					variantIds.flatMap((id) =>
-						availability[id]
-							? [[id, availability[id]] as const]
-							: [],
-					),
-				),
-		);
+		const resolver = jest.fn(async (variantIds: readonly EntityId[]) => {
+			const entries = variantIds.flatMap((id) => {
+				const found = availability[Number(id.slice(-12))];
+
+				return found ? [[id, found] as const] : [];
+			});
+
+			return new Map(entries);
+		});
 
 		registerStockAvailabilityResolver(resolver);
 
@@ -93,13 +97,13 @@ describe('CartPricingService - applyStock', () => {
 		answering({ 7: stock(3) });
 
 		const priced = await applyStock([
-			line({ id: 1, quantity: 2 }),
-			line({ id: 2, quantity: 2 }),
+			line({ id: mockId(1), quantity: 2 }),
+			line({ id: mockId(2), quantity: 2 }),
 		]);
 
 		expect(issues(priced)).toEqual({
-			1: CartLineIssueEnum.INSUFFICIENT_STOCK,
-			2: CartLineIssueEnum.INSUFFICIENT_STOCK,
+			[mockId(1)]: CartLineIssueEnum.INSUFFICIENT_STOCK,
+			[mockId(2)]: CartLineIssueEnum.INSUFFICIENT_STOCK,
 		});
 		expect(priced.map((entry) => entry.stock_available)).toEqual([3, 3]);
 	});
@@ -109,27 +113,35 @@ describe('CartPricingService - applyStock', () => {
 
 		const priced = await applyStock([
 			line({
-				id: 10,
+				id: mockId(10),
 				is_bundle: true,
-				variant_id: 50,
+				variant_id: mockId(50),
 				unit_price: 0,
 				subtotal: 0,
 			}),
-			line({ id: 11, parent_id: 10, variant_id: 7 }),
-			line({ id: 12, parent_id: 10, variant_id: 8 }),
-			line({ id: 20, variant_id: 7 }),
+			line({
+				id: mockId(11),
+				parent_id: mockId(10),
+				variant_id: mockId(7),
+			}),
+			line({
+				id: mockId(12),
+				parent_id: mockId(10),
+				variant_id: mockId(8),
+			}),
+			line({ id: mockId(20), variant_id: mockId(7) }),
 		]);
 
 		expect(issues(priced)).toEqual({
-			10: CartLineIssueEnum.INSUFFICIENT_STOCK,
-			11: CartLineIssueEnum.INSUFFICIENT_STOCK,
-			12: CartLineIssueEnum.INSUFFICIENT_STOCK,
+			[mockId(10)]: CartLineIssueEnum.INSUFFICIENT_STOCK,
+			[mockId(11)]: CartLineIssueEnum.INSUFFICIENT_STOCK,
+			[mockId(12)]: CartLineIssueEnum.INSUFFICIENT_STOCK,
 			// The same variant bought on its own is not short - only its bundle is
-			20: null,
+			[mockId(20)]: null,
 		});
 		// A header holds no stock and never states a count
 		expect(
-			priced.find((entry) => entry.id === 10)?.stock_available,
+			priced.find((entry) => entry.id === mockId(10))?.stock_available,
 		).toBeNull();
 	});
 
@@ -138,11 +150,15 @@ describe('CartPricingService - applyStock', () => {
 		const resolver = answering({ 7: stock(5) });
 
 		await applyStock([
-			line({ id: 10, is_bundle: true, variant_id: 50 }),
-			line({ id: 11, parent_id: 10, variant_id: 7 }),
+			line({ id: mockId(10), is_bundle: true, variant_id: mockId(50) }),
+			line({
+				id: mockId(11),
+				parent_id: mockId(10),
+				variant_id: mockId(7),
+			}),
 		]);
 
-		expect(resolver).toHaveBeenCalledWith([7]);
+		expect(resolver).toHaveBeenCalledWith([mockId(7)]);
 	});
 
 	it('lets a backorder variant through, whatever is left', async () => {
@@ -162,9 +178,9 @@ describe('CartPricingService - applyStock', () => {
 		});
 
 		const priced = await applyStock([
-			line({ id: 1, variant_id: 7 }),
-			line({ id: 2, variant_id: 8 }),
-			line({ id: 3, variant_id: 9 }),
+			line({ id: mockId(1), variant_id: mockId(7) }),
+			line({ id: mockId(2), variant_id: mockId(8) }),
+			line({ id: mockId(3), variant_id: mockId(9) }),
 		]);
 
 		expect(priced.map((entry) => entry.stock_available)).toEqual([

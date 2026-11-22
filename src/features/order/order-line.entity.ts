@@ -14,6 +14,7 @@ import type { ProductOptionSnapshot } from '@/features/product/product-option.en
 import type ProductVariantEntity from '@/features/product/product-variant.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import { numericTransformer } from '@/shared/transformers/numeric.transformer';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 const ENTITY_TABLE_NAME = 'order_line';
 
@@ -32,9 +33,9 @@ export default class OrderLineEntity extends EntityAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
 
-	@Column('int', { nullable: false })
+	@Column('uuid', { nullable: false })
 	@Index('IDX_order_line_order_id')
-	order_id!: number;
+	order_id!: EntityId;
 
 	/**
 	 * Set on the component lines a bundle explodes into; NULL on an ordinary line and on the
@@ -49,11 +50,11 @@ export default class OrderLineEntity extends EntityAbstract {
 	 * Apportionment is pro-rata by the components' standalone prices, with the rounding remainder
 	 * assigned to the largest share so the parts reconcile to the charged total exactly.
 	 */
-	@Column('int', { nullable: true })
+	@Column('uuid', { nullable: true })
 	@Index('IDX_order_line_parent_id', {
 		where: 'parent_id IS NOT NULL',
 	})
-	parent_id!: number | null;
+	parent_id!: EntityId | null;
 
 	/**
 	 * The `product_bundle_item` a component line was taken from - null on a header and on every
@@ -66,8 +67,8 @@ export default class OrderLineEntity extends EntityAbstract {
 	 * came from. With the row gone the line still says what was sold; only re-editing the bundle
 	 * falls back to its current composition.
 	 */
-	@Column('int', { nullable: true })
-	bundle_item_id!: number | null;
+	@Column('uuid', { nullable: true })
+	bundle_item_id!: EntityId | null;
 
 	/**
 	 * What was bought. `product_id` is kept alongside it, denormalized, because every revenue
@@ -78,13 +79,13 @@ export default class OrderLineEntity extends EntityAbstract {
 	 * belongs to a different product is rejected by the database rather than by a service check
 	 * somebody has to remember to write.
 	 */
-	@Column('int', { nullable: false })
+	@Column('uuid', { nullable: false })
 	@Index('IDX_order_line_variant_id')
-	variant_id!: number;
+	variant_id!: EntityId;
 
-	@Column('int', { nullable: false })
+	@Column('uuid', { nullable: false })
 	@Index('IDX_order_line_product_id')
-	product_id!: number;
+	product_id!: EntityId;
 
 	/*
 	 * `numeric` rather than `int` because a quantity is not always a count: `product.unit` allows

@@ -128,7 +128,7 @@ export const docs: Record<
 		request: {
 			notes: "Requires an account. An order billed to somebody else's client answers 404, the same as a missing one. Unpaginated. `invoices` holds the issued documents billing the order's goods (`scope` `order`) or one of its delivery fees (`scope` `shipping`), and their reversals - `is_reversal` with `parent_invoice_id` naming the original; figures stay positive and the flag carries the sign. Drafts and canceled documents are not listed. `payments` holds every movement filed under the order, any status; a refund is `direction` `out`, and `gross_amount` is unsigned",
 			params: {
-				order_id: { type: 'number', required: true },
+				order_id: { type: 'string', required: true },
 			},
 		},
 	}),
@@ -146,8 +146,8 @@ export const docs: Record<
 		request: {
 			notes: "Requires an account. Answers 404 for an order billed to somebody else's client, and for a document not listed by `billing` for the order - a draft, a canceled one, or one of another order. Figures stay positive on a reversal; `is_reversal` carries the sign and `parent_invoice` names the document it takes back. `order` is the order billed. `shipping` is set on a `shipping` document only: carrier, both ends (`pickup_data` / `destination_data` once shipped, else the warehouse or client-address label) and its dates, read live. `seller_details.company_vat_number` null states the seller is not VAT-registered; absent on documents issued before it was recorded. Notes are not included",
 			params: {
-				order_id: { type: 'number', required: true },
-				id: { type: 'number', required: true },
+				order_id: { type: 'string', required: true },
+				id: { type: 'string', required: true },
 			},
 		},
 	}),

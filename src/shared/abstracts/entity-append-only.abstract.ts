@@ -1,4 +1,5 @@
-import { CreateDateColumn, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { CreateDateColumn, Entity } from 'typeorm';
+import { EntityIdAbstract } from '@/shared/abstracts/entity-id.abstract';
 
 /**
  * Base for tables that are only ever inserted into - ledgers, audit trails, anything whose value
@@ -14,10 +15,7 @@ import { CreateDateColumn, Entity, PrimaryGeneratedColumn } from 'typeorm';
  * they cancel.
  */
 @Entity()
-export abstract class EntityAppendOnlyAbstract {
-	@PrimaryGeneratedColumn({ type: 'int' })
-	id!: number;
-
+export abstract class EntityAppendOnlyAbstract extends EntityIdAbstract {
 	@CreateDateColumn({ type: 'timestamp', nullable: false })
 	created_at!: Date;
 }

@@ -11,23 +11,19 @@ export class CategoryQuery extends RepositoryAbstract<CategoryEntity> {
 
 	filterByTerm(term?: string): this {
 		if (term) {
-			if (!Number.isNaN(Number(term)) && term.trim() !== '') {
-				this.filterBy('id', Number(term));
-			} else {
-				if (term.length >= Configuration.get('filter.termMinLength')) {
-					this.filterAny([
-						{
-							column: 'content.label',
-							value: term,
-							operator: 'ILIKE',
-						},
-						{
-							column: 'parentContent.label',
-							value: term,
-							operator: 'ILIKE',
-						},
-					]);
-				}
+			if (term.length >= Configuration.get('filter.termMinLength')) {
+				this.filterAny([
+					{
+						column: 'content.label',
+						value: term,
+						operator: 'ILIKE',
+					},
+					{
+						column: 'parentContent.label',
+						value: term,
+						operator: 'ILIKE',
+					},
+				]);
 			}
 		}
 

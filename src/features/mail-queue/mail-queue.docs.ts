@@ -42,7 +42,7 @@ export const docs: Record<
 			notes: `${lifecycleNote}. \`content\` is the rendered subject, body and variables as they were queued - the template it came from can change afterwards without rewriting what was sent`,
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -122,12 +122,12 @@ export const docs: Record<
 					default: OrderDirectionEnum.ASC,
 				},
 				filter: {
-					id: { type: 'number', required: false },
+					id: { type: 'string', required: false },
 					template: {
 						type: 'string',
 						required: false,
 						condition:
-							'either side of the joined template: a number picks one by id, a string searches its label',
+							'either side of the joined template: a uuid picks one by id, any other string searches its label',
 					},
 					status: {
 						type: 'enum',

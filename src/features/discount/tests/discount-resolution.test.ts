@@ -14,9 +14,11 @@ import {
 	evaluateConditions,
 	type OrderDiscountBasis,
 } from '@/features/discount/discount-resolution.service';
+import type { EntityId } from '@/shared/types/entity-id.type';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 function makeDiscount(overrides: {
-	id?: number;
+	id?: EntityId;
 	type?: DiscountType;
 	value: number;
 	scope?: DiscountScope;
@@ -24,7 +26,7 @@ function makeDiscount(overrides: {
 }): DiscountEntity {
 	const discount = new DiscountEntity();
 
-	discount.id = overrides.id ?? 1;
+	discount.id = overrides.id ?? mockId(1);
 	discount.label = 'Test';
 	discount.scope = overrides.scope ?? DiscountScopeEnum.PRODUCT;
 	discount.reason = DiscountReasonEnum.SPECIAL_DISCOUNT;
@@ -37,8 +39,8 @@ function makeDiscount(overrides: {
 }
 
 const baseContext: DiscountLineContext = {
-	variantId: 1,
-	productId: 1,
+	variantId: mockId(1),
+	productId: mockId(1),
 	quantity: 1,
 	unitPrice: 100,
 	exchangeRate: 1,

@@ -116,7 +116,7 @@ export const docs: Record<
 				},
 				filter: {
 					id: {
-						type: 'number',
+						type: 'string',
 						required: false,
 						condition:
 							'resolves a permalink that cannot carry the slug',
@@ -131,7 +131,7 @@ export const docs: Record<
 						required: false,
 						values: Object.values(ArticleFeaturedStatusEnum),
 					},
-					category_id: { type: 'number', required: false },
+					category_id: { type: 'string', required: false },
 					tag_id: {
 						type: 'array',
 						required: false,
@@ -140,7 +140,7 @@ export const docs: Record<
 							'repeatable; a single value is accepted unwrapped',
 					},
 					exclude_id: {
-						type: 'number',
+						type: 'string',
 						required: false,
 						condition:
 							'drops one article, so a sidebar cannot recommend the page it sits on',

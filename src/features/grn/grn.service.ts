@@ -38,12 +38,14 @@ import {
 	warehouseService,
 } from '@/features/warehouse/warehouse.service';
 import { createCurrentDate, formatDate } from '@/helpers/date.helper';
+import { compareIds } from '@/helpers/id.helper';
 import { roundMoney } from '@/helpers/shop.helper';
 import {
 	assertValidStatusTransition,
 	cleanEntityCache,
 	cleanEntityCacheMany,
 } from '@/shared/abstracts/service.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 const ENTRY_COLUMNS = [
@@ -90,23 +92,23 @@ export type GrnWithItems = GrnEntity & { items: GrnItemWithLabel[] };
 
 /** One thing to draw from lots. `key` is the caller's own - a shipment line id - echoed back. */
 export type LotDemand = {
-	key: number;
-	variant_id: number;
+	key: EntityId;
+	variant_id: EntityId;
 	quantity: number;
 };
 
 /** What was drawn from one lot for one demand, at that lot's base cost. */
 export type LotPiece = {
-	key: number;
-	grn_item_id: number;
-	variant_id: number;
+	key: EntityId;
+	grn_item_id: EntityId;
+	variant_id: EntityId;
 	qty: number;
 	unit_cost_base: number;
 };
 
 /** One lot of a variant at a warehouse, as a stock count reads it - see `lockSiteLots`. */
 export type SiteLot = {
-	grn_item_id: number;
+	grn_item_id: EntityId;
 	/** What the lot arrived with - the most it may ever hold again. */
 	qty: number;
 	qty_remaining: number;
@@ -116,7 +118,7 @@ export type SiteLot = {
 };
 
 /** What a confirm or cancel touched, for the caller to drop the caches of once it commits. */
-type StockChange = { productIds: number[] };
+type StockChange = { productIds: EntityId[] };
 
 /**
  * Converts a unit cost into the base currency at the receipt's frozen rate. Four decimals - the
@@ -155,8 +157,8 @@ export class GrnService {
 	 * not received into, or from, something somebody removed.
 	 */
 	private async checkReferences(data: {
-		warehouse_id?: number;
-		vendor_id?: number;
+		warehouse_id?: EntityId;
+		vendor_id?: EntityId;
 	}): Promise<void> {
 		if (data.warehouse_id) {
 			await this.warehouseService.findById(data.warehouse_id, false);
@@ -177,7 +179,7 @@ export class GrnService {
 	 */
 	private async checkVariants(
 		manager: EntityManager,
-		items: readonly { variant_id: number }[],
+		items: readonly { variant_id: EntityId }[],
 	): Promise<void> {
 		if (items.length === 0) {
 			return;
@@ -263,7 +265,7 @@ export class GrnService {
 	 */
 	private async writeItems(
 		manager: EntityManager,
-		grnId: number,
+		grnId: EntityId,
 		items: GrnItemPayload,
 		exchangeRate: number,
 	): Promise<void> {
@@ -370,7 +372,7 @@ export class GrnService {
 	 */
 	private async lockEntry(
 		manager: EntityManager,
-		id: number,
+		id: EntityId,
 	): Promise<GrnEntity> {
 		const entry = await manager.getRepository(GrnEntity).findOne({
 			where: { id: id },
@@ -529,8 +531,8 @@ export class GrnService {
 	 */
 	private async lockVariants(
 		manager: EntityManager,
-		variantIds: number[],
-	): Promise<Map<number, ProductVariantEntity>> {
+		variantIds: EntityId[],
+	): Promise<Map<EntityId, ProductVariantEntity>> {
 		const variants = await manager
 			.getRepository(ProductVariantEntity)
 			.find({
@@ -558,8 +560,8 @@ export class GrnService {
 	 */
 	private async onHandByVariant(
 		manager: EntityManager,
-		variantIds: number[],
-	): Promise<Map<number, number>> {
+		variantIds: EntityId[],
+	): Promise<Map<EntityId, number>> {
 		const rows = await manager
 			.getRepository(GrnItemEntity)
 			.createQueryBuilder('item')
@@ -578,10 +580,10 @@ export class GrnService {
 				status: GrnStatusEnum.CONFIRMED,
 			})
 			.groupBy('item.variant_id')
-			.getRawMany<{ variant_id: number; on_hand: string }>();
+			.getRawMany<{ variant_id: EntityId; on_hand: string }>();
 
 		return new Map(
-			rows.map((row) => [Number(row.variant_id), Number(row.on_hand)]),
+			rows.map((row) => [row.variant_id, Number(row.on_hand)]),
 		);
 	}
 
@@ -603,7 +605,7 @@ export class GrnService {
 	 */
 	public async consumeLots(
 		manager: EntityManager,
-		warehouseId: number,
+		warehouseId: EntityId,
 		demands: readonly LotDemand[],
 		options: { allowShort?: boolean } = {},
 	): Promise<LotPiece[]> {
@@ -643,8 +645,8 @@ export class GrnService {
 			.getRawAndEntities();
 
 		const receivedAt = new Map(
-			lots.raw.map((row: { item_id: number; received_at: Date }) => [
-				Number(row.item_id),
+			lots.raw.map((row: { item_id: EntityId; received_at: Date }) => [
+				row.item_id,
 				new Date(row.received_at).getTime(),
 			]),
 		);
@@ -653,7 +655,7 @@ export class GrnService {
 		const open = [...lots.entities].sort(
 			(a, b) =>
 				(receivedAt.get(a.id) ?? 0) - (receivedAt.get(b.id) ?? 0) ||
-				a.id - b.id,
+				compareIds(a.id, b.id),
 		);
 		const remaining = new Map(
 			open.map((lot) => [lot.id, Number(lot.qty_remaining)]),
@@ -727,9 +729,9 @@ export class GrnService {
 	 */
 	public async restoreLots(
 		manager: EntityManager,
-		pieces: readonly { grn_item_id: number; qty: number }[],
+		pieces: readonly { grn_item_id: EntityId; qty: number }[],
 	): Promise<void> {
-		const totals = new Map<number, number>();
+		const totals = new Map<EntityId, number>();
 
 		for (const piece of pieces) {
 			totals.set(
@@ -738,7 +740,7 @@ export class GrnService {
 			);
 		}
 
-		const ids = [...totals.keys()].sort((a, b) => a - b);
+		const ids = [...totals.keys()].sort(compareIds);
 
 		if (ids.length === 0) {
 			return;
@@ -772,8 +774,8 @@ export class GrnService {
 	 */
 	public async lockSiteLots(
 		manager: EntityManager,
-		warehouseId: number,
-		variantId: number,
+		warehouseId: EntityId,
+		variantId: EntityId,
 	): Promise<SiteLot[]> {
 		const lots = await manager
 			.getRepository(GrnItemEntity)
@@ -800,8 +802,8 @@ export class GrnService {
 			.getRawAndEntities();
 
 		const receivedAt = new Map(
-			lots.raw.map((row: { item_id: number; received_at: Date }) => [
-				Number(row.item_id),
+			lots.raw.map((row: { item_id: EntityId; received_at: Date }) => [
+				row.item_id,
 				new Date(row.received_at).getTime(),
 			]),
 		);
@@ -817,7 +819,7 @@ export class GrnService {
 			.sort(
 				(a, b) =>
 					a.received_at - b.received_at ||
-					a.grn_item_id - b.grn_item_id,
+					compareIds(a.grn_item_id, b.grn_item_id),
 			);
 	}
 
@@ -832,9 +834,9 @@ export class GrnService {
 	 */
 	public async withdrawFromLots(
 		manager: EntityManager,
-		pieces: readonly { grn_item_id: number; qty: number }[],
+		pieces: readonly { grn_item_id: EntityId; qty: number }[],
 	): Promise<void> {
-		const totals = new Map<number, number>();
+		const totals = new Map<EntityId, number>();
 
 		for (const piece of pieces) {
 			totals.set(
@@ -843,7 +845,7 @@ export class GrnService {
 			);
 		}
 
-		const ids = [...totals.keys()].sort((a, b) => a - b);
+		const ids = [...totals.keys()].sort(compareIds);
 
 		if (ids.length === 0) {
 			return;
@@ -890,7 +892,7 @@ export class GrnService {
 	 */
 	public async confirmWithin(
 		manager: EntityManager,
-		id: number,
+		id: EntityId,
 	): Promise<StockChange> {
 		const entry = await this.lockEntry(manager, id);
 
@@ -1003,7 +1005,7 @@ export class GrnService {
 	 */
 	public async cancelWithin(
 		manager: EntityManager,
-		id: number,
+		id: EntityId,
 	): Promise<StockChange> {
 		const entry = await this.lockEntry(manager, id);
 
@@ -1129,7 +1131,7 @@ export class GrnService {
 	 * deleting it would drop them out of every on-hand figure while its movements stayed in the
 	 * ledger - a drift the reconciliation could only report. It is canceled instead.
 	 */
-	public async delete(id: number): Promise<void> {
+	public async delete(id: EntityId): Promise<void> {
 		const entry = await this.findById(id, false);
 
 		if (entry.status === GrnStatusEnum.CONFIRMED) {
@@ -1139,11 +1141,11 @@ export class GrnService {
 		await this.repository.createQuery().filterById(id).delete();
 	}
 
-	public async restore(id: number): Promise<void> {
+	public async restore(id: EntityId): Promise<void> {
 		await this.repository.createQuery().filterById(id).restore();
 	}
 
-	public findById(id: number, withDeleted: boolean): Promise<GrnEntity> {
+	public findById(id: EntityId, withDeleted: boolean): Promise<GrnEntity> {
 		return this.repository
 			.createQuery()
 			.filterById(id)
@@ -1157,7 +1159,7 @@ export class GrnService {
 	 * translation removed since still names what was received - a join would blank it. The name
 	 * is in the default content language, since the `read` payload is cached per id alone.
 	 */
-	public async getItems(grnId: number): Promise<GrnItemWithLabel[]> {
+	public async getItems(grnId: EntityId): Promise<GrnItemWithLabel[]> {
 		const items = await dataSource.getRepository(GrnItemEntity).find({
 			where: { grn_id: grnId },
 			order: { id: 'ASC' },
@@ -1215,7 +1217,7 @@ export class GrnService {
 	 * @description Used in `read` method from controller; this will return a custom shape
 	 */
 	public async getEntryData(data: {
-		id: number;
+		id: EntityId;
 		withDeleted: boolean;
 	}): Promise<GrnWithItems> {
 		const entry = await this.repository
@@ -1325,7 +1327,7 @@ export class GrnService {
 		// A page past the end reports 0 rather than the real total - the window count's price
 		return [
 			rows.map((row) => ({
-				variant_id: Number(row.variant_id),
+				variant_id: row.variant_id,
 				sku: row.sku,
 				cost_price: Number(row.cost_price),
 				currency: row.currency,
@@ -1341,7 +1343,7 @@ export class GrnService {
 
 /** One price row whose floor, in base currency, no longer covers the variant's cost. */
 export type CostOverFloor = {
-	variant_id: number;
+	variant_id: EntityId;
 	sku: string;
 	cost_price: number; // Base currency
 	currency: string; // The price row's

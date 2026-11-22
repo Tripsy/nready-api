@@ -35,10 +35,6 @@ export class ProductQuery extends RepositoryAbstract<ProductEntity> {
 			return this;
 		}
 
-		if (!Number.isNaN(Number(term)) && term.trim() !== '') {
-			return this.filterBy('product.id', Number(term));
-		}
-
 		if (term.length < Configuration.get('filter.termMinLength')) {
 			return this;
 		}

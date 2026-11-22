@@ -11,6 +11,7 @@ import {
 	resolveStockAvailability,
 	type VariantAvailability,
 } from '@/shared/registries/stock-availability.registry';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * What a visitor is told about a variant's stock - a level, never a count. The count is the
@@ -42,7 +43,7 @@ const SEVERITY: readonly ProductStockStatus[] = [
  * no stock to be in.
  */
 export type ProductVariantStock = {
-	variant_id: number;
+	variant_id: EntityId;
 	stock_status: ProductStockStatus | null;
 };
 
@@ -122,7 +123,7 @@ function componentStatus(
  */
 export function bundleStatus(
 	composition: LoadedComposition,
-	availability: Map<number, VariantAvailability>,
+	availability: Map<EntityId, VariantAvailability>,
 ): ProductStockStatus | null {
 	const counted: ProductStockStatus[] = [];
 
@@ -182,7 +183,7 @@ export class ProductStockService {
 	 * read it sits beside is cached for minutes. Three queries for a simple product (the variants,
 	 * then on hand and reserved in the stock feature), two more for a bundle's composition.
 	 */
-	public async getPublicStock(id: number): Promise<ProductVariantStock[]> {
+	public async getPublicStock(id: EntityId): Promise<ProductVariantStock[]> {
 		const product = await this.repository
 			.createQuery()
 			.select(['product.id', 'product.composition'])

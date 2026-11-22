@@ -4,6 +4,7 @@ import request from 'supertest';
 import type UserEntity from '@/features/user/user.entity';
 import type { UserQuery } from '@/features/user/user.repository';
 import { createMockRepository } from '@/tests/jest-service.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 /*
  * `createApp()` skips `authMiddleware` under APP_ENV=test (see `app.ts`), which is what
@@ -86,7 +87,7 @@ function buildApp(): Express {
 
 function getAuthUserMock(overwrite: Partial<UserEntity> = {}) {
 	return {
-		id: 7,
+		id: mockId(7),
 		name: 'John Doe',
 		email: 'john.doe@example.com',
 		email_verified_at: createPastDate(86400),
@@ -111,8 +112,8 @@ function mockSession(
 	overwrite: Partial<{ used_at: Date | null; expire_at: Date }> = {},
 ) {
 	jest.spyOn(accountTokenService, 'findSessionByToken').mockResolvedValue({
-		id: 1,
-		user_id: 7,
+		id: mockId(1),
+		user_id: mockId(7),
 		ident: 'token-ident',
 		metadata: { 'user-agent': 'test-agent' },
 		used_at: createPastDate(3600),

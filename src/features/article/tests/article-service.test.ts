@@ -25,6 +25,7 @@ import {
 	testServiceRestore,
 	testServiceUpdateStatus,
 } from '@/tests/jest-service.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 describe('ArticleService', () => {
 	beforeEach(() => {
@@ -32,7 +33,7 @@ describe('ArticleService', () => {
 	});
 
 	/** The signed-in account `create` stamps onto `author_id`. */
-	const AUTHOR_ID = 7;
+	const AUTHOR_ID = mockId(7);
 
 	const mockArticle = createMockRepository<ArticleEntity, ArticleQuery>();
 	const serviceArticle = new ArticleService(mockArticle.repository);
@@ -91,7 +92,7 @@ describe('ArticleService', () => {
 		jest.spyOn(
 			ArticleContentRepository,
 			'findConflictingSlug',
-		).mockResolvedValue({ id: 99 } as never);
+		).mockResolvedValue({ id: mockId(99) } as never);
 
 		await expect(
 			serviceArticle.create(articleOutputPayloads.create, AUTHOR_ID),
@@ -147,8 +148,8 @@ describe('ArticleService', () => {
 		// Three link changes in one call - the clean is per operation, not per row
 		await serviceArticle.updateDataWithContent(entity, {
 			id: entity.id,
-			categories: [1, 2],
-			tags: [3, 4],
+			categories: [mockId(1), mockId(2)],
+			tags: [mockId(3), mockId(4)],
 		} as never);
 
 		expect(cleans).toEqual([

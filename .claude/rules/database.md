@@ -41,15 +41,21 @@ information belongs to, which the columns alone do not reveal. Read it before ad
 - **Tables:** `snake_case`, singular (`user`, `order_item`).
 - **Columns:** `snake_case`, singular. Property names match the DB column exactly - no camelCase with a
   `name:` mapping.
-- **Primary keys:** `id`, auto-incrementing `int`, provided by `EntityAbstract`. Not UUIDs.
-- **Foreign keys:** named after what they reference (`user_id`, `company_id`).
+- **Primary keys:** `id`, a native Postgres `uuid` holding a UUID v7, from `EntityIdAbstract`
+  (which `EntityAbstract` / `EntityAppendOnlyAbstract` extend). `EntityIdSubscriber` assigns it in
+  the app before an insert; the `uuidv7()` column default covers raw SQL. Type it as `EntityId`.
+- **Foreign keys:** named after what they reference (`user_id`, `company_id`), declared
+  `@Column('uuid', ...)` and typed `EntityId`. v7 is time-ordered, so `ORDER BY id` is creation
+  order. Postgres has no `min` / `max` over `uuid` - take the first row of a group with
+  `DISTINCT ON`. In JS, sort ids with `compareIds` (`helpers/id.helper.ts`), never `a - b`.
 - **Timestamps:** `created_at` / `updated_at` on every table, `deleted_at` on anything soft-deletable -
   all three come from `EntityAbstract`.
 
 ### 2.2. Structure
 
 Every entity extends `EntityAbstract` (`src/shared/abstracts/entity.abstract.ts`), which already
-provides `id`, `created_at`, `updated_at` and `deleted_at`. Do not redeclare them.
+provides `id`, `created_at`, `updated_at` and `deleted_at`. Do not redeclare them. A table that
+must not carry those timestamps extends `EntityIdAbstract` directly, for its `id` alone.
 `src/features/brand/brand.entity.ts` is the reference shape.
 
 - Default-export the class; expose `static readonly NAME` (the table name, reused by policies and

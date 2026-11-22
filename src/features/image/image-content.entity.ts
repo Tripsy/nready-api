@@ -5,10 +5,11 @@ import {
 	Index,
 	JoinColumn,
 	ManyToOne,
-	PrimaryGeneratedColumn,
 	UpdateDateColumn,
 } from 'typeorm';
 import type ImageEntity from '@/features/image/image.entity';
+import { EntityIdAbstract } from '@/shared/abstracts/entity-id.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export type ImageContentType = {
 	language: string;
@@ -26,12 +27,9 @@ const ENTITY_TABLE_NAME = 'image_content';
 @Index('IDX_image_content_unique_per_lang', ['image_id', 'language'], {
 	unique: true,
 })
-export default class ImageContentEntity {
+export default class ImageContentEntity extends EntityIdAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
-
-	@PrimaryGeneratedColumn({ type: 'int' })
-	id!: number;
 
 	@CreateDateColumn({ type: 'timestamp', nullable: false })
 	created_at!: Date;
@@ -39,8 +37,8 @@ export default class ImageContentEntity {
 	@UpdateDateColumn({ type: 'timestamp', nullable: true })
 	updated_at!: Date | null;
 
-	@Column('int', { nullable: false })
-	image_id!: number;
+	@Column('uuid', { nullable: false })
+	image_id!: EntityId;
 
 	@Column('varchar', {
 		length: 3,

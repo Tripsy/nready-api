@@ -18,6 +18,7 @@ import type {
 } from '@/features/product/product-category-attribute.repository';
 import { ProductCategoryAttributeService } from '@/features/product/product-category-attribute.service';
 import type { ProductCategoryAttributeValidator } from '@/features/product/product-category-attribute.validator';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import { MeasureUnitEnum } from '@/shared/types/measure-unit.type';
 import {
 	createMockRepository,
@@ -27,6 +28,7 @@ import {
 	testServiceFindById,
 	testServiceRestore,
 } from '@/tests/jest-service.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 /**
  * `save` echoing its input back - what a test asserting on the row the service *built* needs.
@@ -56,7 +58,7 @@ describe('ProductCategoryAttributeService', () => {
 		syncOptions: jest.fn(
 			async (
 				_manager: unknown,
-				_attributeId: number,
+				_attributeId: EntityId,
 				_options: unknown[],
 			) => undefined,
 		),
@@ -71,11 +73,11 @@ describe('ProductCategoryAttributeService', () => {
 
 	/** A definition as the payload would leave it, before the service applies the defaults. */
 	const termDefinition = {
-		category_id: 4,
-		attribute_label_id: 8,
+		category_id: mockId(4),
+		attribute_label_id: mockId(8),
 		value_type: ProductCategoryAttributeValueTypeEnum.TERM,
 		type: ProductCategoryAttributeTypeEnum.SELECT,
-		options: [{ term_id: 12, sort_order: 10 }],
+		options: [{ term_id: mockId(12), sort_order: 10 }],
 	};
 
 	describe('create', () => {
@@ -109,9 +111,9 @@ describe('ProductCategoryAttributeService', () => {
 			echoSave(mock.repository.save);
 
 			const saved = await service.create({
-				category_id: 4,
-				attribute_label_id: 8,
-				options: [{ term_id: 12 }],
+				category_id: mockId(4),
+				attribute_label_id: mockId(8),
+				options: [{ term_id: mockId(12) }],
 			} as never);
 
 			expect(saved.scope).toBe(ProductCategoryAttributeScopeEnum.PRODUCT);
@@ -195,7 +197,7 @@ describe('ProductCategoryAttributeService', () => {
 					id: entity.id,
 					value_type: ProductCategoryAttributeValueTypeEnum.NUMBER,
 					type: ProductCategoryAttributeTypeEnum.INPUT,
-					options: [{ term_id: 12 }],
+					options: [{ term_id: mockId(12) }],
 				} as never),
 			).rejects.toMatchObject({ statusCode: 422 });
 		});
@@ -251,7 +253,7 @@ describe('ProductCategoryAttributeService', () => {
 				unit: undefined,
 				min_value: undefined,
 				max_value: undefined,
-				options: [{ term_id: 12 }],
+				options: [{ term_id: mockId(12) }],
 			} as never);
 
 			expect(entity.unit).toBeNull();
@@ -285,7 +287,7 @@ describe('ProductCategoryAttributeService', () => {
 	});
 
 	describe('updateOrder', () => {
-		function arrange(stored: { id: number; sort_order: number }[]) {
+		function arrange(stored: { id: EntityId; sort_order: number }[]) {
 			const { manager } = setupTransactionMock(mock.repository);
 
 			const repository = {
@@ -300,15 +302,15 @@ describe('ProductCategoryAttributeService', () => {
 
 		it('applies the given order ascending, leaving room between', async () => {
 			const repository = arrange([
-				{ id: 7, sort_order: 10 },
-				{ id: 8, sort_order: 20 },
+				{ id: mockId(7), sort_order: 10 },
+				{ id: mockId(8), sort_order: 20 },
 			]);
 
-			await service.updateOrder(4, [8, 7]);
+			await service.updateOrder(mockId(4), [mockId(8), mockId(7)]);
 
 			expect(repository.save).toHaveBeenCalledWith([
-				expect.objectContaining({ id: 7, sort_order: 20 }),
-				expect.objectContaining({ id: 8, sort_order: 10 }),
+				expect.objectContaining({ id: mockId(7), sort_order: 20 }),
+				expect.objectContaining({ id: mockId(8), sort_order: 10 }),
 			]);
 		});
 
@@ -319,23 +321,25 @@ describe('ProductCategoryAttributeService', () => {
 		 */
 		it('refuses a list that is not the whole set', async () => {
 			arrange([
-				{ id: 7, sort_order: 10 },
-				{ id: 8, sort_order: 20 },
+				{ id: mockId(7), sort_order: 10 },
+				{ id: mockId(8), sort_order: 20 },
 			]);
 
-			await expect(service.updateOrder(4, [7])).rejects.toMatchObject({
+			await expect(
+				service.updateOrder(mockId(4), [mockId(7)]),
+			).rejects.toMatchObject({
 				statusCode: 400,
 			});
 		});
 
 		it('refuses an id from another category', async () => {
 			arrange([
-				{ id: 7, sort_order: 10 },
-				{ id: 8, sort_order: 20 },
+				{ id: mockId(7), sort_order: 10 },
+				{ id: mockId(8), sort_order: 20 },
 			]);
 
 			await expect(
-				service.updateOrder(4, [7, 999]),
+				service.updateOrder(mockId(4), [mockId(7), mockId(999)]),
 			).rejects.toMatchObject({ statusCode: 400 });
 		});
 	});
@@ -372,7 +376,9 @@ describe('ProductCategoryAttributeService', () => {
 			);
 
 			// One product sits in the definition's category subtree
-			manager.query.mockResolvedValue([{ product_id: 1 }] as never);
+			manager.query.mockResolvedValue([
+				{ product_id: mockId(1) },
+			] as never);
 
 			echoSave(mock.repository.save);
 
@@ -427,28 +433,28 @@ describe('ProductCategoryAttributeService', () => {
 			repository.findForCategories.mockResolvedValue([
 				{
 					definition: definition({
-						id: 1,
-						attribute_label_id: 8,
+						id: mockId(1),
+						attribute_label_id: mockId(8),
 						sort_order: 10,
 					}),
 					depth: 0,
 				},
 				{
 					definition: definition({
-						id: 2,
-						attribute_label_id: 8,
+						id: mockId(2),
+						attribute_label_id: mockId(8),
 						sort_order: 10,
 					}),
 					depth: 2,
 				},
 			]);
 
-			const form = await service.resolveForm([5]);
+			const form = await service.resolveForm([mockId(5)]);
 
 			const resolved = form[ProductCategoryAttributeScopeEnum.PRODUCT];
 
 			expect(resolved).toHaveLength(1);
-			expect(resolved[0].id).toBe(2);
+			expect(resolved[0].id).toBe(mockId(2));
 		});
 
 		/*
@@ -461,18 +467,18 @@ describe('ProductCategoryAttributeService', () => {
 			return [
 				{
 					definition: definition({
-						id: 1,
-						category_id: 1,
-						attribute_label_id: 8,
+						id: mockId(1),
+						category_id: mockId(1),
+						attribute_label_id: mockId(8),
 						scope: ProductCategoryAttributeScopeEnum.PRODUCT,
 					}),
 					depth: 0,
 				},
 				{
 					definition: definition({
-						id: 2,
-						category_id: 14,
-						attribute_label_id: 8,
+						id: mockId(2),
+						category_id: mockId(14),
+						attribute_label_id: mockId(8),
 						scope: ProductCategoryAttributeScopeEnum.VARIANT,
 					}),
 					depth: 1,
@@ -485,13 +491,15 @@ describe('ProductCategoryAttributeService', () => {
 
 			jest.spyOn(dataSource, 'getRepository').mockReturnValue({
 				find: jest.fn(async () => [
-					{ category_id: 1, label: 'Electronics' },
-					{ category_id: 14, label: 'T-shirts' },
+					{ category_id: mockId(1), label: 'Electronics' },
+					{ category_id: mockId(14), label: 'T-shirts' },
 				]),
 			} as never);
 
 			await expect(
-				service.resolveForm([5], { assertScopeAgreement: true }),
+				service.resolveForm([mockId(5)], {
+					assertScopeAgreement: true,
+				}),
 			).rejects.toMatchObject({ statusCode: 422 });
 		});
 
@@ -500,31 +508,31 @@ describe('ProductCategoryAttributeService', () => {
 		it('resolves the same disagreement when not asked to assert', async () => {
 			repository.findForCategories.mockResolvedValue(scopeConflict());
 
-			const form = await service.resolveForm([5]);
+			const form = await service.resolveForm([mockId(5)]);
 
 			expect(
 				form[ProductCategoryAttributeScopeEnum.VARIANT].map(
 					(row) => row.id,
 				),
-			).toEqual([2]);
+			).toEqual([mockId(2)]);
 		});
 
 		it('accepts two categories that agree on a label scope', async () => {
 			repository.findForCategories.mockResolvedValue([
 				{
 					definition: definition({
-						id: 1,
-						category_id: 1,
-						attribute_label_id: 8,
+						id: mockId(1),
+						category_id: mockId(1),
+						attribute_label_id: mockId(8),
 						scope: ProductCategoryAttributeScopeEnum.PRODUCT,
 					}),
 					depth: 0,
 				},
 				{
 					definition: definition({
-						id: 2,
-						category_id: 14,
-						attribute_label_id: 8,
+						id: mockId(2),
+						category_id: mockId(14),
+						attribute_label_id: mockId(8),
 						scope: ProductCategoryAttributeScopeEnum.PRODUCT,
 					}),
 					depth: 1,
@@ -532,7 +540,9 @@ describe('ProductCategoryAttributeService', () => {
 			]);
 
 			await expect(
-				service.resolveForm([5], { assertScopeAgreement: true }),
+				service.resolveForm([mockId(5)], {
+					assertScopeAgreement: true,
+				}),
 			).resolves.toBeDefined();
 		});
 
@@ -540,23 +550,23 @@ describe('ProductCategoryAttributeService', () => {
 			repository.findForCategories.mockResolvedValue([
 				{
 					definition: definition({
-						id: 1,
-						attribute_label_id: 8,
+						id: mockId(1),
+						attribute_label_id: mockId(8),
 						scope: ProductCategoryAttributeScopeEnum.PRODUCT,
 					}),
 					depth: 0,
 				},
 				{
 					definition: definition({
-						id: 2,
-						attribute_label_id: 9,
+						id: mockId(2),
+						attribute_label_id: mockId(9),
 						scope: ProductCategoryAttributeScopeEnum.VARIANT,
 					}),
 					depth: 0,
 				},
 			]);
 
-			const form = await service.resolveForm([5]);
+			const form = await service.resolveForm([mockId(5)]);
 
 			expect(
 				form[ProductCategoryAttributeScopeEnum.PRODUCT],
@@ -570,45 +580,48 @@ describe('ProductCategoryAttributeService', () => {
 			repository.findForCategories.mockResolvedValue([
 				{
 					definition: definition({
-						id: 1,
-						attribute_label_id: 8,
+						id: mockId(1),
+						attribute_label_id: mockId(8),
 						sort_order: 30,
 					}),
 					depth: 0,
 				},
 				{
 					definition: definition({
-						id: 2,
-						attribute_label_id: 9,
+						id: mockId(2),
+						attribute_label_id: mockId(9),
 						sort_order: 10,
 					}),
 					depth: 0,
 				},
 			]);
 
-			const form = await service.resolveForm([5]);
+			const form = await service.resolveForm([mockId(5)]);
 
 			expect(
 				form[ProductCategoryAttributeScopeEnum.PRODUCT].map(
 					(row) => row.id,
 				),
-			).toEqual([2, 1]);
+			).toEqual([mockId(2), mockId(1)]);
 		});
 
 		it('flattens to a label lookup, which is what a value check needs', async () => {
 			repository.findForCategories.mockResolvedValue([
 				{
-					definition: definition({ id: 1, attribute_label_id: 8 }),
+					definition: definition({
+						id: mockId(1),
+						attribute_label_id: mockId(8),
+					}),
 					depth: 0,
 				},
 			]);
 
 			const byLabel = await service.resolveDefinitionsByLabel(
-				[5],
+				[mockId(5)],
 				ProductCategoryAttributeScopeEnum.PRODUCT,
 			);
 
-			expect(byLabel.get(8)?.id).toBe(1);
+			expect(byLabel.get(mockId(8))?.id).toBe(mockId(1));
 		});
 	});
 

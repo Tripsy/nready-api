@@ -2,6 +2,7 @@ import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import type OrderEntity from '@/features/order/order.entity';
 import type UserEntity from '@/features/user/user.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export const SubscriptionStatusEnum = {
 	ACTIVE: 'active',
@@ -29,15 +30,15 @@ export default class SubscriptionEntity extends EntityAbstract {
 		unique: true,
 		where: 'deleted_at IS NULL',
 	})
-	@Column('int', { nullable: false })
-	order_id!: number;
+	@Column('uuid', { nullable: false })
+	order_id!: EntityId;
 
-	@Column('int', {
+	@Column('uuid', {
 		nullable: true,
 		comment: 'When subscription is assigned to a user (virtual services)',
 	})
 	@Index('IDX_subscription_user_id')
-	user_id!: number | null;
+	user_id!: EntityId | null;
 
 	@Column('varchar', {
 		nullable: false,

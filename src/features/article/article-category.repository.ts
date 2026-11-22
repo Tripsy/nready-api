@@ -2,6 +2,7 @@ import type { EntityManager, Repository } from 'typeorm';
 import dataSource from '@/config/data-source.config';
 import ArticleCategoryEntity from '@/features/article/article-category.entity';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export class ArticleCategoryQuery extends RepositoryAbstract<ArticleCategoryEntity> {
 	constructor(repository: Repository<ArticleCategoryEntity>) {
@@ -18,8 +19,8 @@ export const ArticleCategoryRepository = dataSource
 
 		async syncLinks(
 			manager: EntityManager,
-			article_id: number,
-			categoryIds: number[],
+			article_id: EntityId,
+			categoryIds: EntityId[],
 		): Promise<void> {
 			const repository = manager.getRepository(ArticleCategoryEntity);
 

@@ -6,7 +6,9 @@ import type { ArticleAccessTarget } from '@/features/article/article-access.poli
 import ArticleVisibilityRuleRepository, {
 	type ArticleVisibilityRuleFields,
 } from '@/features/article/article-visibility-rule.repository';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { AuthContext } from '@/shared/types/express';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 /*
  * `comparePassword` is a module-level function, not a method on an injected singleton, so it
@@ -34,7 +36,7 @@ function restricted(): ArticleAccessTarget {
 	};
 }
 
-function auth(id: number): AuthContext {
+function auth(id: EntityId | null): AuthContext {
 	return { id } as AuthContext;
 }
 
@@ -66,8 +68,8 @@ describe('ArticleAccessPolicy', () => {
 	it('allows a public article without consulting the rule', async () => {
 		await expect(
 			policy.assertAccess(
-				{ id: 1, visibility: ArticleVisibilityEnum.PUBLIC },
-				auth(0),
+				{ id: mockId(1), visibility: ArticleVisibilityEnum.PUBLIC },
+				auth(null),
 				{},
 				null,
 			),
@@ -77,7 +79,7 @@ describe('ArticleAccessPolicy', () => {
 	it('denies a restricted article whose rule is missing', async () => {
 		// Fails closed: no rule to evaluate is read as "restricted", never as "public"
 		await expect(
-			policy.assertAccess(restricted(), auth(1), {}, null),
+			policy.assertAccess(restricted(), auth(mockId(1)), {}, null),
 		).rejects.toMatchObject({ statusCode: 403 });
 	});
 
@@ -85,7 +87,7 @@ describe('ArticleAccessPolicy', () => {
 		await expect(
 			policy.assertAccess(
 				restricted(),
-				auth(0),
+				auth(null),
 				{},
 				rule({ requires_auth: true }),
 			),
@@ -96,7 +98,7 @@ describe('ArticleAccessPolicy', () => {
 		await expect(
 			policy.assertAccess(
 				restricted(),
-				auth(7),
+				auth(mockId(7)),
 				{},
 				rule({ requires_auth: true }),
 			),
@@ -107,7 +109,7 @@ describe('ArticleAccessPolicy', () => {
 		await expect(
 			policy.assertAccess(
 				restricted(),
-				auth(7),
+				auth(mockId(7)),
 				{},
 				rule({ allowed_countries: ['RO'] }),
 			),
@@ -118,7 +120,7 @@ describe('ArticleAccessPolicy', () => {
 		await expect(
 			policy.assertAccess(
 				restricted(),
-				auth(7),
+				auth(mockId(7)),
 				{ country: 'DE' },
 				rule({ allowed_countries: ['RO'] }),
 			),
@@ -129,7 +131,7 @@ describe('ArticleAccessPolicy', () => {
 		await expect(
 			policy.assertAccess(
 				restricted(),
-				auth(7),
+				auth(mockId(7)),
 				{ country: 'RO' },
 				rule({ allowed_countries: ['RO'] }),
 			),
@@ -142,7 +144,7 @@ describe('ArticleAccessPolicy', () => {
 		await expect(
 			policy.assertAccess(
 				restricted(),
-				auth(7),
+				auth(mockId(7)),
 				{},
 				rule({ requires_subscription: true }),
 			),
@@ -155,7 +157,7 @@ describe('ArticleAccessPolicy', () => {
 		await expect(
 			policy.assertAccess(
 				restricted(),
-				auth(7),
+				auth(mockId(7)),
 				{},
 				rule({ requires_subscription: true }),
 			),
@@ -173,7 +175,7 @@ describe('ArticleAccessPolicy', () => {
 		await expect(
 			policy.assertAccess(
 				restricted(),
-				auth(7),
+				auth(mockId(7)),
 				{},
 				rule({ has_password: true }),
 			),
@@ -193,7 +195,7 @@ describe('ArticleAccessPolicy', () => {
 		await expect(
 			policy.assertAccess(
 				restricted(),
-				auth(7),
+				auth(mockId(7)),
 				{ password: 'guess' },
 				rule({ has_password: true }),
 			),
@@ -209,7 +211,7 @@ describe('ArticleAccessPolicy', () => {
 		await expect(
 			policy.assertAccess(
 				restricted(),
-				auth(7),
+				auth(mockId(7)),
 				{ password: 'guess' },
 				rule({ has_password: true }),
 			),
@@ -227,7 +229,7 @@ describe('ArticleAccessPolicy', () => {
 		await expect(
 			policy.assertAccess(
 				restricted(),
-				auth(7),
+				auth(mockId(7)),
 				{ password: 'correct' },
 				rule({ has_password: true }),
 			),

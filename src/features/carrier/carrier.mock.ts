@@ -5,12 +5,13 @@ import {
 } from '@/features/carrier/carrier.validator';
 import { createPastDate } from '@/helpers/date.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 const carrierValidator = new CarrierValidator('carrier');
 
 export function getCarrierEntityMock(): CarrierEntity {
 	return {
-		id: 1,
+		id: mockId(1),
 		name: 'Fun Drive',
 		website: 'http://www.fundrive.dev',
 		phone: '0722123456',
@@ -31,7 +32,7 @@ export const carrierInputPayloads = {
 		notes: 'Test carrier entry',
 	},
 	update: {
-		id: 1,
+		id: mockId(1),
 		name: 'Fun Drive Update',
 		website: 'http://www.fundrive.dev',
 		phone: '0722123456',

@@ -4,6 +4,7 @@ import PlaceContentEntity, {
 	type PlaceContentType,
 } from '@/features/place/place-content.entity';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export class PlaceContentQuery extends RepositoryAbstract<PlaceContentEntity> {
 	constructor(repository: Repository<PlaceContentEntity>) {
@@ -21,7 +22,7 @@ export const PlaceContentRepository = dataSource
 		async saveContent(
 			manager: EntityManager,
 			contents: PlaceContentType[],
-			place_id: number,
+			place_id: EntityId,
 		) {
 			if (!contents.length) {
 				return;

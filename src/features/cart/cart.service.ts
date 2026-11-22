@@ -87,6 +87,7 @@ import {
 import { createFutureDate } from '@/helpers/date.helper';
 import { roundMoney } from '@/helpers/shop.helper';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 /**
@@ -95,15 +96,15 @@ import type { ValidatorOutput } from '@/shared/types/mock.type';
  */
 export type CartDeliveryChoice = {
 	method: ShippingMethod;
-	addressId: number | null;
+	addressId: EntityId | null;
 };
 
 /** A cart plus what it currently costs - the only shape the storefront is ever handed. */
 export type CartWithPricing = {
-	id: number;
+	id: EntityId;
 	token: string;
 	currency: string;
-	user_id: number | null;
+	user_id: EntityId | null;
 	expires_at: Date;
 	pricing: CartPricing;
 	/**
@@ -118,18 +119,16 @@ export type CartWithPricing = {
 /**
  * The canonical form of a line's option set, and half of what `UQ_cart_item_line` compares.
  *
- * Sorted and de-duplicated before hashing, so `[3, 1]` and `[1, 3, 3]` are recognized as the same
+ * Sorted and de-duplicated before hashing, so `[b, a]` and `[a, b, b]` are recognized as the same
  * choice and increment one line instead of creating three. An empty set hashes to the empty
  * string rather than to the hash of nothing, because the column is `NOT NULL` and a sentinel that
  * reads as "no options" beats one that reads as a hash nobody can reproduce.
  */
-export function normalizeOptions(options?: number[] | null): {
-	options: number[] | null;
+export function normalizeOptions(options?: EntityId[] | null): {
+	options: EntityId[] | null;
 	hash: string;
 } {
-	const unique = [...new Set(options ?? [])].sort(
-		(first, second) => first - second,
-	);
+	const unique = [...new Set(options ?? [])].sort();
 
 	if (unique.length === 0) {
 		return { options: null, hash: '' };
@@ -155,7 +154,7 @@ export function normalizeOptions(options?: number[] | null): {
  * every ordinary line keeps the identity it already had.
  */
 export function buildLineHash(
-	options: number[] | null,
+	options: EntityId[] | null,
 	components?: readonly BundleChoice[] | null,
 ): string {
 	const optionPart = (options ?? []).join(',');
@@ -210,7 +209,7 @@ function bundleProblemMessage(problem: BundleSelectionProblem): string {
  * this shape (`product.md` §8.3).
  */
 function toOrderLines(lines: readonly CartLine[]): OrderLineInput[] {
-	const childrenByParent = new Map<number, CartLine[]>();
+	const childrenByParent = new Map<EntityId, CartLine[]>();
 
 	for (const line of lines) {
 		if (line.parent_id === null) {
@@ -267,11 +266,11 @@ function toOrderLines(lines: readonly CartLine[]): OrderLineInput[] {
  */
 function toShippingLines(
 	lines: readonly CartLine[],
-	physicalProductIds: ReadonlySet<number>,
-): { variant_id: number; product_id: number; quantity: number }[] {
+	physicalProductIds: ReadonlySet<EntityId>,
+): { variant_id: EntityId; product_id: EntityId; quantity: number }[] {
 	const byVariant = new Map<
-		number,
-		{ variant_id: number; product_id: number; quantity: number }
+		EntityId,
+		{ variant_id: EntityId; product_id: EntityId; quantity: number }
 	>();
 
 	for (const line of lines) {
@@ -339,7 +338,7 @@ export class CartService {
 	 */
 	public async resolve(
 		token: string | null,
-		userId: number | null,
+		userId: EntityId | null,
 		currency: string = Configuration.currency(),
 	): Promise<CartEntity> {
 		if (userId) {
@@ -393,7 +392,7 @@ export class CartService {
 	}
 
 	private async create(
-		userId: number | null,
+		userId: EntityId | null,
 		currency: string,
 	): Promise<CartEntity> {
 		const entry = this.repository.create({
@@ -415,7 +414,7 @@ export class CartService {
 	 */
 	public async findWritable(
 		token: string,
-		userId: number | null,
+		userId: EntityId | null,
 	): Promise<CartEntity> {
 		const query = this.repository.createQuery();
 
@@ -448,7 +447,7 @@ export class CartService {
 	 */
 	public async merge(
 		guestToken: string,
-		userId: number,
+		userId: EntityId,
 	): Promise<CartEntity | null> {
 		const guestCart = await this.repository
 			.createQuery()
@@ -678,8 +677,8 @@ export class CartService {
 	): Promise<
 		| null
 		| {
-				item: { id: number; variant_id: number };
-				productId: number;
+				item: { id: EntityId; variant_id: EntityId };
+				productId: EntityId;
 				units: number;
 		  }[]
 	> {
@@ -804,7 +803,7 @@ export class CartService {
 		return saved;
 	}
 
-	public async removeItem(cart: CartEntity, itemId: number): Promise<void> {
+	public async removeItem(cart: CartEntity, itemId: EntityId): Promise<void> {
 		// Checked before the delete rather than after: `RepositoryAbstract.delete` throws its own
 		// generic not-found, and a line the shopper already removed in another tab should read as
 		// this feature's message rather than as a bare `cart_item.error.not_found`.
@@ -877,7 +876,7 @@ export class CartService {
 	 * sort key is the header's id for a header and for each of its children alike, so a bundle
 	 * arrives as a contiguous run in the order the components were written.
 	 */
-	public async getItems(cartId: number): Promise<CartItemEntity[]> {
+	public async getItems(cartId: EntityId): Promise<CartItemEntity[]> {
 		const query = this.itemRepository
 			.createQuery()
 			.filterBy('cart_id', cartId);
@@ -900,8 +899,8 @@ export class CartService {
 	 * missing one does, so the endpoint cannot be used to discover which clients exist.
 	 */
 	public async assertOwnClient(
-		clientId: number,
-		userId: number,
+		clientId: EntityId,
+		userId: EntityId,
 	): Promise<void> {
 		await this.clientService.findOwnById(clientId, userId);
 	}
@@ -922,9 +921,9 @@ export class CartService {
 	public async withPricing(
 		cart: CartEntity,
 		language?: string,
-		clientId?: number | null,
+		clientId?: EntityId | null,
 		delivery?: CartDeliveryChoice | null,
-		billingAddressId?: number | null,
+		billingAddressId?: EntityId | null,
 	): Promise<CartWithPricing> {
 		const items = await this.getItems(cart.id);
 
@@ -974,7 +973,7 @@ export class CartService {
 	 */
 	private async previewDelivery(
 		pricing: CartPricing,
-		clientId: number,
+		clientId: EntityId,
 		delivery: CartDeliveryChoice,
 		billingCountryCode: string | null,
 	): Promise<ShippingPricing | null> {
@@ -1020,8 +1019,8 @@ export class CartService {
 	 * client as a delivery address - somebody else's answers the same 404 a missing one does.
 	 */
 	private async resolveOwnDeliveryCountry(
-		addressId: number,
-		clientId: number,
+		addressId: EntityId,
+		clientId: EntityId,
 	): Promise<string | null> {
 		await this.clientAddressService.getOrderSnapshot(
 			addressId,
@@ -1035,7 +1034,7 @@ export class CartService {
 	/** The products among these lines that are physical - the ones a shipment has to carry. */
 	private async findPhysicalProductIds(
 		lines: readonly CartLine[],
-	): Promise<Set<number>> {
+	): Promise<Set<EntityId>> {
 		const productIds = [...new Set(lines.map((line) => line.product_id))];
 
 		if (productIds.length === 0) {
@@ -1104,7 +1103,7 @@ export class CartService {
 	public async toOrder(
 		cart: CartEntity,
 		data: ValidatorOutput<CartValidator, 'checkout'>,
-		userId: number,
+		userId: EntityId,
 		language?: string,
 	): Promise<OrderEntity> {
 		const client = await this.clientService.findOwnById(
@@ -1377,14 +1376,14 @@ export class CartService {
 	 * support action against a basket somebody is still carrying, and there is nothing to restore
 	 * it to - the shopper's next visit starts a new one.
 	 */
-	public async delete(id: number): Promise<number> {
+	public async delete(id: EntityId): Promise<number> {
 		return this.repository
 			.createQuery()
 			.filterById(id)
 			.delete(false, false);
 	}
 
-	public async findById(id: number): Promise<CartEntity> {
+	public async findById(id: EntityId): Promise<CartEntity> {
 		return this.repository.createQuery().filterById(id).firstOrFail();
 	}
 
@@ -1395,7 +1394,7 @@ export class CartService {
 	 * storefront's payload: the back office reads `updated_at` as the cart's last activity, the
 	 * shopper has no use for either.
 	 */
-	public async getEntryData(data: { id: number }) {
+	public async getEntryData(data: { id: EntityId }) {
 		const cart = await this.repository
 			.createQuery()
 			.filterById(data.id)
@@ -1420,6 +1419,9 @@ export class CartService {
 				'created_at',
 				'updated_at',
 			])
+			// The shopper's name for the dashboard listing - the id alone names nobody to a reader
+			.join('cart.user', 'user', 'LEFT')
+			.addSelect(['user.id', 'user.name'])
 			.filterBy('user_id', data.filter.user_id)
 			.filterBy('currency', data.filter.currency)
 			.orderBy(data.order_by, data.direction)

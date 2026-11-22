@@ -2,6 +2,7 @@ import type ProductVariantEntity from '@/features/product/product-variant.entity
 import { OrderByEnum } from '@/features/product/product-variant.validator';
 import { createPastDate } from '@/helpers/date.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 /**
  * One listing row as the query builds it: the variant's own columns, plus the slice of its
@@ -13,8 +14,8 @@ import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
  */
 export function getProductVariantEntityMock(): ProductVariantEntity {
 	return {
-		id: 41,
-		product_id: 17,
+		id: mockId(41),
+		product_id: mockId(17),
 		sku: 'PIZZA-MARG-30',
 		barcode: '5941234567890',
 		position: 0,
@@ -27,16 +28,16 @@ export function getProductVariantEntityMock(): ProductVariantEntity {
 		updated_at: null,
 		deleted_at: null,
 		product: {
-			id: 17,
+			id: mockId(17),
 			workflow: 'ready',
 			sale_status: 'available',
 			type: 'physical',
 			composition: 'simple',
 			unit: 'piece',
 			vat_category: 'standard',
-			brand_id: 3,
+			brand_id: mockId(3),
 			deleted_at: null,
-			brand: { id: 3, name: 'Forno' },
+			brand: { id: mockId(3), name: 'Forno' },
 			contents: [
 				{
 					language: 'en',
@@ -45,7 +46,7 @@ export function getProductVariantEntityMock(): ProductVariantEntity {
 				},
 			],
 		},
-		prices: [{ id: 88, currency: 'RON', sale_price: 34.5 }],
+		prices: [{ id: mockId(88), currency: 'RON', sale_price: 34.5 }],
 	} as unknown as ProductVariantEntity;
 }
 

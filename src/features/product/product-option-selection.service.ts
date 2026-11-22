@@ -5,6 +5,7 @@ import { Configuration } from '@/config/settings.config';
 import ProductOptionEntity from '@/features/product/product-option.entity';
 import ProductOptionGroupEntity from '@/features/product/product-option-group.entity';
 import TermContentEntity from '@/features/term/term-content.entity';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /** A group read with its live answers - `options` is loaded, where the entity leaves it optional. */
 export type LoadedOptionGroup = ProductOptionGroupEntity & {
@@ -34,9 +35,9 @@ export class ProductOptionSelectionService {
 	 * question nobody answered has to be seen to be refused. One read for the whole set.
 	 */
 	public async loadGroups(
-		productIds: readonly number[],
-	): Promise<Map<number, LoadedOptionGroup[]>> {
-		const byProduct = new Map<number, LoadedOptionGroup[]>();
+		productIds: readonly EntityId[],
+	): Promise<Map<EntityId, LoadedOptionGroup[]>> {
+		const byProduct = new Map<EntityId, LoadedOptionGroup[]>();
 
 		if (productIds.length === 0) {
 			return byProduct;
@@ -82,9 +83,9 @@ export class ProductOptionSelectionService {
 	 * decides what to write in its place.
 	 */
 	public async loadLabels(
-		optionIds: readonly number[],
-	): Promise<Map<number, string>> {
-		const labels = new Map<number, string>();
+		optionIds: readonly EntityId[],
+	): Promise<Map<EntityId, string>> {
+		const labels = new Map<EntityId, string>();
 		const ids = [...new Set(optionIds)];
 
 		if (ids.length === 0) {
@@ -104,10 +105,10 @@ export class ProductOptionSelectionService {
 				language: Configuration.language(),
 			})
 			.select(['option.id AS option_id', 'content.value AS value'])
-			.getRawMany<{ option_id: number; value: string }>();
+			.getRawMany<{ option_id: EntityId; value: string }>();
 
 		for (const row of rows) {
-			labels.set(Number(row.option_id), row.value);
+			labels.set(row.option_id, row.value);
 		}
 
 		return labels;
@@ -120,7 +121,7 @@ export class ProductOptionSelectionService {
 	 */
 	public static findProblem(
 		groups: readonly LoadedOptionGroup[],
-		chosen: readonly number[],
+		chosen: readonly EntityId[],
 	): OptionSelectionProblem | null {
 		const picked = new Set(chosen);
 

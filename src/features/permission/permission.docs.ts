@@ -76,7 +76,7 @@ export const docs: Record<
 			notes: 'A deleted permission is only visible to a caller holding permission delete',
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -96,7 +96,7 @@ export const docs: Record<
 			notes: `Both parameters are required - this is a full replacement of the pair, not a partial edit. ${pairNote}, so the new pair is re-checked against the other permissions`,
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -120,7 +120,7 @@ export const docs: Record<
 			notes: 'Soft delete. Every user holding this permission loses it, while the grants themselves are left in place - restoring the row hands it back to all of them',
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -138,7 +138,7 @@ export const docs: Record<
 		request: {
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -196,7 +196,7 @@ export const docs: Record<
 					default: OrderDirectionEnum.ASC,
 				},
 				filter: {
-					id: { type: 'number', required: false },
+					id: { type: 'string', required: false },
 					term: {
 						type: 'string',
 						required: false,

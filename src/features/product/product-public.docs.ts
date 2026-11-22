@@ -76,7 +76,7 @@ export const docs: Record<
 			notes: `A level, never a count: \`in_stock\`, \`low_stock\` (at or under the variant's own \`low_stock_threshold\`; never, when it has none), \`backorder\` (none left, still taking orders) or \`out_of_stock\`. \`null\` means not stated - the variant keeps no stock, or no stock-keeping feature is installed - and a page should then say nothing. A bundle states one level for all its variants, from its components: every always-included one must be there, a choice needs one of its candidates, and an optional component never holds it back. Not cached, unlike the product read - ask it when the page renders. Same sellable rule as the read: anything else answers 404`,
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -134,7 +134,7 @@ export const docs: Record<
 				},
 				filter: {
 					id: {
-						type: 'number',
+						type: 'string',
 						required: false,
 						condition:
 							'how a permalink that must survive a re-slug is resolved',
@@ -145,12 +145,12 @@ export const docs: Record<
 						condition: `at least ${Configuration.get('filter.termMinLength')} characters; matches the translation and the variant SKUs`,
 					},
 					category_id: {
-						type: 'number',
+						type: 'string',
 						required: false,
 						condition:
 							'matches the category and everything beneath it',
 					},
-					brand_id: { type: 'number', required: false },
+					brand_id: { type: 'string', required: false },
 					tag_id: {
 						type: 'array',
 						required: false,
@@ -158,7 +158,7 @@ export const docs: Record<
 						condition: 'any of the tags, not all of them',
 					},
 					exclude_id: {
-						type: 'number',
+						type: 'string',
 						required: false,
 						condition:
 							'the product a related-products box must not recommend - its own',
@@ -166,7 +166,7 @@ export const docs: Record<
 					attribute: {
 						type: 'array',
 						required: false,
-						format: '[{ label_id: number; value_term_id?: number[]; min?: number; max?: number }]',
+						format: '[{ label_id: EntityId; value_term_id?: EntityId[]; min?: number; max?: number }]',
 						condition:
 							'catalog facets; a range is stated in the unit the category declares and is converted before it is compared',
 					},

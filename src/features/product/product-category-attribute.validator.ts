@@ -11,6 +11,7 @@ import {
 	BaseValidator,
 	sharedValidatorMessages,
 } from '@/shared/abstracts/validator.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import { MeasureUnitEnum } from '@/shared/types/measure-unit.type';
 
 export const paramsUpdateList: string[] = [
@@ -172,7 +173,7 @@ export class ProductCategoryAttributeValidator extends BaseValidator<
 			suffix?: string | null;
 			min_value?: number | null;
 			max_value?: number | null;
-			options?: { term_id: number }[];
+			options?: { term_id: EntityId }[];
 		},
 		ctx: z.RefinementCtx,
 	): void => {
@@ -327,11 +328,7 @@ export class ProductCategoryAttributeValidator extends BaseValidator<
 			this.getMessage('invalid_id', { name: 'category_id' }),
 		),
 		positions: z
-			.array(
-				z.number({
-					message: this.getMessage('invalid_number'),
-				}),
-			)
+			.array(this.validateId(this.getMessage('invalid_number')))
 			.min(2, {
 				message: this.getMessage('array_min', { length: '2' }),
 			}),
@@ -348,12 +345,12 @@ export class ProductCategoryAttributeValidator extends BaseValidator<
 		defaultPage: 1,
 
 		filterSchema: {
-			category_id: this.validateNumber(
-				this.getMessage('invalid_number'),
+			category_id: this.validateId(
+				this.getMessage('invalid_id', { name: 'category_id' }),
 				{ required: false },
 			),
-			attribute_label_id: this.validateNumber(
-				this.getMessage('invalid_number'),
+			attribute_label_id: this.validateId(
+				this.getMessage('invalid_id', { name: 'attribute_label_id' }),
 				{ required: false },
 			),
 			scope: this.validateEnum(

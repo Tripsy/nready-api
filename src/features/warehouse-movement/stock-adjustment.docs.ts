@@ -78,8 +78,8 @@ export const docs: Record<
 		request: {
 			notes: `qty is positive; direction says which way. remove draws the units from the warehouse oldest lot first - the draw a shipment makes - and 409s when it holds fewer; it is posted as a write_off movement for a loss (damaged, expired, lost, theft, sample) and as an adjustment for an audit. add puts them into lots that have room - what they arrived with less what they hold - newest receipt first, at their own cost, posted as adjustment movements; 409 when that room is smaller, since a lot never holds more than it arrived with and the rest has to come in on a goods receipt. reason has to fit the direction - remove: ${STOCK_ADJUSTMENT_REASONS.remove.join(', ')}; add: ${STOCK_ADJUSTMENT_REASONS.add.join(', ')}. 422 when the warehouse is inactive or the variant does not track stock. Reservations are not checked: a removal records what happened, and may leave the variant promised beyond what it holds (available goes negative in the stock read). Needs stock-adjustment.create`,
 			body: {
-				warehouse_id: { type: 'number', required: true },
-				variant_id: { type: 'number', required: true },
+				warehouse_id: { type: 'string', required: true },
+				variant_id: { type: 'string', required: true },
 				direction: {
 					type: 'enum',
 					required: true,
@@ -129,7 +129,7 @@ export const docs: Record<
 		request: {
 			notes: 'Posts one opposing adjustment movement per row the adjustment posted (reversal_of_id set) and puts the units back where they were: removed units into the lots they left, added units out of the lots they went into. 409 when it is already reversed, or when a lot no longer holds the units a count added - stock drawn from it since; post a new count instead. Needs stock-adjustment.delete',
 			params: {
-				id: { type: 'number', required: true },
+				id: { type: 'string', required: true },
 			},
 		},
 	}),
@@ -147,7 +147,7 @@ export const docs: Record<
 		request: {
 			notes: entryNote,
 			params: {
-				id: { type: 'number', required: true },
+				id: { type: 'string', required: true },
 			},
 		},
 	}),
@@ -180,8 +180,8 @@ export const docs: Record<
 					required: false,
 					values: Object.values(OrderDirectionEnum),
 				},
-				'filter[warehouse_id]': { type: 'number', required: false },
-				'filter[variant_id]': { type: 'number', required: false },
+				'filter[warehouse_id]': { type: 'string', required: false },
+				'filter[variant_id]': { type: 'string', required: false },
 				'filter[adjustment_direction]': {
 					type: 'enum',
 					required: false,

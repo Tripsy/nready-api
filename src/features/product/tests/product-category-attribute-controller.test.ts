@@ -23,6 +23,7 @@ import {
 	withDebugResponse,
 } from '@/tests/jest-controller.setup';
 import { authorizedSpy, notAuthorizedSpy } from '@/tests/mocks/policies.mock';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 let app: Express;
 
@@ -133,13 +134,13 @@ describe(`${controller} - resolve`, () => {
 
 		const response = await request(app)
 			.get(route)
-			.query({ category_id: [1, 5] });
+			.query({ category_id: [mockId(1), mockId(5)] });
 
 		withDebugResponse(() => {
 			expect(response.status).toBe(200);
 			expect(
 				productCategoryAttributeService.resolveForm,
-			).toHaveBeenCalledWith([1, 5]);
+			).toHaveBeenCalledWith([mockId(1), mockId(5)]);
 			expect(response.body.data).toHaveProperty(
 				ProductCategoryAttributeScopeEnum.VARIANT,
 			);

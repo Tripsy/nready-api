@@ -12,12 +12,13 @@ import {
 } from '@/features/article/article.validator';
 import { createPastDate } from '@/helpers/date.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 const articleValidator = new ArticleValidator('article');
 
 export function getArticleEntityMock(): ArticleEntity {
 	return {
-		id: 1,
+		id: mockId(1),
 		status: ArticleStatusEnum.DRAFT,
 		layout: ArticleLayoutEnum.DEFAULT,
 		details: null,
@@ -70,11 +71,11 @@ export const articleInputPayloads = {
 				},
 			},
 		],
-		categories: [1],
-		tags: [1, 2],
+		categories: [mockId(1)],
+		tags: [mockId(1), mockId(2)],
 	},
 	update: {
-		id: 1,
+		id: mockId(1),
 		layout: undefined,
 		publish_at: undefined,
 		archive_at: undefined,
@@ -100,7 +101,7 @@ export const articleInputPayloads = {
 				},
 			},
 		],
-		tags: [2],
+		tags: [mockId(2)],
 	},
 	publicRead: {
 		slug: 'first-article',

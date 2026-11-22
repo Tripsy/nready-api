@@ -13,6 +13,7 @@ import {
 	cleanEntityCache,
 	cleanEntityCacheBy,
 } from '@/shared/abstracts/service.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 export class TemplateService {
@@ -48,7 +49,7 @@ export class TemplateService {
 	 * @description Update any data
 	 */
 	public async update(
-		data: DeepPartial<TemplateEntity> & { id: number },
+		data: DeepPartial<TemplateEntity> & { id: EntityId },
 	): Promise<TemplateEntity> {
 		const saved = await this.repository.save(data);
 
@@ -105,7 +106,7 @@ export class TemplateService {
 		return [entry.label, entry.language, entry.type];
 	}
 
-	public async delete(id: number) {
+	public async delete(id: EntityId) {
 		// Loaded first: the terminal drops `template:<id>*`, but the render-time lookup is
 		// keyed by label and only this row knows what that label is.
 		const entry = await this.findById(id, true);
@@ -115,7 +116,7 @@ export class TemplateService {
 		await cleanEntityCacheBy(TemplateEntity, ...this.lookupKey(entry));
 	}
 
-	public async restore(id: number) {
+	public async restore(id: EntityId) {
 		const entry = await this.findById(id, true);
 
 		await this.repository.createQuery().filterById(id).restore();
@@ -123,7 +124,10 @@ export class TemplateService {
 		await cleanEntityCacheBy(TemplateEntity, ...this.lookupKey(entry));
 	}
 
-	public findById(id: number, withDeleted: boolean): Promise<TemplateEntity> {
+	public findById(
+		id: EntityId,
+		withDeleted: boolean,
+	): Promise<TemplateEntity> {
 		return this.repository
 			.createQuery()
 			.filterById(id)
@@ -148,7 +152,7 @@ export class TemplateService {
 		label: string,
 		language: string,
 		type: TemplateType,
-		withoutId?: number,
+		withoutId?: EntityId,
 	) {
 		const q = this.repository
 			.createQuery()

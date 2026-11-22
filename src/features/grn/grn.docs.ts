@@ -63,13 +63,13 @@ const statusTransitionNote = Object.entries(STATUS_TRANSITIONS)
 const itemsParam = {
 	type: 'array' as const,
 	required: false,
-	format: '[{ variant_id: number; qty: number; unit_cost: number; vat_rate?: number; lot_code?: string; expires_at?: string; notes?: string }]',
+	format: '[{ variant_id: EntityId; qty: number; unit_cost: number; vat_rate?: number; lot_code?: string; expires_at?: string; notes?: string }]',
 	condition: `at most ${GRN_ITEMS_MAX} lines, one per variant; every variant must exist and track stock. \`qty\` and \`unit_cost\` take 2 decimals, \`unit_cost\` may be 0, \`lot_code\` up to ${GRN_LOT_CODE_MAX} characters, \`expires_at\` a YYYY-MM-DD day`,
 };
 
 const headerBody = {
-	warehouse_id: { type: 'number' as const, required: true },
-	vendor_id: { type: 'number' as const, required: true },
+	warehouse_id: { type: 'string' as const, required: true },
+	vendor_id: { type: 'string' as const, required: true },
 	supplier_document_number: {
 		type: 'string' as const,
 		required: false,
@@ -101,7 +101,7 @@ const headerBody = {
 };
 
 const idParams = {
-	id: { type: 'number' as const, required: true },
+	id: { type: 'string' as const, required: true },
 };
 
 /**
@@ -251,9 +251,9 @@ export const docs: Record<keyof typeof grnController, ApiInputDocumentation> = {
 					default: OrderDirectionEnum.DESC,
 				},
 				filter: {
-					id: { type: 'number', required: false },
-					warehouse_id: { type: 'number', required: false },
-					vendor_id: { type: 'number', required: false },
+					id: { type: 'string', required: false },
+					warehouse_id: { type: 'string', required: false },
+					vendor_id: { type: 'string', required: false },
 					status: {
 						type: 'enum',
 						required: false,

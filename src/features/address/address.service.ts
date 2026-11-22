@@ -20,6 +20,7 @@ import {
 } from '@/features/place/place.service';
 import { pickValuesFromObject } from '@/helpers/objects.helper';
 import { cleanEntityCache } from '@/shared/abstracts/service.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 export class AddressService {
@@ -28,7 +29,7 @@ export class AddressService {
 		private placeService: PlaceService,
 	) {}
 
-	public async checkCityId(city_id?: number) {
+	public async checkCityId(city_id?: EntityId) {
 		if (city_id) {
 			const address_city = await this.placeService.findById(
 				city_id,
@@ -65,7 +66,7 @@ export class AddressService {
 	 * @description Update any data
 	 */
 	public async update(
-		data: DeepPartial<AddressEntity> & { id: number },
+		data: DeepPartial<AddressEntity> & { id: EntityId },
 	): Promise<AddressEntity> {
 		const saved = await this.repository.save(data);
 
@@ -90,15 +91,18 @@ export class AddressService {
 		return this.update(entry);
 	}
 
-	public async delete(id: number) {
+	public async delete(id: EntityId) {
 		await this.repository.createQuery().filterById(id).delete();
 	}
 
-	public async restore(id: number) {
+	public async restore(id: EntityId) {
 		await this.repository.createQuery().filterById(id).restore();
 	}
 
-	public findById(id: number, withDeleted: boolean): Promise<AddressEntity> {
+	public findById(
+		id: EntityId,
+		withDeleted: boolean,
+	): Promise<AddressEntity> {
 		return this.repository
 			.createQuery()
 			.filterById(id)
@@ -157,7 +161,7 @@ export class AddressService {
 	 * the request happened to arrive in.
 	 */
 	public async getSnapshotById(
-		id: number,
+		id: EntityId,
 		manager?: EntityManager,
 	): Promise<AddressSnapshot> {
 		const entry = await this.createPlaceQuery(
@@ -191,7 +195,7 @@ export class AddressService {
 	 * @description Used in `read` method from controller; this will return a custom shape
 	 */
 	public async getEntryData(data: {
-		id: number;
+		id: EntityId;
 		language: string;
 		withDeleted: boolean;
 	}) {

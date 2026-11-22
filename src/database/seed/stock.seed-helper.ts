@@ -1,4 +1,5 @@
 import type { EntityManager } from 'typeorm';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * What each active warehouse can still send, per variant: `warehouse_id -> variant_id -> qty`.
@@ -12,7 +13,7 @@ import type { EntityManager } from 'typeorm';
  * `cli/feature.ts` removes it. The statuses are written out for the same reason - they mirror
  * `GrnStatusEnum.CONFIRMED` and `WarehouseStatusEnum.ACTIVE`.
  */
-export type SiteStock = Map<number, Map<number, number>>;
+export type SiteStock = Map<EntityId, Map<EntityId, number>>;
 
 async function tableExists(
 	manager: EntityManager,
@@ -42,7 +43,7 @@ export async function loadSiteStock(
 	const stock: SiteStock = new Map();
 
 	const lots = await manager.query<
-		{ warehouse_id: number; variant_id: number; qty: string }[]
+		{ warehouse_id: EntityId; variant_id: EntityId; qty: string }[]
 	>(
 		`SELECT grn.warehouse_id, grn_item.variant_id, SUM(grn_item.qty_remaining) AS qty
 		 FROM grn_item
@@ -55,18 +56,13 @@ export async function loadSiteStock(
 	);
 
 	for (const lot of lots) {
-		adjust(
-			stock,
-			Number(lot.warehouse_id),
-			Number(lot.variant_id),
-			Number(lot.qty),
-		);
+		adjust(stock, lot.warehouse_id, lot.variant_id, Number(lot.qty));
 	}
 
 	const hasLedger = await tableExists(manager, 'warehouse_movement');
 
 	const undrawn = await manager.query<
-		{ warehouse_id: number; variant_id: number; qty: string }[]
+		{ warehouse_id: EntityId; variant_id: EntityId; qty: string }[]
 	>(
 		`SELECT shipping.pickup_warehouse_id AS warehouse_id, line.variant_id, SUM(line.quantity) AS qty
 		 FROM shipping_line line
@@ -88,12 +84,7 @@ export async function loadSiteStock(
 	);
 
 	for (const row of undrawn) {
-		adjust(
-			stock,
-			Number(row.warehouse_id),
-			Number(row.variant_id),
-			-Number(row.qty),
-		);
+		adjust(stock, row.warehouse_id, row.variant_id, -Number(row.qty));
 	}
 
 	return stock;
@@ -102,18 +93,18 @@ export async function loadSiteStock(
 /** Ids of the variants whose stock is tracked - the only ones a site's shelves constrain. */
 export async function loadTrackedVariantIds(
 	manager: EntityManager,
-): Promise<Set<number>> {
-	const rows = await manager.query<{ id: number }[]>(
+): Promise<Set<EntityId>> {
+	const rows = await manager.query<{ id: EntityId }[]>(
 		'SELECT id FROM product_variant WHERE track_stock AND deleted_at IS NULL',
 	);
 
-	return new Set(rows.map((row) => Number(row.id)));
+	return new Set(rows.map((row) => row.id));
 }
 
 export function available(
 	stock: SiteStock,
-	warehouseId: number,
-	variantId: number,
+	warehouseId: EntityId,
+	variantId: EntityId,
 ): number {
 	return stock.get(warehouseId)?.get(variantId) ?? 0;
 }
@@ -121,11 +112,11 @@ export function available(
 /** Moves a site's figure for a variant by `delta`, kept to the cent. */
 export function adjust(
 	stock: SiteStock,
-	warehouseId: number,
-	variantId: number,
+	warehouseId: EntityId,
+	variantId: EntityId,
 	delta: number,
 ): void {
-	const site = stock.get(warehouseId) ?? new Map<number, number>();
+	const site = stock.get(warehouseId) ?? new Map<EntityId, number>();
 
 	site.set(
 		variantId,
@@ -140,9 +131,9 @@ export function adjust(
  */
 export function canFill(
 	stock: SiteStock,
-	warehouseId: number,
-	lines: readonly { variant_id: number; quantity: number }[],
-	tracked: ReadonlySet<number>,
+	warehouseId: EntityId,
+	lines: readonly { variant_id: EntityId; quantity: number }[],
+	tracked: ReadonlySet<EntityId>,
 ): boolean {
 	return lines.every(
 		(line) =>

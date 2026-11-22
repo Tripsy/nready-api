@@ -14,6 +14,7 @@ import type ArticleVisibilityRuleEntity from '@/features/article/article-visibil
 import type UserEntity from '@/features/user/user.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import type { StatusTransitions } from '@/shared/types/common.type';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export const ArticleStatusEnum = {
 	DRAFT: 'draft',
@@ -302,9 +303,9 @@ export default class ArticleEntity extends EntityAbstract {
 	source!: ArticleSource | null;
 
 	// RELATIONS
-	@Column('int', { nullable: true })
+	@Column('uuid', { nullable: true })
 	@Index('IDX_article_author_id')
-	author_id!: number | null;
+	author_id!: EntityId | null;
 
 	// The author is attribution, not ownership - deleting the user must leave the article standing
 	@ManyToOne('UserEntity', {

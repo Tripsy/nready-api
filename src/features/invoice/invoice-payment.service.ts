@@ -26,6 +26,7 @@ import {
 	cleanEntityCache,
 	cleanEntityCacheMany,
 } from '@/shared/abstracts/service.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 /**
@@ -42,7 +43,7 @@ export type AllocationCeiling = {
 
 /** A captured movement with something left to allocate, in its own currency. */
 type OpenMovement = {
-	id: number;
+	id: EntityId;
 	currency: string;
 	available: number;
 };
@@ -238,7 +239,7 @@ export class InvoicePaymentService {
 	 *
 	 * Returns the documents it touched, for the caller to re-evaluate their orders.
 	 */
-	public async settleClient(clientId: number): Promise<InvoiceEntity[]> {
+	public async settleClient(clientId: EntityId): Promise<InvoiceEntity[]> {
 		const touched = await dataSource.transaction(async (manager) => {
 			await this.lockClient(manager, clientId);
 
@@ -329,11 +330,11 @@ export class InvoicePaymentService {
 	 */
 	private async findOpenMovements(
 		manager: EntityManager,
-		clientId: number,
+		clientId: EntityId,
 	): Promise<OpenMovement[]> {
 		const rows = await manager.query<
 			{
-				id: number;
+				id: EntityId;
 				currency: string;
 				amount: number;
 				vat_rate: string;
@@ -368,7 +369,7 @@ export class InvoicePaymentService {
 
 		return rows
 			.map((row) => ({
-				id: Number(row.id),
+				id: row.id,
 				currency: row.currency,
 				available: roundMoney(
 					maxAllocatableAmount(
@@ -415,8 +416,8 @@ export class InvoicePaymentService {
 	 */
 	private async allocate(
 		manager: EntityManager,
-		invoiceId: number,
-		cashFlowId: number,
+		invoiceId: EntityId,
+		cashFlowId: EntityId,
 		amount: number,
 	): Promise<void> {
 		const repository = manager.getRepository(InvoicePaymentEntity);
@@ -451,7 +452,7 @@ export class InvoicePaymentService {
 	 * hold the index and block ever allocating that movement to this invoice again - the same
 	 * reason `account_identity` unlinks hard.
 	 */
-	public async delete(invoice: InvoiceEntity, paymentId: number) {
+	public async delete(invoice: InvoiceEntity, paymentId: EntityId) {
 		const entry = await this.repository
 			.createQuery()
 			.filterById(paymentId)
@@ -511,7 +512,7 @@ export class InvoicePaymentService {
 	 */
 	private async release(
 		invoice: InvoiceEntity,
-		paymentIds: readonly number[],
+		paymentIds: readonly EntityId[],
 	): Promise<void> {
 		if (invoice.is_reversal) {
 			throw new CustomError(
@@ -550,7 +551,7 @@ export class InvoicePaymentService {
 	 */
 	private async lockClient(
 		manager: EntityManager,
-		clientId: number,
+		clientId: EntityId,
 	): Promise<void> {
 		await manager.query('SELECT pg_advisory_xact_lock(hashtext($1), $2)', [
 			'invoice_payment.client',

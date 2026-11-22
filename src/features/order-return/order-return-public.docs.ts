@@ -47,7 +47,7 @@ const publicSample: Record<string, unknown> = {
 };
 
 const orderParams = {
-	order_id: { type: 'number' as const, required: true },
+	order_id: { type: 'string' as const, required: true },
 };
 
 /**
@@ -132,7 +132,7 @@ export const docs: Record<
 				lines: {
 					type: 'array',
 					required: true,
-					format: '[{ variant_id: number; quantity: number }]',
+					format: '[{ variant_id: EntityId; quantity: number }]',
 				},
 			},
 			sample: {
@@ -155,7 +155,7 @@ export const docs: Record<
 			notes: `Only while ${OrderReturnStatusEnum.REQUESTED} - once the shop has decided, 409`,
 			params: {
 				...orderParams,
-				id: { type: 'number', required: true },
+				id: { type: 'string', required: true },
 			},
 		},
 	}),

@@ -54,7 +54,7 @@ export const docs: Record<
 			notes: "Soft-deleted reviews are returned only to a caller whose role allows it. `order_id` is the order the purchase was made on: derived when the review is written, from the most recent completed order billed to one of the author's clients that carries a line for the product (and the variant, when named). Null when no such order exists",
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -74,7 +74,7 @@ export const docs: Record<
 			notes: `Only the presentation of a review is editable here - the scores are the author's. The moderation decision moves through the status endpoint instead. At least one of: ${paramsUpdateList.join(', ')}`,
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -113,7 +113,7 @@ export const docs: Record<
 			notes: 'Soft - the row keeps its place and can be restored. It also frees the slot: one live review per buyer per product, so the author may write another one in the meantime',
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -132,7 +132,7 @@ export const docs: Record<
 			notes: 'Answers 409 when the author has written a new review on that product since - the slot the deleted one held is taken',
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -191,14 +191,14 @@ export const docs: Record<
 					default: OrderDirectionEnum.DESC,
 				},
 				filter: {
-					product_id: { type: 'number', required: false },
+					product_id: { type: 'string', required: false },
 					variant_id: {
-						type: 'number',
+						type: 'string',
 						required: false,
 						condition:
 							'reviews naming no variant are excluded when this is set',
 					},
-					user_id: { type: 'number', required: false },
+					user_id: { type: 'string', required: false },
 					status: {
 						type: 'enum',
 						required: false,
@@ -245,7 +245,7 @@ export const docs: Record<
 			notes: `Only these transitions are allowed: ${statusTransitionNote}. Nothing returns a review to ${ReviewStatusEnum.PENDING}. Only an approved review is public, and only an approved one accepts comments, ratings or complaints. The decision is stamped with the authenticated caller, never with an id from the request`,
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 				status: {

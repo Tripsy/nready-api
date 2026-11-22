@@ -11,23 +11,19 @@ export class TemplateQuery extends RepositoryAbstract<TemplateEntity> {
 
 	filterByTerm(term?: string): this {
 		if (term) {
-			if (!Number.isNaN(Number(term)) && term.trim() !== '') {
-				this.filterBy('id', Number(term));
-			} else {
-				if (term.length >= Configuration.get('filter.termMinLength')) {
-					this.filterAny([
-						{
-							column: 'label',
-							value: term,
-							operator: 'ILIKE',
-						},
-						{
-							column: 'content::text',
-							value: term,
-							operator: 'ILIKE',
-						},
-					]);
-				}
+			if (term.length >= Configuration.get('filter.termMinLength')) {
+				this.filterAny([
+					{
+						column: 'label',
+						value: term,
+						operator: 'ILIKE',
+					},
+					{
+						column: 'content::text',
+						value: term,
+						operator: 'ILIKE',
+					},
+				]);
 			}
 		}
 

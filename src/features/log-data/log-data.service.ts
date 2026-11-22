@@ -1,6 +1,7 @@
 import type LogDataEntity from '@/features/log-data/log-data.entity';
 import { getLogDataRepository } from '@/features/log-data/log-data.repository';
 import type { LogDataValidator } from '@/features/log-data/log-data.validator';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 export class LogDataService {
@@ -13,7 +14,7 @@ export class LogDataService {
 			.delete(false, true, true);
 	}
 
-	public findById(id: number): Promise<LogDataEntity> {
+	public findById(id: EntityId): Promise<LogDataEntity> {
 		return this.repository.createQuery().filterById(id).firstOrFail();
 	}
 

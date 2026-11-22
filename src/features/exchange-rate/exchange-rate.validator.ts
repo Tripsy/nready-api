@@ -118,7 +118,7 @@ export class ExchangeRateValidator extends BaseValidator<
 		defaultPage: 1,
 
 		filterSchema: {
-			id: this.validateNumber(this.getMessage('invalid_number'), {
+			id: this.validateId(this.getMessage('invalid_id', { name: 'id' }), {
 				required: false,
 			}),
 			currency: this.optionalCurrencyCode(

@@ -15,6 +15,7 @@ import {
 	BaseValidator,
 	sharedValidatorMessages,
 } from '@/shared/abstracts/validator.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * `workflow` and `sale_status` are deliberately absent: the first moves through its own route so
@@ -227,7 +228,7 @@ export class ProductValidator extends BaseValidator<typeof validatorMessages> {
 	};
 
 	private readonly refineSingleValue = (data: {
-		value_term_id?: number | null;
+		value_term_id?: EntityId | null;
 		value_numeric?: number | null;
 		value_text?: string | null;
 		value_boolean?: boolean | null;
@@ -562,13 +563,7 @@ export class ProductValidator extends BaseValidator<typeof validatorMessages> {
 		message: string,
 		options: { required?: boolean; requiredMessage?: string } = {},
 	) => {
-		const schema = z.array(
-			z.coerce
-				.number({ message: message })
-				.int({ message: message })
-				.positive({ message: message }),
-			{ message: message },
-		);
+		const schema = z.array(this.validateId(message), { message: message });
 
 		if (!options.required) {
 			return schema.optional();
@@ -839,16 +834,22 @@ export class ProductValidator extends BaseValidator<typeof validatorMessages> {
 				this.getMessage('invalid_sale_status'),
 				{ required: false },
 			),
-			brand_id: this.validateNumber(this.getMessage('invalid_number'), {
-				required: false,
-			}),
-			category_id: this.validateNumber(
-				this.getMessage('invalid_number'),
+			brand_id: this.validateId(
+				this.getMessage('invalid_id', { name: 'brand_id' }),
+				{
+					required: false,
+				},
+			),
+			category_id: this.validateId(
+				this.getMessage('invalid_id', { name: 'category_id' }),
 				{ required: false },
 			),
-			tag_id: this.validateNumber(this.getMessage('invalid_number'), {
-				required: false,
-			}),
+			tag_id: this.validateId(
+				this.getMessage('invalid_id', { name: 'tag_id' }),
+				{
+					required: false,
+				},
+			),
 			language: this.validateLanguage(
 				this.getMessage('invalid_language'),
 				{ required: false },
@@ -948,13 +949,16 @@ export class ProductValidator extends BaseValidator<typeof validatorMessages> {
 				required: false,
 				minChars: Configuration.get('filter.termMinLength'),
 			}),
-			category_id: this.validateNumber(
-				this.getMessage('invalid_number'),
+			category_id: this.validateId(
+				this.getMessage('invalid_id', { name: 'category_id' }),
 				{ required: false },
 			),
-			brand_id: this.validateNumber(this.getMessage('invalid_number'), {
-				required: false,
-			}),
+			brand_id: this.validateId(
+				this.getMessage('invalid_id', { name: 'brand_id' }),
+				{
+					required: false,
+				},
+			),
 			/*
 			 * A list rather than a scalar: the "related products" box on a product page is
 			 * matched against every tag the product it sits on carries. `qs` hands over a bare
@@ -969,17 +973,22 @@ export class ProductValidator extends BaseValidator<typeof validatorMessages> {
 							: [value],
 					z
 						.array(
-							this.validateNumber(
-								this.getMessage('invalid_number'),
+							this.validateId(
+								this.getMessage('invalid_id', {
+									name: 'tag_id',
+								}),
 							),
 						)
 						.nonempty(),
 				)
 				.optional(),
 			// The product the listing must not contain - the box is rendered on its own page
-			exclude_id: this.validateNumber(this.getMessage('invalid_number'), {
-				required: false,
-			}),
+			exclude_id: this.validateId(
+				this.getMessage('invalid_id', { name: 'exclude_id' }),
+				{
+					required: false,
+				},
+			),
 			attribute: z
 				.preprocess(
 					(value) =>

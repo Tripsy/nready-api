@@ -6,6 +6,7 @@ import {
 import { productCategoryAttributeInputPayloads } from '@/features/product/product-category-attribute.mock';
 import { ProductCategoryAttributeValidator } from '@/features/product/product-category-attribute.validator';
 import { withDebugValidated } from '@/tests/jest-validator.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 beforeEach(() => {
 	jest.restoreAllMocks();
@@ -83,7 +84,7 @@ describe(validator, () => {
 				const validated = createWith({
 					type,
 					value_type,
-					options: isTerm ? [{ term_id: 12 }] : [],
+					options: isTerm ? [{ term_id: mockId(12) }] : [],
 				});
 
 				withDebugValidated(() => {
@@ -152,12 +153,14 @@ describe(validator, () => {
 		// Its restriction is a range, which is what bounds a measurement and leaves the number
 		// in `value_numeric` where it stays filterable
 		it('rejects options on a numeric definition', () => {
-			expect(numeric({ options: [{ term_id: 12 }] }).success).toBe(false);
+			expect(
+				numeric({ options: [{ term_id: mockId(12) }] }).success,
+			).toBe(false);
 		});
 
 		it('accepts an omitted options key on an update', () => {
 			const validated = attributeValidator.update.safeParse({
-				id: 1,
+				id: mockId(1),
 				sort_order: 5,
 			});
 
@@ -169,25 +172,25 @@ describe(validator, () => {
 
 	describe('update', () => {
 		it('rejects a payload carrying only the id', () => {
-			expect(attributeValidator.update.safeParse({ id: 1 }).success).toBe(
-				false,
-			);
+			expect(
+				attributeValidator.update.safeParse({ id: mockId(1) }).success,
+			).toBe(false);
 		});
 
 		// They are what a value is keyed on, so moving them would orphan every recorded value
 		it('ignores category_id and attribute_label_id', () => {
 			expect(
 				attributeValidator.update.safeParse({
-					id: 1,
-					category_id: 9,
-					attribute_label_id: 9,
+					id: mockId(1),
+					category_id: mockId(9),
+					attribute_label_id: mockId(9),
 				}).success,
 			).toBe(false);
 		});
 
 		it('accepts is_filterable false on its own', () => {
 			const validated = attributeValidator.update.safeParse({
-				id: 1,
+				id: mockId(1),
 				is_filterable: false,
 			});
 
@@ -200,12 +203,12 @@ describe(validator, () => {
 	describe('resolve', () => {
 		it('wraps a single category id into a list', () => {
 			const validated = attributeValidator.resolve.safeParse({
-				category_id: 5,
+				category_id: mockId(5),
 			});
 
 			withDebugValidated(() => {
 				expect(validated.success).toBe(true);
-				expect(validated.data?.category_id).toEqual([5]);
+				expect(validated.data?.category_id).toEqual([mockId(5)]);
 			}, validated);
 		});
 

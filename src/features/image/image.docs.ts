@@ -47,7 +47,7 @@ const targetParams = {
 		values: Object.values(ImageSectionEnum),
 	},
 	entity_id: {
-		type: 'number' as const,
+		type: 'string' as const,
 		required: true,
 		condition:
 			'the row in that section; the pair carries no foreign key, so nothing here checks that it exists',
@@ -124,7 +124,7 @@ export const docs: Record<keyof typeof imageController, ApiInputDocumentation> =
 			request: {
 				params: {
 					id: {
-						type: 'number',
+						type: 'string',
 						required: true,
 					},
 				},
@@ -147,7 +147,7 @@ export const docs: Record<keyof typeof imageController, ApiInputDocumentation> =
 				notes: 'Only contents can be changed. The file, its target, its type and its storage are what the row records - replacing an image means registering the new file and removing this row. Status and order have their own routes',
 				params: {
 					id: {
-						type: 'number',
+						type: 'string',
 						required: true,
 					},
 				},
@@ -176,7 +176,7 @@ export const docs: Record<keyof typeof imageController, ApiInputDocumentation> =
 				notes: 'Hard - the table has no deleted state and therefore no restore. The translations follow through the cascade, but the stored file does not: removing it belongs to whoever put it there. The same is true of the sweep that clears images when their target is removed',
 				params: {
 					id: {
-						type: 'number',
+						type: 'string',
 						required: true,
 					},
 				},
@@ -234,13 +234,17 @@ export const docs: Record<keyof typeof imageController, ApiInputDocumentation> =
 						default: OrderDirectionEnum.ASC,
 					},
 					filter: {
-						id: { type: 'number', required: false },
+						id: { type: 'string', required: false },
 						section: {
 							type: 'enum',
 							required: false,
 							values: Object.values(ImageSectionEnum),
 						},
-						entity_id: { type: 'number', required: false },
+						entity_id: {
+							type: 'array',
+							required: false,
+							format: 'string[]',
+						},
 						image_type: {
 							type: 'enum',
 							required: false,
@@ -270,7 +274,7 @@ export const docs: Record<keyof typeof imageController, ApiInputDocumentation> =
 				notes: `Only these transitions are allowed: ${statusTransitionNote}. An inactive image is skipped by the lookup that picks the one standing for a target, and the move resets sort_order - the image leaves its ordered group either way`,
 				params: {
 					id: {
-						type: 'number',
+						type: 'string',
 						required: true,
 					},
 					status: {
@@ -297,7 +301,7 @@ export const docs: Record<keyof typeof imageController, ApiInputDocumentation> =
 					positions: {
 						type: 'array',
 						required: true,
-						format: '[{ id: number; sort_order: number }]',
+						format: '[{ id: EntityId; sort_order: number }]',
 						condition: 'at least two entries, with distinct ids',
 					},
 				},

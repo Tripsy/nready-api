@@ -19,13 +19,15 @@ This boilerplate can serve as a foundation to quickly build MVPs, CMS platforms,
 It comes with a [solid structure](#-structure), it is fully modular and feature-based, and already contains a lot of useful [features](#-features),
 and many [goodies](#-characteristics) including:
 - **Complete authentication system** - JWT access / refresh tokens, email confirmation, password recovery, session limits, social sign-in (Google, Facebook);
-- **A working commerce chain** - catalog, cart, checkout, orders, discounts, shipping, typed invoices with reversals, payments allocated FIFO per client, and a client ledger;
+- **A working commerce chain** - catalog, cart, checkout, orders, discounts, shipping, typed invoices with reversals, payments allocated FIFO per client, a client ledger, and buyer returns with stock re-entry and refund drafts;
+- **Stock handling** - goods receipts with FIFO lots and a weighted-average cost, an append-only stock ledger, reservations from the moment an order is placed, a checkout split across warehouses, and manual adjustments;
 - Convention-based auto-discovery - drop in a `*.routes.ts`, `*.cron.ts`, `*.listener.ts` or `*.bootstrap.ts` and it is wired at startup;
 - Hook slots between features - a feature plugs into another from its bootstrap without being imported by it, so an optional feature stays removable;
 - A feature installer (`cli/feature.ts`) with version-aware dependency resolution, so a slice can be packaged and moved between projects;
 - Background processing - BullMQ queues, an email worker, and a cron provider that records every run and takes a Redis lock per job;
+- UUID v7 ids everywhere - native `uuid` columns defaulting to Postgres 18's `uuidv7()`, time-ordered and safe to expose;
 - Built to run as several replicas - sessions cached in Redis, rate limits shared through it, crons and the worker split into a dedicated [scheduler](#-deployment);
-- A generated API reference, served per feature from the `*.docs.ts` files;
+- A generated API reference, served per feature from the `*.docs.ts` files, to admins only;
 - Advanced logging and error handling, with a destination per level (console, file, database, email, CloudWatch);
 - Custom middlewares;
 - Multi-language support for content and outgoing email;
@@ -42,9 +44,9 @@ The database is **PostgreSQL**, using **TypeORM** as the ORM layer.
 A ready-to-use Docker environment is provided for quick [setup](#-setup).
 
 This project is still a work in progress, and the next goals are:
-   - Stock handling - goods receipts (`grn`) confirm and cancel with FIFO lots and a weighted-average cost; an optional stock feature (`warehouse-movement`) keeps an append-only ledger of every receipt and its reversal, and reserves stock for orders from the moment they are placed (available = on hand - reserved, refused with 409 when short unless the variant allows backorders), and splits a courier checkout across the fewest warehouses that can fill it (one delivery whenever a single site can, extra parcels free), and draws a delivery's goods from the oldest lots as it ships (put back if it returns undelivered); stock added or removed by hand with a reason - damaged, lost, a shelf audit, a sample come back (`/stock-adjustments`) - moves the lots and posts to the ledger, each reversible as a whole; a nightly reconcile mails any drift between lots, ledger and reservations, and a morning digest lists variants under their low-stock threshold; relocations are still to come
+   - Stock relocations - the `relocation` shipping scope exists, the relocation document behind it does not yet
    - Subscriptions - entity-only so far
-   - Returns
+   - Dashboard stats - redo
    - Create documentation
 
 The working list, with the design notes behind each item and the latest load-test figures, is in [TODO.md](TODO.md).
@@ -53,8 +55,10 @@ Meanwhile, we're open to suggestions / feedback, and if you find this project us
 
 > On a [separate project](https://github.com/Tripsy/nready-ui), powered by **React / Next.js** you can find a 
 > working #FrontEnd interface which demonstrates the usability of the `authentication system`, a storefront
-> (catalog, cart, checkout, the buyer's orders and invoices) and an **Administration Dashboard** covering
-> Users, Permissions, Templates, Logs, Clients, Cash-Flow, Places, Products, Orders, Invoices, Shipping, etc
+> (catalog with stock levels, articles and comments, cart, checkout, the buyer's orders, invoices and returns)
+> and an **Administration Dashboard** covering Users, Permissions, Templates, Logs, Clients, Cash-Flow, Places,
+> Products, Orders, Invoices, Shipping, Returns, Goods Receipts, Stock Movements and Adjustments, low-stock and
+> under-cost reports, VAT Rates & more.
 
 # 🚀 Tech Stack
 
@@ -99,11 +103,16 @@ Meanwhile, we're open to suggestions / feedback, and if you find this project us
 - [x] Ready-to-use boilerplate with a modular, feature-based architecture
 - [x] Best Practices: Clean architecture, TypeScript, error handling, async patterns, DRY, SOLID, KISS
 - [x] Security: Helmet, Redis-backed rate limiting, input validation, CORS, client API keys
+- [x] UUID v7 primary keys (native `uuid` columns, generated by Postgres)
+- [x] Graceful shutdown - drains in-flight requests and closes resources in order; request timeouts answer 503
+- [x] Liveness (`/health`) and readiness (`/ready`, checks the database and Redis) probes
+- [x] Build version reported on every response (`X-App-Version`)
 - [x] Logging (powered by Pino)
 - [x] Request validation (powered by Zod)
 - [x] Standardized JSON Responses: Consistent response structures for better frontend integration
 - [x] Caching (powered by ioredis)
 - [x] Cron jobs provider with automatic discovery, registration, run history and a Redis lock per job
+- [x] Housekeeping crons - expired tokens, abandoned carts, and weekly cleanup of `log_history`, `mail_queue`, `log_data` and `cron_history`
 - [x] Auto-registered event listeners
 - [x] Feature bootstrap files and typed hook slots (`<feature>.hooks.ts`, `shared/registries/`) for plugging one feature into another
 - [x] Email sending via queues (powered by BullMQ)
@@ -123,9 +132,10 @@ Meanwhile, we're open to suggestions / feedback, and if you find this project us
 - [x] Session and user context cached in Redis
 - [x] Authorization policies based on user roles and permissions
 - [x] Testing (powered by Jest & Supertest)
-- [x] Documentation provided for APIs endpoints (`*.docs.ts`, served at `/public/api-docs` when `API_DOCS_ENABLED=true`)
+- [x] Documentation provided for APIs endpoints (`*.docs.ts`, served to admins at `/public/api-docs` when `API_DOCS_ENABLED=true`)
 - [x] Packaged features, installable via CLI with version-aware dependency resolution
 - [x] Document numbering from one continuous series per document type (orders, invoices, receipts, returns)
+- [x] VAT rates as data - per country, each with the day it starts applying
 - [x] Demo seeds for every feature owning a table
 - [x] Development environment available (Docker)
 - [x] Production image and compose stack, with a one-shot migration step and a dedicated scheduler
@@ -195,7 +205,9 @@ Unchecked features hold their entities only - no routes, services or seeds yet.
 - **invoice** - raised when an order is confirmed; typed by scope (`order`, `shipping`, `subscription`, `custom`), full or partial reversals, a printable document for the buyer and the back office
 - **cash-flow** - payments, spread over a client's open invoices oldest first
 - **client-ledger** - what each client owes, reconciled by a cron
-- **shipping** - delivery, return and relocation movements, prepared when the order is confirmed
+- **shipping** - delivery, return and relocation movements, prepared when the order is confirmed; a courier checkout is split across the fewest warehouses that can fill it
+- **grn** - goods received notes; confirming one opens FIFO lots and moves the weighted-average cost, cancelling it reverses them. A daily report flags prices whose floor is under cost
+- **warehouse-movement** - optional; an append-only stock ledger. Reserves stock as an order is placed (409 when short, unless the variant allows backorders), draws a delivery from the oldest lots as it ships and puts it back if it returns undelivered, writes off a delivery lost in transit, and takes manual adjustments with a reason (`/stock-adjustments`), each reversible as a whole. A nightly reconcile mails any drift between lots, ledger and reservations; a morning digest lists variants under their low-stock threshold
 - **order-settlement** - optional; moves an order's status as its invoices and deliveries settle. Without it billing runs the same and orders change status by hand
 - **order-return** - optional; a buyer asks to send delivered goods back (within `ORDER_RETURN_WINDOW_DAYS`), an operator approves - which writes the `return` shipping movement - and once it arrives the goods re-enter stock by condition (resellable back into their lot, damaged written off) and a draft invoice reversal is raised for the operator to issue, which is what refunds the money
 
@@ -225,6 +237,8 @@ docker network create development
 
 PostgreSQL and Redis are not part of this compose file. The container reaches them through
 `host.docker.internal`, so run them wherever suits and point `DB_*` / `REDIS_*` at them.
+PostgreSQL has to be **18 or newer**: every id is a UUID v7, and the columns default to the
+built-in `uuidv7()`, which earlier versions do not have.
 
 Start the Docker container using the following command:
 

@@ -5,9 +5,10 @@ import {
 	Index,
 	JoinColumn,
 	ManyToOne,
-	PrimaryGeneratedColumn,
 } from 'typeorm';
 import type UserEntity from '@/features/user/user.entity';
+import { EntityIdAbstract } from '@/shared/abstracts/entity-id.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export const AccountIdentityProviderEnum = {
 	GOOGLE: 'google',
@@ -39,15 +40,12 @@ const ENTITY_TABLE_NAME = 'account_identity';
 @Index('IDX_account_identity_user_provider', ['user_id', 'provider'], {
 	unique: true,
 })
-export default class AccountIdentityEntity {
+export default class AccountIdentityEntity extends EntityIdAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = false;
 
-	@PrimaryGeneratedColumn({ type: 'int' })
-	id!: number;
-
-	@Column('int', { unsigned: false, nullable: false })
-	user_id!: number;
+	@Column('uuid', { nullable: false })
+	user_id!: EntityId;
 
 	@Column({
 		type: 'enum',

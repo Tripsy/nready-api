@@ -1,10 +1,5 @@
-import {
-	Column,
-	DeleteDateColumn,
-	Entity,
-	Index,
-	PrimaryGeneratedColumn,
-} from 'typeorm';
+import { Column, DeleteDateColumn, Entity, Index } from 'typeorm';
+import { EntityIdAbstract } from '@/shared/abstracts/entity-id.abstract';
 
 const ENTITY_TABLE_NAME = 'permission';
 
@@ -17,12 +12,9 @@ const ENTITY_TABLE_NAME = 'permission';
 	unique: true,
 	where: 'deleted_at IS NULL',
 })
-export default class PermissionEntity {
+export default class PermissionEntity extends EntityIdAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
-
-	@PrimaryGeneratedColumn({ type: 'int' })
-	id!: number;
 
 	@Column('varchar', { nullable: false })
 	entity!: string;

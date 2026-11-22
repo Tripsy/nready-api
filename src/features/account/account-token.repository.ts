@@ -3,6 +3,7 @@ import dataSource from '@/config/data-source.config';
 import AccountTokenEntity from '@/features/account/account-token.entity';
 import { runInBackground } from '@/helpers/background.helper';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export class AccountTokenQuery extends RepositoryAbstract<AccountTokenEntity> {
 	constructor(repository: Repository<AccountTokenEntity>) {
@@ -28,7 +29,7 @@ export const getAccountTokenRepository = () =>
 		 * to the request. `runInBackground` keeps a failed delete from surfacing as an
 		 * unhandled rejection, which `server.ts` would treat as grounds for a shutdown.
 		 */
-		removeTokenById(id: number): void {
+		removeTokenById(id: EntityId): void {
 			runInBackground(
 				this.createQuery().filterById(id).delete(false),
 				`Failed to remove account token #${id}`,

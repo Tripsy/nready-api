@@ -157,16 +157,9 @@ export class RatingValidator extends BaseValidator<typeof validatorMessages> {
 		entity_ids: z.preprocess(
 			(value) => (typeof value === 'string' ? value.split(',') : value),
 			z
-				.array(
-					z.coerce
-						.number({
-							message: this.getMessage('invalid_entity_ids'),
-						})
-						.positive({
-							message: this.getMessage('invalid_entity_ids'),
-						}),
-					{ message: this.getMessage('invalid_entity_ids') },
-				)
+				.array(this.validateId(this.getMessage('invalid_entity_ids')), {
+					message: this.getMessage('invalid_entity_ids'),
+				})
 				.min(1, { message: this.getMessage('invalid_entity_ids') })
 				.max(RATING_SUMMARY_MAX_TARGETS, {
 					message: this.getMessage('invalid_entity_ids'),

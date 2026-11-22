@@ -12,21 +12,23 @@ import WarehouseMovementEntity, {
 } from '@/features/warehouse-movement/warehouse-movement.entity';
 import type { WarehouseMovementQuery } from '@/features/warehouse-movement/warehouse-movement.repository';
 import { WarehouseMovementService } from '@/features/warehouse-movement/warehouse-movement.service';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import { createMockRepository } from '@/tests/jest-service.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
-const WAREHOUSE_ID = 1;
+const WAREHOUSE_ID = mockId(1);
 
 const move: ShippingStockMove = {
-	shipping_id: 42,
-	order_id: 41,
+	shipping_id: mockId(42),
+	order_id: mockId(41),
 	scope: ShippingScopeEnum.DELIVERY,
 	pickup_warehouse_id: WAREHOUSE_ID,
 	destination_warehouse_id: null,
 };
 
 type Line = {
-	id: number;
-	variant_id: number;
+	id: EntityId;
+	variant_id: EntityId;
 	quantity: string;
 	condition: null;
 };
@@ -47,7 +49,9 @@ function fakeManager(lines: Line[], tracked: number[]) {
 
 			if (target === ProductVariantEntity) {
 				return {
-					find: jest.fn(async () => tracked.map((id) => ({ id }))),
+					find: jest.fn(async () =>
+						tracked.map((id) => ({ id: mockId(id) })),
+					),
 				};
 			}
 
@@ -57,11 +61,11 @@ function fakeManager(lines: Line[], tracked: number[]) {
 						async (options: {
 							where: Record<
 								string,
-								{ value?: number[] } | string
+								{ value?: EntityId[] } | string
 							>;
 						}) => {
 							const reversalOf = options.where.reversal_of_id as
-								| { value: number[] }
+								| { value: EntityId[] }
 								| undefined;
 
 							if (reversalOf) {
@@ -75,7 +79,7 @@ function fakeManager(lines: Line[], tracked: number[]) {
 							}
 
 							const sources = (
-								options.where.source_id as { value: number[] }
+								options.where.source_id as { value: EntityId[] }
 							).value;
 
 							return ledger.filter(
@@ -97,7 +101,7 @@ function fakeManager(lines: Line[], tracked: number[]) {
 			for (const row of rows) {
 				ledger.push({
 					...row,
-					id: nextId++,
+					id: mockId(nextId++),
 				} as WarehouseMovementEntity);
 			}
 
@@ -119,31 +123,46 @@ describe('WarehouseMovementService - ship and come back undelivered', () => {
 
 	// Two lines of the same shirt (a bundle component and a standalone line) and an untracked mug
 	const lines: Line[] = [
-		{ id: 501, variant_id: 7, quantity: '2', condition: null },
-		{ id: 502, variant_id: 7, quantity: '12', condition: null },
-		{ id: 503, variant_id: 99, quantity: '1', condition: null },
+		{
+			id: mockId(501),
+			variant_id: mockId(7),
+			quantity: '2',
+			condition: null,
+		},
+		{
+			id: mockId(502),
+			variant_id: mockId(7),
+			quantity: '12',
+			condition: null,
+		},
+		{
+			id: mockId(503),
+			variant_id: mockId(99),
+			quantity: '1',
+			condition: null,
+		},
 	];
 
 	// What the lots give: line 502 spans two lots at two costs
 	const pieces: LotPiece[] = [
 		{
-			key: 501,
-			grn_item_id: 31,
-			variant_id: 7,
+			key: mockId(501),
+			grn_item_id: mockId(31),
+			variant_id: mockId(7),
 			qty: 2,
 			unit_cost_base: 40,
 		},
 		{
-			key: 502,
-			grn_item_id: 31,
-			variant_id: 7,
+			key: mockId(502),
+			grn_item_id: mockId(31),
+			variant_id: mockId(7),
 			qty: 8,
 			unit_cost_base: 40,
 		},
 		{
-			key: 502,
-			grn_item_id: 32,
-			variant_id: 7,
+			key: mockId(502),
+			grn_item_id: mockId(32),
+			variant_id: mockId(7),
 			qty: 4,
 			unit_cost_base: 48,
 		},
@@ -182,8 +201,8 @@ describe('WarehouseMovementService - ship and come back undelivered', () => {
 			manager,
 			WAREHOUSE_ID,
 			[
-				{ key: 501, variant_id: 7, quantity: 2 },
-				{ key: 502, variant_id: 7, quantity: 12 },
+				{ key: mockId(501), variant_id: mockId(7), quantity: 2 },
+				{ key: mockId(502), variant_id: mockId(7), quantity: 12 },
 			],
 			{ allowShort: undefined },
 		);
@@ -203,9 +222,9 @@ describe('WarehouseMovementService - ship and come back undelivered', () => {
 				row.unit_cost_base,
 			]),
 		).toEqual([
-			[WarehouseMovementTypeEnum.SALE, 501, 31, -2, 40],
-			[WarehouseMovementTypeEnum.SALE, 502, 31, -8, 40],
-			[WarehouseMovementTypeEnum.SALE, 502, 32, -4, 48],
+			[WarehouseMovementTypeEnum.SALE, mockId(501), mockId(31), -2, 40],
+			[WarehouseMovementTypeEnum.SALE, mockId(502), mockId(31), -8, 40],
+			[WarehouseMovementTypeEnum.SALE, mockId(502), mockId(32), -4, 48],
 		]);
 		expect(
 			ledger.every(
@@ -224,8 +243,8 @@ describe('WarehouseMovementService - ship and come back undelivered', () => {
 
 		expect(consumeForOrder).toHaveBeenCalledWith(
 			manager,
-			41,
-			new Map([[7, 14]]),
+			mockId(41),
+			new Map([[mockId(7), 14]]),
 		);
 	});
 
@@ -281,18 +300,18 @@ describe('WarehouseMovementService - ship and come back undelivered', () => {
 			]),
 		);
 		expect(restoreLots).toHaveBeenCalledWith(manager, [
-			{ grn_item_id: 31, qty: 2 },
-			{ grn_item_id: 31, qty: 8 },
-			{ grn_item_id: 32, qty: 4 },
+			{ grn_item_id: mockId(31), qty: 2 },
+			{ grn_item_id: mockId(31), qty: 8 },
+			{ grn_item_id: mockId(32), qty: 4 },
 		]);
 		expect(restoreForOrder).toHaveBeenCalledWith(
 			manager,
-			41,
-			new Map([[7, 14]]),
+			mockId(41),
+			new Map([[mockId(7), 14]]),
 		);
 
 		// The round trip nets to nothing per lot
-		const net = new Map<number | null, number>();
+		const net = new Map<EntityId | null, number>();
 
 		for (const row of ledger) {
 			net.set(
@@ -368,7 +387,7 @@ describe('WarehouseMovementService - ship and come back undelivered', () => {
 		expect(restoreForOrder).not.toHaveBeenCalled();
 
 		// Each lot still holds what the ship left it: the loss adds nothing to the ledger sum
-		const added = new Map<number | null, number>();
+		const added = new Map<EntityId | null, number>();
 
 		for (const row of lost) {
 			added.set(

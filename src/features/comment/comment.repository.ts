@@ -2,6 +2,7 @@ import type { Repository } from 'typeorm';
 import dataSource from '@/config/data-source.config';
 import CommentEntity from '@/features/comment/comment.entity';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export class CommentQuery extends RepositoryAbstract<CommentEntity> {
 	constructor(repository: Repository<CommentEntity>) {
@@ -15,7 +16,7 @@ export class CommentQuery extends RepositoryAbstract<CommentEntity> {
 	 * `undefined` leaves the filter off entirely, which is what a dashboard listing wants: it
 	 * shows roots and replies together.
 	 */
-	filterByParent(parentId?: number | null): this {
+	filterByParent(parentId?: EntityId | null): this {
 		if (parentId === undefined) {
 			return this;
 		}
@@ -38,7 +39,7 @@ export class CommentQuery extends RepositoryAbstract<CommentEntity> {
 	 * sharing an address - a household, an office, a carrier's NAT - could edit a signed-in user's
 	 * comment, since nothing stops both rows from carrying the same hash.
 	 */
-	filterByOwner(userId: number | null, userIpHash: string): this {
+	filterByOwner(userId: EntityId | null, userIpHash: string): this {
 		if (userId) {
 			this.filterBy('user_id', userId);
 

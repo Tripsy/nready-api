@@ -9,13 +9,14 @@ import CommentSubscriptionEntity, {
 } from '@/features/comment/comment-subscription.entity';
 import { getCommentSubscriptionRepository } from '@/features/comment/comment-subscription.repository';
 import { userService } from '@/features/user/user.service';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * Who a subscription is addressed to. Resolved from the comment that created it: a member's name
  * and address come from their account, a guest's from what they signed the comment with.
  */
 type SubscriberIdentity = {
-	user_id: number | null;
+	user_id: EntityId | null;
 	name: string;
 	email: string;
 };
@@ -48,7 +49,7 @@ export class CommentSubscriptionService {
 	 */
 	public async subscribe(
 		entityType: CommentEntityType,
-		entityId: number,
+		entityId: EntityId,
 		identity: SubscriberIdentity,
 		language: string,
 	): Promise<void> {
@@ -114,7 +115,7 @@ export class CommentSubscriptionService {
 	/** Everyone still listening to one discussion. */
 	public findSubscribers(
 		entityType: CommentEntityType,
-		entityId: number,
+		entityId: EntityId,
 	): Promise<CommentSubscriptionEntity[]> {
 		return (
 			this.repository
@@ -170,7 +171,7 @@ export class CommentSubscriptionService {
 	 */
 	public async deleteByTargets(
 		entityType: CommentEntityType,
-		entityIds: number[],
+		entityIds: EntityId[],
 	): Promise<void> {
 		if (!entityIds.length) {
 			return;

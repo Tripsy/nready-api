@@ -9,6 +9,7 @@ import {
 } from '@/features/carrier/carrier.validator';
 import { pickValuesFromObject } from '@/helpers/objects.helper';
 import { cleanEntityCache } from '@/shared/abstracts/service.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 export class CarrierService {
@@ -41,7 +42,7 @@ export class CarrierService {
 	 * @description Update any data
 	 */
 	public async update(
-		data: DeepPartial<CarrierEntity> & { id: number },
+		data: DeepPartial<CarrierEntity> & { id: EntityId },
 	): Promise<CarrierEntity> {
 		const saved = await this.repository.save(data);
 
@@ -73,15 +74,18 @@ export class CarrierService {
 		return this.update(entry);
 	}
 
-	public async delete(id: number) {
+	public async delete(id: EntityId) {
 		await this.repository.createQuery().filterById(id).delete();
 	}
 
-	public async restore(id: number) {
+	public async restore(id: EntityId) {
 		await this.repository.createQuery().filterById(id).restore();
 	}
 
-	public findById(id: number, withDeleted: boolean): Promise<CarrierEntity> {
+	public findById(
+		id: EntityId,
+		withDeleted: boolean,
+	): Promise<CarrierEntity> {
 		return this.repository
 			.createQuery()
 			.filterById(id)
@@ -89,7 +93,7 @@ export class CarrierService {
 			.firstOrFail();
 	}
 
-	public findByName(name: string, withoutId?: number) {
+	public findByName(name: string, withoutId?: EntityId) {
 		const q = this.repository.createQuery().filterBy('name', name);
 
 		if (withoutId) {

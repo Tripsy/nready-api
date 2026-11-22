@@ -4,6 +4,7 @@ import ImageContentEntity, {
 	type ImageContentType,
 } from '@/features/image/image-content.entity';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export class ImageContentQuery extends RepositoryAbstract<ImageContentEntity> {
 	constructor(repository: Repository<ImageContentEntity>) {
@@ -21,7 +22,7 @@ export const ImageContentRepository = dataSource
 		async saveContent(
 			manager: EntityManager,
 			contents: ImageContentType[],
-			image_id: number,
+			image_id: EntityId,
 		) {
 			if (!contents.length) {
 				return;

@@ -8,6 +8,7 @@ import {
 } from '@/features/order-return/order-return.validator';
 import { createPastDate } from '@/helpers/date.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 const orderReturnValidator = new OrderReturnValidator('order-return');
 
@@ -19,7 +20,7 @@ export function getOrderReturnEntityMock(
 	overrides?: Partial<OrderReturnEntity>,
 ): OrderReturnEntity {
 	return Object.assign(new OrderReturnEntity(), {
-		id: 7,
+		id: mockId(7),
 		ref_code: 'RMA',
 		ref_number: 7,
 		status: OrderReturnStatusEnum.REQUESTED,
@@ -32,9 +33,9 @@ export function getOrderReturnEntityMock(
 		closed_at: null,
 		reversal_invoice_ids: [],
 		refund_shipping: false,
-		order_id: 118,
+		order_id: mockId(118),
 		shipping_id: null,
-		user_id: 42,
+		user_id: mockId(42),
 		created_at: createPastDate(86400),
 		updated_at: null,
 		deleted_at: null,
@@ -44,26 +45,26 @@ export function getOrderReturnEntityMock(
 
 export const orderReturnInputPayloads = {
 	create: {
-		order_id: 118,
+		order_id: mockId(118),
 		reason: OrderReturnReasonEnum.WRONG_ITEM,
 		customer_notes: 'Ordered M, received L',
 		notes: 'Raised by phone',
-		lines: [{ variant_id: 27, quantity: 1 }],
+		lines: [{ variant_id: mockId(27), quantity: 1 }],
 	},
 	update: {
-		id: 7,
+		id: mockId(7),
 		customer_notes: 'Ordered M, received L',
 		response: 'Please pack the item in its original box',
 		notes: 'Buyer called to confirm',
 	},
 	approve: {
-		id: 7,
-		carrier_id: 3,
+		id: mockId(7),
+		carrier_id: mockId(3),
 		response: 'Approved - the courier will collect it',
 		refund_shipping: true,
 	},
 	statusUpdate: {
-		id: 7,
+		id: mockId(7),
 		status: OrderReturnStatusEnum.REJECTED,
 		response: 'Outside the return window',
 	},
@@ -73,16 +74,16 @@ export const orderReturnInputPayloads = {
 		order_by: OrderByEnum.ID,
 		direction: OrderDirectionEnum.DESC,
 		filter: {
-			order_id: 118,
+			order_id: mockId(118),
 			status: OrderReturnStatusEnum.REQUESTED,
 			is_deleted: false,
 		},
 	},
 	publicCreate: {
-		order_id: 118,
+		order_id: mockId(118),
 		reason: OrderReturnReasonEnum.NO_LONGER_NEEDED,
 		customer_notes: 'Changed my mind',
-		lines: [{ variant_id: 27, quantity: 1 }],
+		lines: [{ variant_id: mockId(27), quantity: 1 }],
 	},
 };
 

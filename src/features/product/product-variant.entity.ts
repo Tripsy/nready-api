@@ -12,6 +12,7 @@ import type ProductPriceEntity from '@/features/product/product-price.entity';
 import type ProductVariantAttributeEntity from '@/features/product/product-variant-attribute.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import { numericTransformer } from '@/shared/transformers/numeric.transformer';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 const ENTITY_TABLE_NAME = 'product_variant';
 
@@ -53,8 +54,8 @@ export default class ProductVariantEntity extends EntityAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
 
-	@Column('int', { nullable: false })
-	product_id!: number;
+	@Column('uuid', { nullable: false })
+	product_id!: EntityId;
 
 	@Column('varchar', {
 		nullable: false,

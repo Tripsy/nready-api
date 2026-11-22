@@ -207,11 +207,7 @@ export class BrandValidator extends BaseValidator<typeof validatorMessages> {
 			this.getMessage('invalid_brand_type'),
 		),
 		positions: z
-			.array(
-				z.number({
-					message: this.getMessage('invalid_number'),
-				}),
-			)
+			.array(this.validateId(this.getMessage('invalid_number')))
 			.min(2, {
 				message: this.getMessage('array_min', {
 					length: '2',

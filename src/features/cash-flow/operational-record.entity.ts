@@ -8,6 +8,7 @@ import {
 import type ClientEntity from '@/features/client/client.entity';
 import type VendorEntity from '@/features/vendor/vendor.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * What a movement is recorded against. The first two name a counterparty - who the money came
@@ -88,8 +89,8 @@ export default class OperationalRecordEntity extends EntityAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
 
-	@Column('int')
-	cash_flow_id!: number;
+	@Column('uuid')
+	cash_flow_id!: EntityId;
 
 	@Column({
 		type: 'enum',
@@ -98,8 +99,8 @@ export default class OperationalRecordEntity extends EntityAbstract {
 	})
 	operational_record_type!: OperationalRecordType;
 
-	@Column('int', { nullable: false })
-	entity_id!: number;
+	@Column('uuid', { nullable: false })
+	entity_id!: EntityId;
 
 	// OTHER
 	@Column('text', { nullable: true })

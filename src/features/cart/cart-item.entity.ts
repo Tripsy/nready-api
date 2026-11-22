@@ -7,13 +7,14 @@ import {
 	JoinColumn,
 	ManyToOne,
 	OneToMany,
-	PrimaryGeneratedColumn,
 	UpdateDateColumn,
 } from 'typeorm';
 import type CartEntity from '@/features/cart/cart.entity';
 import type ProductBundleItemEntity from '@/features/product/product-bundle-item.entity';
 import type ProductVariantEntity from '@/features/product/product-variant.entity';
+import { EntityIdAbstract } from '@/shared/abstracts/entity-id.abstract';
 import { numericTransformer } from '@/shared/transformers/numeric.transformer';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 const ENTITY_TABLE_NAME = 'cart_item';
 
@@ -36,7 +37,7 @@ const ENTITY_TABLE_NAME = 'cart_item';
  * one; a different set of options is a genuinely different line and gets its own row.
  *
  * The hash is what makes that expressible as an index - jsonb has no useful equality for this,
- * since `[3,1]` and `[1,3]` are the same choice written two ways. `CartService` normalizes and
+ * since `[b, a]` and `[a, b]` are the same choice written two ways. `CartService` normalizes and
  * hashes the ids, so the column is the canonical form of `options` and the two are written
  * together or not at all.
  *
@@ -63,12 +64,9 @@ const ENTITY_TABLE_NAME = 'cart_item';
 @Index('IDX_cart_item_parent_id', ['parent_id'], {
 	where: 'parent_id IS NOT NULL',
 })
-export default class CartItemEntity {
+export default class CartItemEntity extends EntityIdAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = false;
-
-	@PrimaryGeneratedColumn({ type: 'int' })
-	id!: number;
 
 	@CreateDateColumn({ type: 'timestamp', nullable: false })
 	created_at!: Date;
@@ -76,9 +74,9 @@ export default class CartItemEntity {
 	@UpdateDateColumn({ type: 'timestamp', nullable: true })
 	updated_at!: Date | null;
 
-	@Column('int', { nullable: false })
+	@Column('uuid', { nullable: false })
 	@Index('IDX_cart_item_cart_id')
-	cart_id!: number;
+	cart_id!: EntityId;
 
 	/**
 	 * The bundle line this row is a component of; null on every line a shopper added directly.
@@ -88,8 +86,8 @@ export default class CartItemEntity {
 	 * is what the shopper sees and what `quantity` counts; the components record what the bundle
 	 * was configured to contain.
 	 */
-	@Column('int', { nullable: true })
-	parent_id!: number | null;
+	@Column('uuid', { nullable: true })
+	parent_id!: EntityId | null;
 
 	/**
 	 * Which `product_bundle_item` this row materializes, so the line can be read back against the
@@ -99,20 +97,20 @@ export default class CartItemEntity {
 	 * Without it a component row is just a variant, and nothing could tell a component that comes
 	 * with the kit - covered by the bundle's price - from a ticked extra that adds to it.
 	 */
-	@Column('int', { nullable: true })
-	bundle_item_id!: number | null;
+	@Column('uuid', { nullable: true })
+	bundle_item_id!: EntityId | null;
 
-	@Column('int', { nullable: false })
+	@Column('uuid', { nullable: false })
 	@Index('IDX_cart_item_variant_id')
-	variant_id!: number;
+	variant_id!: EntityId;
 
 	/**
 	 * Denormalized alongside `variant_id` and held to it by the composite foreign key below, the
 	 * same arrangement `order_line` uses. Pricing needs the product on every line - for its VAT
 	 * class, and as a discount target - and this saves a join to reach it.
 	 */
-	@Column('int', { nullable: false })
-	product_id!: number;
+	@Column('uuid', { nullable: false })
+	product_id!: EntityId;
 
 	/*
 	 * On a component row this is units **per one bundle**, not the absolute count. Two burger
@@ -150,7 +148,7 @@ export default class CartItemEntity {
 		nullable: true,
 		comment: 'Chosen product_option ids, ascending',
 	})
-	options!: number[] | null;
+	options!: EntityId[] | null;
 
 	/**
 	 * Canonical form of `options`, for `UQ_cart_item_line`. Empty string when no option was

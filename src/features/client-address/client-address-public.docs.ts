@@ -42,7 +42,7 @@ export const docs: Record<
 			notes: 'Requires an account holding the client. Unpaginated - a client holds a handful of addresses. `place` carries the city, region and country names in the request language',
 			query: {
 				client_id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 					condition: "one of the caller's own clients",
 				},
@@ -66,19 +66,19 @@ export const docs: Record<
 			notes: 'Requires an account holding the client. Send either `address_id` - an address picked from `GET /public/addresses`, linked the way the dashboard links one - or `city_id` + `street` (+ `postal_code`) to write a new address row; both at once is refused. There is no update: an address is added or removed, since the linked row may be filed against other clients too',
 			body: {
 				client_id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 					condition: "one of the caller's own clients",
 				},
 				type: { type: 'enum', required: true, values: typeValues },
 				address_id: {
-					type: 'number',
+					type: 'string',
 					required: false,
 					condition:
 						'an existing address from `GET /public/addresses`; required unless city_id and street are sent',
 				},
 				city_id: {
-					type: 'number',
+					type: 'string',
 					required: false,
 					condition:
 						'a city from `GET /public/places`; required with street when address_id is absent',
@@ -122,7 +122,7 @@ export const docs: Record<
 			notes: 'Deleted outright; the address row it pointed at stays. Orders keep their own copy of the address they were placed with, so nothing already placed changes',
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 					condition:
 						"an address under one of the caller's own clients",

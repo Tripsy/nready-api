@@ -24,13 +24,11 @@ export class MailQueueValidator extends BaseValidator<
 
 	readonly delete = z.object({
 		ids: z.array(
-			z.coerce
-				.number({
-					message: this.getMessage('invalid_ids', {
-						name: 'ids',
-					}),
-				})
-				.positive(),
+			this.validateId(
+				this.getMessage('invalid_ids', {
+					name: 'ids',
+				}),
+			),
 			{
 				message: this.getMessage('invalid_ids', {
 					name: 'ids',
@@ -50,10 +48,10 @@ export class MailQueueValidator extends BaseValidator<
 		defaultPage: 1,
 
 		filterSchema: {
-			id: this.validateNumber(this.getMessage('invalid_number'), {
+			id: this.validateId(this.getMessage('invalid_id', { name: 'id' }), {
 				required: false,
 			}),
-			template: z.union([z.string(), z.number()]).optional(),
+			template: z.string().trim().optional(),
 			status: this.validateEnum(
 				MailQueueStatusEnum,
 				this.getMessage('invalid_status'),

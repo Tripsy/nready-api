@@ -10,9 +10,11 @@ import {
 import type { ShippingQuery } from '@/features/shipping/shipping.repository';
 import { ShippingService } from '@/features/shipping/shipping.service';
 import ShippingLineEntity from '@/features/shipping/shipping-line.entity';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import { createMockRepository } from '@/tests/jest-service.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
-type SumRow = { variant_id: number; quantity: string };
+type SumRow = { variant_id: EntityId; quantity: string };
 
 /**
  * What the shipping line sums answer, told apart by the parameters each query binds: the scope it
@@ -31,7 +33,7 @@ type BoundParameters = {
 	scopes?: string[];
 	statuses?: string[];
 	excludeStatuses?: string[];
-	excludeShippingId?: number;
+	excludeShippingId?: EntityId;
 };
 
 function fakeManager(orderLines: unknown[], pools: LinePools) {
@@ -102,27 +104,35 @@ describe('ShippingService - return allocation', () => {
 	const assertLinesAllocatable = (
 		manager: EntityManager,
 		scope: ShippingScope,
-		lines: { variant_id: number; quantity: number }[],
-		excludeShippingId?: number,
+		lines: { variant_id: EntityId; quantity: number }[],
+		excludeShippingId?: EntityId,
 	) =>
 		(
 			service as unknown as {
 				assertLinesAllocatable(
 					manager: EntityManager,
-					orderId: number | null,
+					orderId: EntityId | null,
 					scope: ShippingScope,
 					lines: unknown,
-					excludeShippingId?: number,
+					excludeShippingId?: EntityId,
 				): Promise<void>;
 			}
-		).assertLinesAllocatable(manager, 118, scope, lines, excludeShippingId);
+		).assertLinesAllocatable(
+			manager,
+			mockId(118),
+			scope,
+			lines,
+			excludeShippingId,
+		);
 
 	// One order line of 5 shirts; 3 arrived, 1 is already on its way back
-	const orderLines = [{ id: 501, variant_id: 27, quantity: '5' }];
+	const orderLines = [
+		{ id: mockId(501), variant_id: mockId(27), quantity: '5' },
+	];
 	const pools: LinePools = {
-		delivered: [{ variant_id: 27, quantity: '3' }],
-		allocated: [{ variant_id: 27, quantity: '5' }],
-		returning: [{ variant_id: 27, quantity: '1' }],
+		delivered: [{ variant_id: mockId(27), quantity: '3' }],
+		allocated: [{ variant_id: mockId(27), quantity: '5' }],
+		returning: [{ variant_id: mockId(27), quantity: '1' }],
 	};
 
 	beforeEach(() => {
@@ -134,7 +144,7 @@ describe('ShippingService - return allocation', () => {
 
 		await expect(
 			assertLinesAllocatable(manager, ShippingScopeEnum.RETURN, [
-				{ variant_id: 27, quantity: 2 },
+				{ variant_id: mockId(27), quantity: 2 },
 			]),
 		).resolves.toBeUndefined();
 	});
@@ -144,7 +154,7 @@ describe('ShippingService - return allocation', () => {
 
 		await expect(
 			assertLinesAllocatable(manager, ShippingScopeEnum.RETURN, [
-				{ variant_id: 27, quantity: 3 },
+				{ variant_id: mockId(27), quantity: 3 },
 			]),
 		).rejects.toMatchObject({ statusCode: 409 });
 	});
@@ -158,7 +168,7 @@ describe('ShippingService - return allocation', () => {
 
 		await expect(
 			assertLinesAllocatable(manager, ShippingScopeEnum.RETURN, [
-				{ variant_id: 27, quantity: 4 },
+				{ variant_id: mockId(27), quantity: 4 },
 			]),
 		).rejects.toMatchObject({ statusCode: 409 });
 	});
@@ -169,8 +179,8 @@ describe('ShippingService - return allocation', () => {
 		await assertLinesAllocatable(
 			manager,
 			ShippingScopeEnum.RETURN,
-			[{ variant_id: 27, quantity: 1 }],
-			64,
+			[{ variant_id: mockId(27), quantity: 1 }],
+			mockId(64),
 		);
 
 		const returning = queries.find((query) =>
@@ -186,7 +196,7 @@ describe('ShippingService - return allocation', () => {
 				ShippingStatusEnum.RETURNED,
 				ShippingStatusEnum.CANCELED,
 			],
-			excludeShippingId: 64,
+			excludeShippingId: mockId(64),
 		});
 		expect(delivered).toMatchObject({
 			statuses: [ShippingStatusEnum.DELIVERED],
@@ -199,7 +209,7 @@ describe('ShippingService - return allocation', () => {
 
 		await expect(
 			assertLinesAllocatable(manager, ShippingScopeEnum.RETURN, [
-				{ variant_id: 99, quantity: 1 },
+				{ variant_id: mockId(99), quantity: 1 },
 			]),
 		).rejects.toMatchObject({ statusCode: 422 });
 	});
@@ -208,18 +218,18 @@ describe('ShippingService - return allocation', () => {
 	it('caps a delivery by what the order holds less its other deliveries', async () => {
 		const { manager } = fakeManager(orderLines, {
 			...pools,
-			allocated: [{ variant_id: 27, quantity: '4' }],
+			allocated: [{ variant_id: mockId(27), quantity: '4' }],
 		});
 
 		await expect(
 			assertLinesAllocatable(manager, ShippingScopeEnum.DELIVERY, [
-				{ variant_id: 27, quantity: 1 },
+				{ variant_id: mockId(27), quantity: 1 },
 			]),
 		).resolves.toBeUndefined();
 
 		await expect(
 			assertLinesAllocatable(manager, ShippingScopeEnum.DELIVERY, [
-				{ variant_id: 27, quantity: 2 },
+				{ variant_id: mockId(27), quantity: 2 },
 			]),
 		).rejects.toMatchObject({ statusCode: 409 });
 	});
@@ -229,21 +239,21 @@ describe('ShippingService - return allocation', () => {
 			const { manager } = fakeManager(orderLines, {
 				...pools,
 				delivered: [
-					{ variant_id: 27, quantity: '3' },
-					{ variant_id: 28, quantity: '1' },
+					{ variant_id: mockId(27), quantity: '3' },
+					{ variant_id: mockId(28), quantity: '1' },
 				],
 				returning: [
-					{ variant_id: 27, quantity: '1' },
-					{ variant_id: 28, quantity: '1' },
+					{ variant_id: mockId(27), quantity: '1' },
+					{ variant_id: mockId(28), quantity: '1' },
 				],
 			});
 
 			const returnable = await service.getReturnableByVariant(
-				118,
+				mockId(118),
 				manager,
 			);
 
-			expect([...returnable.entries()]).toEqual([[27, 2]]);
+			expect([...returnable.entries()]).toEqual([[mockId(27), 2]]);
 		});
 	});
 });

@@ -6,11 +6,12 @@ import {
 	Index,
 	JoinColumn,
 	ManyToOne,
-	PrimaryGeneratedColumn,
 	UpdateDateColumn,
 } from 'typeorm';
 import type UserEntity from '@/features/user/user.entity';
+import { EntityIdAbstract } from '@/shared/abstracts/entity-id.abstract';
 import type { StatusTransitions } from '@/shared/types/common.type';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * What a comment can hang from. `article` is the only one in use: a product is not a target, and
@@ -132,12 +133,9 @@ const ENTITY_TABLE_NAME = 'comment';
 	'CHK_comment_author',
 	`user_id IS NOT NULL OR (guest_name IS NOT NULL AND guest_email IS NOT NULL)`,
 )
-export default class CommentEntity {
+export default class CommentEntity extends EntityIdAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
-
-	@PrimaryGeneratedColumn({ type: 'int' })
-	id!: number;
 
 	@CreateDateColumn({ type: 'timestamp', nullable: false })
 	created_at!: Date;
@@ -154,10 +152,10 @@ export default class CommentEntity {
 	entity_type!: CommentEntityType;
 
 	@Column({
-		type: 'int',
+		type: 'uuid',
 		nullable: false,
 	})
-	entity_id!: number;
+	entity_id!: EntityId;
 
 	@Column({
 		type: 'enum',
@@ -196,19 +194,19 @@ export default class CommentEntity {
 	status!: CommentStatus;
 
 	@Column({
-		type: 'int',
+		type: 'uuid',
 		nullable: true,
 		comment: 'Parent comment ID',
 	})
 	@Index('IDX_comment_parent_id')
-	parent_id?: number | null;
+	parent_id?: EntityId | null;
 
 	// Author
 	@Column({
-		type: 'int',
+		type: 'uuid',
 		nullable: true,
 	})
-	user_id?: number | null;
+	user_id?: EntityId | null;
 
 	@Column({
 		type: 'varchar',
@@ -267,11 +265,11 @@ export default class CommentEntity {
 	moderated_at?: Date | null;
 
 	@Column({
-		type: 'int',
+		type: 'uuid',
 		nullable: true,
 		comment: 'Moderator user ID',
 	})
-	moderated_by?: number | null;
+	moderated_by?: EntityId | null;
 
 	@Column({
 		type: 'varchar',

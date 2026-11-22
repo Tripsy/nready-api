@@ -2,6 +2,7 @@ import { expect, jest } from '@jest/globals';
 import type { Repository } from 'typeorm';
 import type DiscountTargetEntity from '@/features/discount/discount-target.entity';
 import { DiscountTargetService } from '@/features/discount/discount-target.service';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 /**
  * One repository stands in for the whole table now that targets are polymorphic - the previous
@@ -39,15 +40,19 @@ describe('DiscountTargetService.replaceTargets', () => {
 		const { repository, asService } = createRepository();
 		const service = new DiscountTargetService(asService);
 
-		await service.replaceTargets(7, { client: [3] });
+		await service.replaceTargets(mockId(7), { client: [mockId(3)] });
 
 		expect(repository.delete).toHaveBeenCalledTimes(1);
 		expect(repository.delete).toHaveBeenCalledWith({
-			discount_id: 7,
+			discount_id: mockId(7),
 			target_type: 'client',
 		});
 		expect(repository.insert).toHaveBeenCalledWith([
-			{ discount_id: 7, target_type: 'client', entity_id: 3 },
+			{
+				discount_id: mockId(7),
+				target_type: 'client',
+				entity_id: mockId(3),
+			},
 		]);
 	});
 
@@ -55,7 +60,10 @@ describe('DiscountTargetService.replaceTargets', () => {
 		const { repository, asService } = createRepository();
 		const service = new DiscountTargetService(asService);
 
-		await service.replaceTargets(7, { category: [1], brand: [2] });
+		await service.replaceTargets(mockId(7), {
+			category: [mockId(1)],
+			brand: [mockId(2)],
+		});
 
 		// One delete per type in the payload, never a blanket delete by discount alone
 		expect(repository.delete).toHaveBeenCalledTimes(2);
@@ -70,10 +78,10 @@ describe('DiscountTargetService.replaceTargets', () => {
 		const { repository, asService } = createRepository();
 		const service = new DiscountTargetService(asService);
 
-		await service.replaceTargets(7, { client: [] });
+		await service.replaceTargets(mockId(7), { client: [] });
 
 		expect(repository.delete).toHaveBeenCalledWith({
-			discount_id: 7,
+			discount_id: mockId(7),
 			target_type: 'client',
 		});
 		expect(repository.insert).not.toHaveBeenCalled();
@@ -83,11 +91,21 @@ describe('DiscountTargetService.replaceTargets', () => {
 		const { repository, asService } = createRepository();
 		const service = new DiscountTargetService(asService);
 
-		await service.replaceTargets(7, { client: [3, 3, 9] });
+		await service.replaceTargets(mockId(7), {
+			client: [mockId(3), mockId(3), mockId(9)],
+		});
 
 		expect(repository.insert).toHaveBeenCalledWith([
-			{ discount_id: 7, target_type: 'client', entity_id: 3 },
-			{ discount_id: 7, target_type: 'client', entity_id: 9 },
+			{
+				discount_id: mockId(7),
+				target_type: 'client',
+				entity_id: mockId(3),
+			},
+			{
+				discount_id: mockId(7),
+				target_type: 'client',
+				entity_id: mockId(9),
+			},
 		]);
 	});
 });
@@ -95,17 +113,17 @@ describe('DiscountTargetService.replaceTargets', () => {
 describe('DiscountTargetService.listTargets', () => {
 	it('groups rows by target type', async () => {
 		const { asService } = createRepository([
-			{ target_type: 'client', entity_id: 3 },
-			{ target_type: 'client', entity_id: 9 },
-			{ target_type: 'category', entity_id: 12 },
+			{ target_type: 'client', entity_id: mockId(3) },
+			{ target_type: 'client', entity_id: mockId(9) },
+			{ target_type: 'category', entity_id: mockId(12) },
 		]);
 
 		const result = await new DiscountTargetService(asService).listTargets(
-			7,
+			mockId(7),
 		);
 
-		expect(result.client).toEqual([3, 9]);
-		expect(result.category).toEqual([12]);
+		expect(result.client).toEqual([mockId(3), mockId(9)]);
+		expect(result.category).toEqual([mockId(12)]);
 		expect(result).not.toHaveProperty('brand');
 	});
 });

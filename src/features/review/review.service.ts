@@ -27,6 +27,7 @@ import {
 	cleanEntityCache,
 	cleanEntityCacheBy,
 } from '@/shared/abstracts/service.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 /**
@@ -112,8 +113,8 @@ export class ReviewService {
 	 * a different product deserve. `findById` raises the product's own not-found error.
 	 */
 	private async assertTarget(
-		productId: number,
-		variantId?: number | null,
+		productId: EntityId,
+		variantId?: EntityId | null,
 	): Promise<void> {
 		await productService.findById(productId, false);
 
@@ -145,7 +146,7 @@ export class ReviewService {
 	 */
 	public async create(
 		data: ValidatorOutput<ReviewValidator, 'create'>,
-		userId: number,
+		userId: EntityId,
 	): Promise<ReviewEntity> {
 		await this.assertTarget(data.product_id, data.variant_id);
 
@@ -215,7 +216,7 @@ export class ReviewService {
 	 */
 	public async updateOwn(
 		data: ValidatorOutput<ReviewValidator, 'publicUpdate'>,
-		userId: number,
+		userId: EntityId,
 	): Promise<ReviewEntity> {
 		const entry = await this.repository
 			.createQuery()
@@ -257,7 +258,7 @@ export class ReviewService {
 	 */
 	public async deleteOwn(
 		data: ValidatorOutput<ReviewValidator, 'publicDelete'>,
-		userId: number,
+		userId: EntityId,
 	): Promise<void> {
 		const entry = await this.repository
 			.createQuery()
@@ -309,7 +310,7 @@ export class ReviewService {
 	public async updateStatus(
 		entry: ReviewEntity,
 		newStatus: ReviewStatus,
-		moderatedBy: number | null,
+		moderatedBy: EntityId | null,
 		moderationReason?: string,
 	): Promise<ReviewEntity> {
 		assertValidStatusTransition(
@@ -333,7 +334,7 @@ export class ReviewService {
 	/**
 	 * @description Used in `delete` method from the dashboard controller
 	 */
-	public async delete(id: number): Promise<void> {
+	public async delete(id: EntityId): Promise<void> {
 		const entry = await this.findById(id, false);
 
 		await this.repository.createQuery().filterById(id).delete();
@@ -349,7 +350,7 @@ export class ReviewService {
 	 * then collides, and without this check the collision surfaces from the database as a masked
 	 * 500 instead of the 409 `create` already answers with.
 	 */
-	public async restore(id: number): Promise<void> {
+	public async restore(id: EntityId): Promise<void> {
 		const entry = await this.findById(id, true);
 
 		const existing = await this.repository
@@ -368,7 +369,7 @@ export class ReviewService {
 		await this.cleanCaches(entry);
 	}
 
-	public findById(id: number, withDeleted: boolean): Promise<ReviewEntity> {
+	public findById(id: EntityId, withDeleted: boolean): Promise<ReviewEntity> {
 		return this.repository
 			.createQuery()
 			.filterById(id)
@@ -380,7 +381,7 @@ export class ReviewService {
 	 * @description Used in `read` method from the dashboard controller
 	 */
 	public getEntryData(data: {
-		id: number;
+		id: EntityId;
 		withDeleted: boolean;
 	}): Promise<ReviewEntity> {
 		return (
@@ -543,8 +544,8 @@ export class ReviewService {
 	 * the edit.
 	 */
 	public getOwnReview(
-		productId: number,
-		userId: number,
+		productId: EntityId,
+		userId: EntityId,
 	): Promise<ReviewEntity | null> {
 		return this.repository
 			.createQuery()
@@ -566,7 +567,7 @@ export class ReviewService {
 	 * `REVIEW_RATING_DIMENSIONS`, so the SQL cannot name a key the entity does not allow; nothing
 	 * from the request reaches it.
 	 */
-	public async getSummary(productId: number): Promise<ReviewSummary> {
+	public async getSummary(productId: EntityId): Promise<ReviewSummary> {
 		const totalsQuery = this.repository
 			.createQuery()
 			.filterBy('product_id', productId)

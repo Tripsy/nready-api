@@ -56,7 +56,7 @@ export const docs: Record<
 		request: {
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -119,14 +119,14 @@ export const docs: Record<
 						required: false,
 						values: Object.values(ComplaintEntityTypeEnum),
 					},
-					entity_id: { type: 'number', required: false },
+					entity_id: { type: 'string', required: false },
 					reason: {
 						type: 'enum',
 						required: false,
 						values: Object.values(ComplaintReasonEnum),
 					},
 					user_id: {
-						type: 'number',
+						type: 'string',
 						required: false,
 						condition: 'the reporter',
 					},
@@ -174,7 +174,7 @@ export const docs: Record<
 			notes: `One endpoint per direction rather than a boolean in the body - a required boolean validates as "must be true", so the reopening half could never pass. ${resolutionNote}`,
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -194,7 +194,7 @@ export const docs: Record<
 			notes: resolutionNote,
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -213,7 +213,7 @@ export const docs: Record<
 			notes: "Soft - a dismissed complaint is still the record a disputed decision is answered from. It also releases the reporter's slot on that target, so the same reader may file again",
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -232,7 +232,7 @@ export const docs: Record<
 			notes: 'Brings it back into the queue. It can collide with a complaint the same reporter filed on the same target in the meantime, since the uniqueness rule counts only live rows',
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},

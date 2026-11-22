@@ -13,16 +13,18 @@ import WarehouseMovementEntity, {
 } from '@/features/warehouse-movement/warehouse-movement.entity';
 import type { WarehouseMovementQuery } from '@/features/warehouse-movement/warehouse-movement.repository';
 import { WarehouseMovementService } from '@/features/warehouse-movement/warehouse-movement.service';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import { createMockRepository } from '@/tests/jest-service.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
-const WAREHOUSE_ID = 2;
-const DELIVERY_LINE_ID = 800;
-const RETURN_LINE_ID = 900;
+const WAREHOUSE_ID = mockId(2);
+const DELIVERY_LINE_ID = mockId(800);
+const RETURN_LINE_ID = mockId(900);
 
 type Sale = {
-	id: number;
-	grn_item_id: number;
-	variant_id: number;
+	id: EntityId;
+	grn_item_id: EntityId;
+	variant_id: EntityId;
 	qty: number;
 	unit_cost_base: number;
 };
@@ -31,9 +33,9 @@ type Ledger = {
 	/** The order's `sale` rows at the destination, newest first - as the query orders them. */
 	sales: Sale[];
 	/** Reversals of those sales: undelivered parcels put back whole. */
-	undelivered?: { reversal_of_id: number; qty: number }[];
+	undelivered?: { reversal_of_id: EntityId; qty: number }[];
 	/** `sale_return` rows earlier returns of the order already posted. */
-	returned?: { grn_item_id: number; qty: number }[];
+	returned?: { grn_item_id: EntityId; qty: number }[];
 };
 
 /**
@@ -42,8 +44,8 @@ type Ledger = {
  */
 function fakeManager(
 	lines: {
-		id: number;
-		variant_id: number;
+		id: EntityId;
+		variant_id: EntityId;
 		quantity: string;
 		condition: ShippingLineCondition | null;
 	}[],
@@ -99,7 +101,9 @@ function fakeManager(
 
 			if (target === ProductVariantEntity) {
 				return {
-					find: jest.fn(async () => tracked.map((id) => ({ id }))),
+					find: jest.fn(async () =>
+						tracked.map((id) => ({ id: mockId(id) })),
+					),
 				};
 			}
 
@@ -121,8 +125,8 @@ function fakeManager(
 }
 
 const move: ShippingStockMove = {
-	shipping_id: 64,
-	order_id: 118,
+	shipping_id: mockId(64),
+	order_id: mockId(118),
 	scope: ShippingScopeEnum.RETURN,
 	pickup_warehouse_id: null,
 	destination_warehouse_id: WAREHOUSE_ID,
@@ -130,8 +134,20 @@ const move: ShippingStockMove = {
 
 // Two lots sold from for the order, the newer one first: 2 from lot 11, 2 from lot 10
 const sales: Sale[] = [
-	{ id: 71, grn_item_id: 11, variant_id: 27, qty: -2, unit_cost_base: 60 },
-	{ id: 70, grn_item_id: 10, variant_id: 27, qty: -2, unit_cost_base: 50 },
+	{
+		id: mockId(71),
+		grn_item_id: mockId(11),
+		variant_id: mockId(27),
+		qty: -2,
+		unit_cost_base: 60,
+	},
+	{
+		id: mockId(70),
+		grn_item_id: mockId(10),
+		variant_id: mockId(27),
+		qty: -2,
+		unit_cost_base: 50,
+	},
 ];
 
 const returnLine = (
@@ -139,7 +155,7 @@ const returnLine = (
 	condition: ShippingLineCondition | null,
 ) => ({
 	id: RETURN_LINE_ID,
-	variant_id: 27,
+	variant_id: mockId(27),
 	quantity: quantity,
 	condition: condition,
 });
@@ -172,7 +188,7 @@ describe('WarehouseMovementService - receiveReturn', () => {
 		expect(saved).toEqual([
 			expect.objectContaining({
 				movement_type: WarehouseMovementTypeEnum.SALE_RETURN,
-				grn_item_id: 11,
+				grn_item_id: mockId(11),
 				qty: 2,
 				unit_cost_base: 60,
 				warehouse_id: WAREHOUSE_ID,
@@ -181,14 +197,14 @@ describe('WarehouseMovementService - receiveReturn', () => {
 			}),
 			expect.objectContaining({
 				movement_type: WarehouseMovementTypeEnum.SALE_RETURN,
-				grn_item_id: 10,
+				grn_item_id: mockId(10),
 				qty: 1,
 				unit_cost_base: 50,
 			}),
 		]);
 		expect(restoreLots).toHaveBeenCalledWith(manager, [
-			{ grn_item_id: 11, qty: 2 },
-			{ grn_item_id: 10, qty: 1 },
+			{ grn_item_id: mockId(11), qty: 2 },
+			{ grn_item_id: mockId(10), qty: 1 },
 		]);
 	});
 
@@ -203,12 +219,12 @@ describe('WarehouseMovementService - receiveReturn', () => {
 		expect(saved).toEqual([
 			expect.objectContaining({
 				movement_type: WarehouseMovementTypeEnum.SALE_RETURN,
-				grn_item_id: 11,
+				grn_item_id: mockId(11),
 				qty: 1,
 			}),
 			expect.objectContaining({
 				movement_type: WarehouseMovementTypeEnum.WRITE_OFF,
-				grn_item_id: 11,
+				grn_item_id: mockId(11),
 				qty: -1,
 			}),
 		]);
@@ -219,8 +235,8 @@ describe('WarehouseMovementService - receiveReturn', () => {
 	it('leaves out what undelivered parcels and earlier returns already put back', async () => {
 		const ledger: Ledger = {
 			sales,
-			undelivered: [{ reversal_of_id: 71, qty: 1 }],
-			returned: [{ grn_item_id: 10, qty: 1 }],
+			undelivered: [{ reversal_of_id: mockId(71), qty: 1 }],
+			returned: [{ grn_item_id: mockId(10), qty: 1 }],
 		};
 
 		const { manager: fits, saved } = fakeManager(
@@ -231,8 +247,8 @@ describe('WarehouseMovementService - receiveReturn', () => {
 		await service.receiveReturn(fits, move);
 
 		expect(saved.map((row) => [row.grn_item_id, row.qty])).toEqual([
-			[11, 1],
-			[10, 1],
+			[mockId(11), 1],
+			[mockId(10), 1],
 		]);
 
 		const { manager: over } = fakeManager(

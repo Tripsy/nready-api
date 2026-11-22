@@ -1,4 +1,5 @@
 import { createKeyedProvider, createNotification } from '@/helpers/hook.helper';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * What `invoice` announces once its own writes have committed, and what it asks of the features
@@ -67,7 +68,7 @@ import { createKeyedProvider, createNotification } from '@/helpers/hook.helper';
  * whether or not anything changed for it.
  */
 export type OrderStateChangedPayload = {
-	order_ids: readonly number[];
+	order_ids: readonly EntityId[];
 };
 
 /** One line a source is billed with, before `invoice` computes its net, VAT and total. */
@@ -81,8 +82,8 @@ export type BillableLine = {
 
 /** A row an order carries that bills on a document of its own. */
 export type BillableSource = {
-	id: number;
-	order_id: number;
+	id: EntityId;
+	order_id: EntityId;
 	lines: readonly BillableLine[];
 };
 
@@ -103,10 +104,10 @@ export type BillableSourceProvider = {
 	 * The rows of an order billed automatically when the order is - each raised on its own document
 	 * unless one already bills it. Empty for a type raised only by hand.
 	 */
-	listBillable(orderId: number): Promise<BillableSource[]>;
+	listBillable(orderId: EntityId): Promise<BillableSource[]>;
 
 	/** One row, or null when it does not exist or cannot be billed at all. */
-	findBillable(sourceId: number): Promise<BillableSource | null>;
+	findBillable(sourceId: EntityId): Promise<BillableSource | null>;
 
 	/**
 	 * The edit ceiling of the lines billing these rows, by row id. Read for documents already
@@ -114,8 +115,8 @@ export type BillableSourceProvider = {
 	 * not capped.
 	 */
 	getLineCaps(
-		sourceIds: readonly number[],
-	): Promise<Map<number, BillableLineCap>>;
+		sourceIds: readonly EntityId[],
+	): Promise<Map<EntityId, BillableLineCap>>;
 };
 
 const orderStateChanged = createNotification<OrderStateChangedPayload>(

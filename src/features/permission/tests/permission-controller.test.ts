@@ -19,6 +19,7 @@ import {
 	withDebugResponse,
 } from '@/tests/jest-controller.setup';
 import { authorizedSpy, notAuthorizedSpy } from '@/tests/mocks/policies.mock';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 let app: Express;
 
@@ -78,7 +79,7 @@ describe(`${controller} - create`, () => {
 });
 
 describe(`${controller} - update`, () => {
-	const route = `${basePath}/1`;
+	const route = `${basePath}/${mockId(1)}`;
 
 	it('should fail if not authenticated', async () => {
 		const response = await request(app).put(route).send();

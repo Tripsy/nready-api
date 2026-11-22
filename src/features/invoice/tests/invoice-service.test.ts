@@ -37,6 +37,7 @@ import type OrderEntity from '@/features/order/order.entity';
 import { OrderStatusEnum } from '@/features/order/order.entity';
 import { orderService } from '@/features/order/order.service';
 import { roundMoney } from '@/helpers/shop.helper';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import {
 	createMockRepository,
 	setupTransactionMock,
@@ -44,6 +45,7 @@ import {
 	testServiceFindById,
 	testServiceUpdate,
 } from '@/tests/jest-service.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 /** A stand-in for `sources/shipping.source.ts`, billing the given movements. */
 function registerShippingProvider(
@@ -51,9 +53,9 @@ function registerShippingProvider(
 ): BillableSourceProvider {
 	const provider: BillableSourceProvider = {
 		billedOnce: true,
-		listBillable: async (orderId: number) =>
+		listBillable: async (orderId: EntityId) =>
 			sources.filter((source) => source.order_id === orderId),
-		findBillable: async (sourceId: number) =>
+		findBillable: async (sourceId: EntityId) =>
 			sources.find((source) => source.id === sourceId) ?? null,
 		getLineCaps: async () => new Map(),
 	};
@@ -163,7 +165,7 @@ describe('InvoiceService', () => {
 			const totals = invoiceService.computeTotals([
 				getInvoiceLineEntityMock(),
 				getInvoiceLineEntityMock({
-					id: 2,
+					id: mockId(2),
 					discount_reduction: 0,
 					line_net: 100,
 					line_vat: 21,
@@ -204,7 +206,7 @@ describe('InvoiceService', () => {
 					line_total: 121,
 				}),
 				getInvoiceLineEntityMock({
-					id: 2,
+					id: mockId(2),
 					vat_rate: 11,
 					discount_reduction: 0,
 					line_net: 100,
@@ -212,10 +214,10 @@ describe('InvoiceService', () => {
 					line_total: 111,
 				}),
 				getInvoiceLineEntityMock({
-					id: 3,
+					id: mockId(3),
 					kind: InvoiceLineKindEnum.SHIPPING,
 					order_line_id: null,
-					shipping_id: 1,
+					shipping_id: mockId(1),
 					discount_reduction: 0,
 					line_net: 20,
 					line_vat: 4.2,
@@ -267,15 +269,15 @@ describe('InvoiceService', () => {
 		// The movement goes on the header too, so the document is found by it without its lines
 		it('names the movement on a shipping document', async () => {
 			jest.spyOn(orderService, 'findById').mockResolvedValue({
-				id: 1,
-				client_id: 1,
+				id: mockId(1),
+				client_id: mockId(1),
 				status: OrderStatusEnum.PENDING,
 			} as unknown as OrderEntity);
 			jest.spyOn(orderService, 'getLines').mockResolvedValue([]);
 			registerShippingProvider([
 				{
-					id: 7,
-					order_id: 1,
+					id: mockId(7),
+					order_id: mockId(1),
 					lines: [
 						{
 							label: 'Delivery',
@@ -308,19 +310,19 @@ describe('InvoiceService', () => {
 			await invoiceService.create({
 				...invoiceOutputPayloads.create,
 				scope: InvoiceScopeEnum.SHIPPING,
-				shipping_id: 7,
+				shipping_id: mockId(7),
 			});
 
 			const call = persist.mock.calls[0]?.[0];
 
 			expect(call?.entry).toMatchObject({
 				scope: InvoiceScopeEnum.SHIPPING,
-				shipping_id: 7,
+				shipping_id: mockId(7),
 			});
 			expect(call?.lines).toHaveLength(1);
 			expect(call?.lines[0]).toMatchObject({
 				kind: InvoiceLineKindEnum.SHIPPING,
-				shipping_id: 7,
+				shipping_id: mockId(7),
 			});
 		});
 
@@ -328,7 +330,7 @@ describe('InvoiceService', () => {
 		it('refuses a canceled order', async () => {
 			// `order` ships no mock factory, and the guard reads one column
 			jest.spyOn(orderService, 'findById').mockResolvedValue({
-				id: 1,
+				id: mockId(1),
 				status: OrderStatusEnum.CANCELED,
 			} as unknown as OrderEntity);
 
@@ -340,16 +342,16 @@ describe('InvoiceService', () => {
 
 	describe('buildOrderLines', () => {
 		const order = {
-			id: 1,
-			client_id: 1,
+			id: mockId(1),
+			client_id: mockId(1),
 			status: OrderStatusEnum.PENDING,
 		} as unknown as OrderEntity;
 
 		const orderLines = [
 			{
-				id: 10,
-				product_id: 1,
-				variant_id: 100,
+				id: mockId(10),
+				product_id: mockId(1),
+				variant_id: mockId(100),
 				label: 'Chair',
 				quantity: 10,
 				price: 50,
@@ -358,9 +360,9 @@ describe('InvoiceService', () => {
 				discount_reduction: 20,
 			},
 			{
-				id: 11,
-				product_id: 2,
-				variant_id: 200,
+				id: mockId(11),
+				product_id: mockId(2),
+				variant_id: mockId(200),
 				label: 'Table',
 				quantity: 1,
 				price: 300,
@@ -398,8 +400,8 @@ describe('InvoiceService', () => {
 		it('bills only what earlier documents left', async () => {
 			jest.spyOn(invoiceService, 'getBilledQuantities').mockResolvedValue(
 				new Map([
-					[10, 3],
-					[11, 1],
+					[mockId(10), 3],
+					[mockId(11), 1],
 				]),
 			);
 
@@ -407,7 +409,7 @@ describe('InvoiceService', () => {
 
 			expect(lines).toHaveLength(1);
 			expect(lines[0]).toMatchObject({
-				order_line_id: 10,
+				order_line_id: mockId(10),
 				quantity: 7,
 			});
 		});
@@ -419,7 +421,7 @@ describe('InvoiceService', () => {
 			);
 
 			const lines = await invoiceService.buildOrderLines(order, [
-				{ order_line_id: 10, quantity: 3 },
+				{ order_line_id: mockId(10), quantity: 3 },
 			]);
 
 			expect(lines).toHaveLength(1);
@@ -432,12 +434,12 @@ describe('InvoiceService', () => {
 
 		it('refuses more than is left on a line', async () => {
 			jest.spyOn(invoiceService, 'getBilledQuantities').mockResolvedValue(
-				new Map([[10, 8]]),
+				new Map([[mockId(10), 8]]),
 			);
 
 			await expect(
 				invoiceService.buildOrderLines(order, [
-					{ order_line_id: 10, quantity: 3 },
+					{ order_line_id: mockId(10), quantity: 3 },
 				]),
 			).rejects.toThrow('invoice.error.order_line_over_billed');
 		});
@@ -449,7 +451,7 @@ describe('InvoiceService', () => {
 
 			await expect(
 				invoiceService.buildOrderLines(order, [
-					{ order_line_id: 99, quantity: 1 },
+					{ order_line_id: mockId(99), quantity: 1 },
 				]),
 			).rejects.toThrow('invoice.error.invalid_order_line');
 		});
@@ -457,8 +459,8 @@ describe('InvoiceService', () => {
 
 	describe('raiseForOrder', () => {
 		const order = {
-			id: 1,
-			client_id: 1,
+			id: mockId(1),
+			client_id: mockId(1),
 			status: OrderStatusEnum.CONFIRMED,
 		} as unknown as OrderEntity;
 
@@ -486,7 +488,7 @@ describe('InvoiceService', () => {
 		// are one call rather than leaving the document half-raised
 		it('issues the order document it creates for the remainder', async () => {
 			jest.spyOn(invoiceService, 'buildOrderLines').mockResolvedValue([
-				{ order_line_id: 10, quantity: 1 },
+				{ order_line_id: mockId(10), quantity: 1 },
 			]);
 
 			const draft = getInvoiceEntityMock({
@@ -516,8 +518,8 @@ describe('InvoiceService', () => {
 
 	describe('raiseForSource', () => {
 		const movement: BillableSource = {
-			id: 5,
-			order_id: 1,
+			id: mockId(5),
+			order_id: mockId(1),
 			lines: [
 				{
 					label: 'Delivery',
@@ -532,7 +534,7 @@ describe('InvoiceService', () => {
 		it('raises nothing for a movement a live document already bills', async () => {
 			registerShippingProvider([movement]);
 			jest.spyOn(invoiceService, 'getBilledSourceIds').mockResolvedValue(
-				new Set([5]),
+				new Set([mockId(5)]),
 			);
 
 			const create = jest.spyOn(invoiceService, 'create');
@@ -540,7 +542,7 @@ describe('InvoiceService', () => {
 			await expect(
 				invoiceService.raiseForSource(
 					InvoiceSourceTypeEnum.SHIPPING,
-					5,
+					mockId(5),
 				),
 			).resolves.toBeNull();
 
@@ -554,7 +556,7 @@ describe('InvoiceService', () => {
 			await expect(
 				invoiceService.raiseForSource(
 					InvoiceSourceTypeEnum.SHIPPING,
-					5,
+					mockId(5),
 				),
 			).resolves.toBeNull();
 		});
@@ -565,7 +567,7 @@ describe('InvoiceService', () => {
 			await expect(
 				invoiceService.raiseForSource(
 					InvoiceSourceTypeEnum.SHIPPING,
-					5,
+					mockId(5),
 				),
 			).resolves.toBeNull();
 
@@ -589,14 +591,14 @@ describe('InvoiceService', () => {
 
 			await invoiceService.raiseForSource(
 				InvoiceSourceTypeEnum.SHIPPING,
-				5,
+				mockId(5),
 			);
 
 			expect(create).toHaveBeenCalledWith(
 				expect.objectContaining({
-					order_id: 1,
+					order_id: mockId(1),
 					scope: InvoiceScopeEnum.SHIPPING,
-					shipping_id: 5,
+					shipping_id: mockId(5),
 				}),
 			);
 		});
@@ -605,34 +607,34 @@ describe('InvoiceService', () => {
 	describe('getUnbilledSources', () => {
 		it('lists the movements of an order no live document bills', async () => {
 			registerShippingProvider([
-				{ id: 5, order_id: 1, lines: [] },
-				{ id: 6, order_id: 1, lines: [] },
-				{ id: 7, order_id: 2, lines: [] },
+				{ id: mockId(5), order_id: mockId(1), lines: [] },
+				{ id: mockId(6), order_id: mockId(1), lines: [] },
+				{ id: mockId(7), order_id: mockId(2), lines: [] },
 			]);
 			jest.spyOn(invoiceService, 'getBilledSourceIds').mockResolvedValue(
-				new Set([5]),
+				new Set([mockId(5)]),
 			);
 
-			const unbilled = await invoiceService.getUnbilledSources(1);
+			const unbilled = await invoiceService.getUnbilledSources(mockId(1));
 
 			expect(
 				unbilled.map((entry) => [entry.source_type, entry.source.id]),
-			).toEqual([[InvoiceSourceTypeEnum.SHIPPING, 6]]);
+			).toEqual([[InvoiceSourceTypeEnum.SHIPPING, mockId(6)]]);
 		});
 	});
 
 	describe('createReversal', () => {
 		const parent = getInvoiceEntityMock({
-			id: 1,
+			id: mockId(1),
 			scope: InvoiceScopeEnum.SHIPPING,
-			shipping_id: 7,
+			shipping_id: mockId(7),
 			status: InvoiceStatusEnum.ISSUED,
 		});
 
 		const parentLines = [
 			getInvoiceLineEntityMock({
-				id: 10,
-				invoice_id: 1,
+				id: mockId(10),
+				invoice_id: mockId(1),
 				quantity: 4,
 				unit_price: 50,
 				vat_rate: 21,
@@ -642,8 +644,8 @@ describe('InvoiceService', () => {
 				line_total: 217.8,
 			}),
 			getInvoiceLineEntityMock({
-				id: 11,
-				invoice_id: 1,
+				id: mockId(11),
+				invoice_id: mockId(1),
 				quantity: 1,
 				unit_price: 30,
 				vat_rate: 21,
@@ -679,14 +681,14 @@ describe('InvoiceService', () => {
 		});
 
 		const reversedSoFar = (
-			entries: [number, { quantity: number; net: number }][],
+			entries: [string, { quantity: number; net: number }][],
 		) =>
 			jest
 				.spyOn(invoiceService, 'getReversedPerLine')
 				.mockResolvedValue(new Map(entries));
 
 		const pick = (
-			invoice_line_id: number,
+			invoice_line_id: EntityId,
 			by: { quantity?: number; amount?: number },
 		) => ({
 			invoice_line_id: invoice_line_id,
@@ -699,9 +701,9 @@ describe('InvoiceService', () => {
 				invoiceService.createReversal(
 					getInvoiceEntityMock({
 						is_reversal: true,
-						parent_invoice_id: 9,
+						parent_invoice_id: mockId(9),
 					}),
-					{ id: 1, lines: undefined, notes: undefined },
+					{ id: mockId(1), lines: undefined, notes: undefined },
 				),
 			).rejects.toThrow('invoice.error.reversal_of_reversal');
 		});
@@ -710,7 +712,7 @@ describe('InvoiceService', () => {
 			await expect(
 				invoiceService.createReversal(
 					getInvoiceEntityMock({ status: InvoiceStatusEnum.DRAFT }),
-					{ id: 1, lines: undefined, notes: undefined },
+					{ id: mockId(1), lines: undefined, notes: undefined },
 				),
 			).rejects.toThrow('invoice.error.reversal_parent_status');
 		});
@@ -718,7 +720,7 @@ describe('InvoiceService', () => {
 		// Same type, same movement and same figures as the original - a reversed shipping
 		// document is still one
 		it('takes back everything not reversed yet, as the same type', async () => {
-			reversedSoFar([[11, { quantity: 1, net: 30 }]]);
+			reversedSoFar([[mockId(11), { quantity: 1, net: 30 }]]);
 
 			const persist = persisted();
 
@@ -732,7 +734,7 @@ describe('InvoiceService', () => {
 
 			expect(data?.entry).toMatchObject({
 				scope: InvoiceScopeEnum.SHIPPING,
-				shipping_id: 7,
+				shipping_id: mockId(7),
 				is_reversal: true,
 				parent_invoice_id: parent.id,
 				// The parties the original went out to, so it can be issued with no order behind it
@@ -741,7 +743,7 @@ describe('InvoiceService', () => {
 			});
 			expect(data?.lines).toHaveLength(1);
 			expect(data?.lines[0]).toMatchObject({
-				parent_line_id: 10,
+				parent_line_id: mockId(10),
 				is_value_reversal: false,
 				quantity: 4,
 				line_total: 217.8,
@@ -756,12 +758,12 @@ describe('InvoiceService', () => {
 
 			await invoiceService.createReversal(parent, {
 				id: parent.id,
-				lines: [pick(10, { quantity: 1 })],
+				lines: [pick(mockId(10), { quantity: 1 })],
 				notes: undefined,
 			});
 
 			expect(persist.mock.calls[0]?.[0].lines[0]).toMatchObject({
-				parent_line_id: 10,
+				parent_line_id: mockId(10),
 				is_value_reversal: false,
 				order_line_id: parentLines[0]?.order_line_id,
 				quantity: 1,
@@ -778,12 +780,12 @@ describe('InvoiceService', () => {
 
 			await invoiceService.createReversal(parent, {
 				id: parent.id,
-				lines: [pick(10, { amount: 40 })],
+				lines: [pick(mockId(10), { amount: 40 })],
 				notes: undefined,
 			});
 
 			expect(persist.mock.calls[0]?.[0].lines[0]).toMatchObject({
-				parent_line_id: 10,
+				parent_line_id: mockId(10),
 				is_value_reversal: true,
 				order_line_id: null,
 				shipping_id: null,
@@ -796,12 +798,12 @@ describe('InvoiceService', () => {
 		});
 
 		it('refuses more value than earlier reversals left on a line', async () => {
-			reversedSoFar([[10, { quantity: 0, net: 150 }]]);
+			reversedSoFar([[mockId(10), { quantity: 0, net: 150 }]]);
 
 			await expect(
 				invoiceService.createReversal(parent, {
 					id: parent.id,
-					lines: [pick(10, { amount: 40 })],
+					lines: [pick(mockId(10), { amount: 40 })],
 					notes: undefined,
 				}),
 			).rejects.toThrow('invoice.error.reversal_value_over');
@@ -809,12 +811,12 @@ describe('InvoiceService', () => {
 
 		// Corrected by value first, the line cannot also hand back its units at full price
 		it('refuses a quantity whose value no longer fits', async () => {
-			reversedSoFar([[10, { quantity: 0, net: 100 }]]);
+			reversedSoFar([[mockId(10), { quantity: 0, net: 100 }]]);
 
 			await expect(
 				invoiceService.createReversal(parent, {
 					id: parent.id,
-					lines: [pick(10, { quantity: 4 })],
+					lines: [pick(mockId(10), { quantity: 4 })],
 					notes: undefined,
 				}),
 			).rejects.toThrow('invoice.error.reversal_value_over');
@@ -823,7 +825,7 @@ describe('InvoiceService', () => {
 		// By quantity only, like the dashboard form: a line whose units no longer fit after a value
 		// correction is left out rather than turned into a value line
 		it('defaults to quantity and leaves out a line whose units no longer fit', async () => {
-			reversedSoFar([[10, { quantity: 0, net: 100 }]]);
+			reversedSoFar([[mockId(10), { quantity: 0, net: 100 }]]);
 
 			const persist = persisted();
 
@@ -835,7 +837,7 @@ describe('InvoiceService', () => {
 
 			expect(persist.mock.calls[0]?.[0].lines).toHaveLength(1);
 			expect(persist.mock.calls[0]?.[0].lines[0]).toMatchObject({
-				parent_line_id: 11,
+				parent_line_id: mockId(11),
 				is_value_reversal: false,
 				quantity: 1,
 			});
@@ -843,8 +845,8 @@ describe('InvoiceService', () => {
 
 		it('refuses a default reversal when no line has units that still fit', async () => {
 			reversedSoFar([
-				[10, { quantity: 0, net: 100 }],
-				[11, { quantity: 1, net: 30 }],
+				[mockId(10), { quantity: 0, net: 100 }],
+				[mockId(11), { quantity: 1, net: 30 }],
 			]);
 
 			await expect(
@@ -857,12 +859,12 @@ describe('InvoiceService', () => {
 		});
 
 		it('refuses more quantity than earlier reversals left on a line', async () => {
-			reversedSoFar([[10, { quantity: 3, net: 135 }]]);
+			reversedSoFar([[mockId(10), { quantity: 3, net: 135 }]]);
 
 			await expect(
 				invoiceService.createReversal(parent, {
 					id: parent.id,
-					lines: [pick(10, { quantity: 2 })],
+					lines: [pick(mockId(10), { quantity: 2 })],
 					notes: undefined,
 				}),
 			).rejects.toThrow('invoice.error.reversal_line_over');
@@ -874,7 +876,7 @@ describe('InvoiceService', () => {
 			await expect(
 				invoiceService.createReversal(parent, {
 					id: parent.id,
-					lines: [pick(99, { quantity: 1 })],
+					lines: [pick(mockId(99), { quantity: 1 })],
 					notes: undefined,
 				}),
 			).rejects.toThrow('invoice.error.invalid_invoice_line');
@@ -882,8 +884,8 @@ describe('InvoiceService', () => {
 
 		it('refuses when everything has been reversed already', async () => {
 			reversedSoFar([
-				[10, { quantity: 4, net: 180 }],
-				[11, { quantity: 1, net: 30 }],
+				[mockId(10), { quantity: 4, net: 180 }],
+				[mockId(11), { quantity: 1, net: 30 }],
 			]);
 
 			await expect(
@@ -915,7 +917,7 @@ describe('InvoiceService', () => {
 		// The lines and the parties are written through `update`, like on any draft
 		it('raises an empty custom draft with no order', async () => {
 			jest.spyOn(clientService, 'findById').mockResolvedValue({
-				id: 5,
+				id: mockId(5),
 			} as never);
 			jest.spyOn(
 				clientAddressService,
@@ -924,12 +926,14 @@ describe('InvoiceService', () => {
 
 			const persist = persisted();
 
-			await invoiceService.createCustom({ client_id: 5 } as never);
+			await invoiceService.createCustom({
+				client_id: mockId(5),
+			} as never);
 
 			const call = persist.mock.calls[0]?.[0];
 
 			expect(call?.entry).toMatchObject({
-				client_id: 5,
+				client_id: mockId(5),
 				order_id: null,
 				subscription_id: null,
 				scope: InvoiceScopeEnum.CUSTOM,
@@ -942,7 +946,7 @@ describe('InvoiceService', () => {
 		// There is no order to resolve the buyer from at issue time, so it is frozen now
 		it('freezes the buyer from the client billing address when there is one', async () => {
 			jest.spyOn(clientService, 'findById').mockResolvedValue({
-				id: 5,
+				id: mockId(5),
 				client_type: 'company',
 				company_name: 'Acme SRL',
 			} as never);
@@ -959,7 +963,9 @@ describe('InvoiceService', () => {
 
 			const persist = persisted();
 
-			await invoiceService.createCustom({ client_id: 5 } as never);
+			await invoiceService.createCustom({
+				client_id: mockId(5),
+			} as never);
 
 			expect(
 				persist.mock.calls[0]?.[0].entry.billing_details,
@@ -979,16 +985,16 @@ describe('InvoiceService', () => {
 			) => Promise<number[]>;
 			getRefundedForParent: (
 				manager: EntityManager,
-				parentId: number,
+				parentId: EntityId,
 			) => Promise<number>;
 		};
 
 		const privateApi = invoiceService as unknown as RefundApi;
 
 		const reversal = getInvoiceEntityMock({
-			id: 50,
+			id: mockId(50),
 			is_reversal: true,
-			parent_invoice_id: 40,
+			parent_invoice_id: mockId(40),
 			status: InvoiceStatusEnum.ISSUED,
 			ref_code: 'INV',
 			ref_number: 21,
@@ -996,14 +1002,14 @@ describe('InvoiceService', () => {
 		});
 
 		const parent = getInvoiceEntityMock({
-			id: 40,
+			id: mockId(40),
 			status: InvoiceStatusEnum.ISSUED,
 			total_gross: 1210,
 		});
 
 		// A completed payment of 1210 gross: 1000 net at 21%, scaled to four decimals
 		const movement = {
-			id: 9,
+			id: mockId(9),
 			direction: CashFlowDirectionEnum.IN,
 			method: 'bank_transfer',
 			currency: 'RON',
@@ -1074,7 +1080,10 @@ describe('InvoiceService', () => {
 				.spyOn(cashFlowService, 'createWithin')
 				.mockImplementation(
 					async (_manager, row) =>
-						({ id: 77, ...row }) as unknown as CashFlowEntity,
+						({
+							id: mockId(77),
+							...row,
+						}) as unknown as CashFlowEntity,
 				);
 			// Completing through `cash-flow` is what books the refund on the client ledger
 			const completeWithin = jest
@@ -1115,21 +1124,23 @@ describe('InvoiceService', () => {
 
 			await expect(
 				privateApi.refundReversal(manager, reversal),
-			).resolves.toEqual([9]);
+			).resolves.toEqual([mockId(9)]);
 
 			expect(createWithin.mock.calls[0]?.[1]).toMatchObject({
 				direction: CashFlowDirectionEnum.OUT,
 				category: CashFlowCategoryEnum.REFUND,
-				parent_id: 9,
+				parent_id: mockId(9),
 				amount: 1000,
 				vat_rate: 21,
 			});
 			// Completed through `cash-flow`, which books it on the ledger in this transaction
-			expect(completeWithin.mock.calls[0]?.[1]).toMatchObject({ id: 77 });
+			expect(completeWithin.mock.calls[0]?.[1]).toMatchObject({
+				id: mockId(77),
+			});
 			expect(savedAllocations).toEqual([
 				expect.objectContaining({
-					invoice_id: 50,
-					cash_flow_id: 77,
+					invoice_id: mockId(50),
+					cash_flow_id: mockId(77),
 					amount: 1210,
 				}),
 			]);
@@ -1175,8 +1186,8 @@ describe('InvoiceService', () => {
 				andWhere: jest.fn(() => builder),
 				groupBy: jest.fn(() => builder),
 				getRawMany: jest.fn(async () => [
-					{ parent_invoice_id: 1, reversed_net: '500' },
-					{ parent_invoice_id: 2, reversed_net: '120' },
+					{ parent_invoice_id: mockId(1), reversed_net: '500' },
+					{ parent_invoice_id: mockId(2), reversed_net: '120' },
 				]),
 			};
 
@@ -1197,24 +1208,24 @@ describe('InvoiceService', () => {
 
 			const result = await withReversibleNet([
 				getInvoiceEntityMock({
-					id: 1,
+					id: mockId(1),
 					status: InvoiceStatusEnum.ISSUED,
 					total_net: 500,
 				}),
 				getInvoiceEntityMock({
-					id: 2,
+					id: mockId(2),
 					status: InvoiceStatusEnum.ISSUED,
 					total_net: 500,
 				}),
 				getInvoiceEntityMock({
-					id: 3,
+					id: mockId(3),
 					status: InvoiceStatusEnum.DRAFT,
 				}),
 				getInvoiceEntityMock({
-					id: 4,
+					id: mockId(4),
 					status: InvoiceStatusEnum.ISSUED,
 					is_reversal: true,
-					parent_invoice_id: 1,
+					parent_invoice_id: mockId(1),
 				}),
 			]);
 
@@ -1246,16 +1257,18 @@ describe('InvoiceService', () => {
 				'createQueryBuilder',
 			).mockReturnValue(
 				builder([
-					{ invoice_id: 1, allocated: '400' },
-					{ invoice_id: 2, allocated: '1000' },
-					{ invoice_id: 4, allocated: '50' },
+					{ invoice_id: mockId(1), allocated: '400' },
+					{ invoice_id: mockId(2), allocated: '1000' },
+					{ invoice_id: mockId(4), allocated: '50' },
 				]) as never,
 			);
 			jest.spyOn(
 				mockInvoice.repository,
 				'createQueryBuilder',
 			).mockReturnValue(
-				builder([{ parent_invoice_id: 2, reversed: '300' }]) as never,
+				builder([
+					{ parent_invoice_id: mockId(2), reversed: '300' },
+				]) as never,
 			);
 
 			const withOutstanding = (
@@ -1271,26 +1284,26 @@ describe('InvoiceService', () => {
 			const result = await withOutstanding([
 				// Partly paid
 				getInvoiceEntityMock({
-					id: 1,
+					id: mockId(1),
 					status: InvoiceStatusEnum.ISSUED,
 					total_gross: 1000,
 				}),
 				// Paid in full, then partly reversed - owed nothing, never below zero
 				getInvoiceEntityMock({
-					id: 2,
+					id: mockId(2),
 					status: InvoiceStatusEnum.ISSUED,
 					total_gross: 1000,
 				}),
 				getInvoiceEntityMock({
-					id: 3,
+					id: mockId(3),
 					status: InvoiceStatusEnum.DRAFT,
 				}),
 				// A reversal counts only the refunds allocated to it
 				getInvoiceEntityMock({
-					id: 4,
+					id: mockId(4),
 					status: InvoiceStatusEnum.ISSUED,
 					is_reversal: true,
-					parent_invoice_id: 2,
+					parent_invoice_id: mockId(2),
 					total_gross: 300,
 				}),
 			]);
@@ -1314,7 +1327,7 @@ describe('InvoiceService', () => {
 
 					return Array.isArray(row)
 						? row
-						: { id: 40, ...(row as object) };
+						: { id: mockId(40), ...(row as object) };
 				}),
 			});
 
@@ -1333,9 +1346,9 @@ describe('InvoiceService', () => {
 
 			const result = await persist({
 				entry: {
-					client_id: 1,
-					order_id: 7,
-					shipping_id: 9,
+					client_id: mockId(1),
+					order_id: mockId(7),
+					shipping_id: mockId(9),
 					subscription_id: null,
 					scope: InvoiceScopeEnum.SHIPPING,
 				},
@@ -1346,19 +1359,19 @@ describe('InvoiceService', () => {
 			expect(saved[0]).not.toHaveProperty('shipping_id');
 			expect(saved[1]).toEqual([
 				{
-					invoice_id: 40,
+					invoice_id: mockId(40),
 					source_type: InvoiceSourceTypeEnum.ORDER,
-					source_id: 7,
+					source_id: mockId(7),
 				},
 				{
-					invoice_id: 40,
+					invoice_id: mockId(40),
 					source_type: InvoiceSourceTypeEnum.SHIPPING,
-					source_id: 9,
+					source_id: mockId(9),
 				},
 			]);
 			expect(result).toMatchObject({
-				order_id: 7,
-				shipping_id: 9,
+				order_id: mockId(7),
+				shipping_id: mockId(9),
 				subscription_id: null,
 			});
 		});
@@ -1371,18 +1384,21 @@ describe('InvoiceService', () => {
 				...invoiceOutputPayloads.find,
 				filter: {
 					...invoiceOutputPayloads.find.filter,
-					order_id: 5,
-					shipping_id: 6,
+					order_id: mockId(5),
+					shipping_id: mockId(6),
 				},
 			});
 
 			expect(mockInvoice.query.filterRaw).toHaveBeenCalledWith(
 				expect.stringContaining('invoice_source'),
-				{ source_order_type: 'order', source_order_id: 5 },
+				{ source_order_type: 'order', source_order_id: mockId(5) },
 			);
 			expect(mockInvoice.query.filterRaw).toHaveBeenCalledWith(
 				expect.stringContaining('invoice_source'),
-				{ source_shipping_type: 'shipping', source_shipping_id: 6 },
+				{
+					source_shipping_type: 'shipping',
+					source_shipping_id: mockId(6),
+				},
 			);
 		});
 	});
@@ -1425,7 +1441,7 @@ describe('InvoiceService', () => {
 						status: InvoiceStatusEnum.DRAFT,
 						is_reversal: true,
 					}),
-					{ id: 1, seller_details: null } as never,
+					{ id: mockId(1), seller_details: null } as never,
 				),
 			).rejects.toThrow('invoice.error.reversal_party_locked');
 		});
@@ -1532,14 +1548,16 @@ describe('InvoiceService', () => {
 		const arrange = (lines: InvoiceLineEntity[]) => {
 			const repository = {
 				save: jest.fn(async (rows: unknown) => rows),
-				softDelete: jest.fn(async (_ids: number[]) => undefined),
+				softDelete: jest.fn(async (_ids: EntityId[]) => undefined),
 			};
 
 			setupTransactionMock(repository);
 
 			jest.spyOn(invoiceService, 'getLines').mockResolvedValue(lines);
 			jest.spyOn(invoiceService, 'getLineCaps').mockResolvedValue(
-				new Map([[7, { max_quantity: 2, max_unit_price: 110 }]]),
+				new Map([
+					[mockId(7), { max_quantity: 2, max_unit_price: 110 }],
+				]),
 			);
 			jest.spyOn(invoiceService, 'recomputeTotals').mockResolvedValue({
 				total_net: 0,
@@ -1554,13 +1572,13 @@ describe('InvoiceService', () => {
 
 		// The set is the whole draft: restated, added and left-out lines land in one write
 		it('restates, adds and removes in one transaction, skipping unchanged lines', async () => {
-			const restated = getInvoiceLineEntityMock({ id: 7 });
-			const unchanged = getInvoiceLineEntityMock({ id: 8 });
-			const dropped = getInvoiceLineEntityMock({ id: 9 });
+			const restated = getInvoiceLineEntityMock({ id: mockId(7) });
+			const unchanged = getInvoiceLineEntityMock({ id: mockId(8) });
+			const dropped = getInvoiceLineEntityMock({ id: mockId(9) });
 			const repository = arrange([restated, unchanged, dropped]);
 
 			await invoiceService.updateData(draft(), {
-				id: 1,
+				id: mockId(1),
 				lines: [
 					{ ...asItem(restated), quantity: 1 },
 					asItem(unchanged),
@@ -1573,13 +1591,16 @@ describe('InvoiceService', () => {
 				],
 			} as never);
 
-			expect(repository.softDelete).toHaveBeenCalledWith([9]);
+			expect(repository.softDelete).toHaveBeenCalledWith([mockId(9)]);
 
 			const saved = repository.save.mock.calls.at(-1)?.[0] as
 				| InvoiceLineEntity[]
 				| undefined;
 
-			expect(saved?.map((line) => line.id ?? 'new')).toEqual([7, 'new']);
+			expect(saved?.map((line) => line.id ?? 'new')).toEqual([
+				mockId(7),
+				'new',
+			]);
 			expect(saved?.[0]).toMatchObject({ quantity: 1 });
 			expect(saved?.[1]).toMatchObject({
 				kind: InvoiceLineKindEnum.ADJUSTMENT,
@@ -1589,12 +1610,12 @@ describe('InvoiceService', () => {
 
 		// A product line bills no more of its order line than is left, checked before any write
 		it('refuses a line over its cap and writes nothing', async () => {
-			const line = getInvoiceLineEntityMock({ id: 7 });
+			const line = getInvoiceLineEntityMock({ id: mockId(7) });
 			const repository = arrange([line]);
 
 			await expect(
 				invoiceService.updateData(draft(), {
-					id: 1,
+					id: mockId(1),
 					lines: [{ ...asItem(line), quantity: 3 }],
 				} as never),
 			).rejects.toThrow('invoice.error.line_quantity_over');
@@ -1604,13 +1625,17 @@ describe('InvoiceService', () => {
 		});
 
 		it('refuses a line id that is not on this invoice', async () => {
-			arrange([getInvoiceLineEntityMock({ id: 7 })]);
+			arrange([getInvoiceLineEntityMock({ id: mockId(7) })]);
 
 			await expect(
 				invoiceService.updateData(draft(), {
-					id: 1,
+					id: mockId(1),
 					lines: [
-						{ ...asItem(getInvoiceLineEntityMock({ id: 99 })) },
+						{
+							...asItem(
+								getInvoiceLineEntityMock({ id: mockId(99) }),
+							),
+						},
 					],
 				} as never),
 			).rejects.toThrow('invoice.error.invalid_invoice_line');
@@ -1627,7 +1652,7 @@ describe('InvoiceService', () => {
 						is_reversal: true,
 					}),
 					{
-						id: 1,
+						id: mockId(1),
 						lines: [
 							{
 								label: 'Rounding',
@@ -1756,7 +1781,7 @@ describe('InvoiceService', () => {
 		// An original's lines carry what earlier reversals took back - what the reverse form caps at
 		it('returns the document with its lines, allocations and reversed totals', async () => {
 			const entry = getInvoiceEntityMock();
-			const lines = [getInvoiceLineEntityMock({ id: 7 })];
+			const lines = [getInvoiceLineEntityMock({ id: mockId(7) })];
 
 			mockInvoice.query.firstOrFail.mockResolvedValue(entry);
 			mockLine.query.all.mockResolvedValue(
@@ -1766,7 +1791,7 @@ describe('InvoiceService', () => {
 				[] as unknown as [InvoicePaymentEntity[], number],
 			);
 			jest.spyOn(invoiceService, 'getReversedPerLine').mockResolvedValue(
-				new Map([[7, { quantity: 1, net: 100 }]]),
+				new Map([[mockId(7), { quantity: 1, net: 100 }]]),
 			);
 
 			const result = await invoiceService.getEntryData({
@@ -1775,7 +1800,7 @@ describe('InvoiceService', () => {
 
 			expect(result.id).toBe(entry.id);
 			expect(result.lines[0]).toMatchObject({
-				id: 7,
+				id: mockId(7),
 				reversed_quantity: 1,
 				reversed_net: 100,
 			});
@@ -1790,8 +1815,8 @@ describe('InvoiceService', () => {
 				order_id: null,
 			});
 			const lines = [
-				getInvoiceLineEntityMock({ id: 7 }),
-				getInvoiceLineEntityMock({ id: 8 }),
+				getInvoiceLineEntityMock({ id: mockId(7) }),
+				getInvoiceLineEntityMock({ id: mockId(8) }),
 			];
 
 			mockInvoice.query.firstOrFail.mockResolvedValue(entry);
@@ -1805,7 +1830,7 @@ describe('InvoiceService', () => {
 				new Map(),
 			);
 			jest.spyOn(invoiceService, 'getLineCaps').mockResolvedValue(
-				new Map([[7, { max_quantity: 2, max_unit_price: 50 }]]),
+				new Map([[mockId(7), { max_quantity: 2, max_unit_price: 50 }]]),
 			);
 
 			const result = await invoiceService.getEntryData({

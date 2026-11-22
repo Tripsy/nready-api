@@ -35,6 +35,8 @@ import ShippingLineEntity from '@/features/shipping/shipping-line.entity';
 import WarehouseEntity, {
 	WarehouseStatusEnum,
 } from '@/features/warehouse/warehouse.entity';
+import { compareIds } from '@/helpers/id.helper';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 const TARGET = 20;
 
@@ -116,7 +118,7 @@ export const shippingSeed: SeedDefinition = {
 			.andWhere('shipping.id IS NULL')
 			.select(['order.id AS id', 'order.status AS status'])
 			.orderBy('order.id', 'ASC')
-			.getRawMany<{ id: number; status: OrderStatus }>();
+			.getRawMany<{ id: EntityId; status: OrderStatus }>();
 
 		if (warehouses.length === 0 || orders.length === 0) {
 			return {
@@ -155,7 +157,7 @@ export const shippingSeed: SeedDefinition = {
 						quantity: true,
 						currency: true,
 					},
-					where: { order_id: Number(order.id) },
+					where: { order_id: order.id },
 					order: { id: 'ASC' },
 				});
 
@@ -165,7 +167,7 @@ export const shippingSeed: SeedDefinition = {
 
 			const client = await manager.getRepository(OrderEntity).findOne({
 				select: { id: true, client_id: true },
-				where: { id: Number(order.id) },
+				where: { id: order.id },
 			});
 
 			const deliveryAddress = client
@@ -205,7 +207,7 @@ export const shippingSeed: SeedDefinition = {
 					: null;
 
 			// Split only across two sites that can each send their half in full
-			const plan: { lines: OrderLineEntity[]; site: number }[] =
+			const plan: { lines: OrderLineEntity[]; site: EntityId }[] =
 				firstSite !== null && secondSite !== null
 					? [
 							{ lines: halves[0], site: firstSite },
@@ -259,7 +261,7 @@ export const shippingSeed: SeedDefinition = {
 				const shipping = await repository.save(
 					repository.create({
 						scope: ShippingScopeEnum.DELIVERY,
-						order_id: Number(order.id),
+						order_id: order.id,
 						pickup_warehouse_id: warehouse.id,
 						destination_client_address_id: destinationAddressId,
 						pickup_data: hasLeft
@@ -346,18 +348,18 @@ export const shippingSeed: SeedDefinition = {
  */
 function pickSite(
 	stock: SiteStock | null,
-	warehouseIds: readonly number[],
+	warehouseIds: readonly EntityId[],
 	lines: readonly OrderLineEntity[],
-	tracked: ReadonlySet<number>,
-	exclude: readonly number[],
-): number | null {
+	tracked: ReadonlySet<EntityId>,
+	exclude: readonly EntityId[],
+): EntityId | null {
 	const open = warehouseIds.filter((id) => !exclude.includes(id));
 
 	if (!stock) {
 		return open[0] ?? null;
 	}
 
-	const held = (warehouseId: number): number =>
+	const held = (warehouseId: EntityId): number =>
 		lines
 			.filter((line) => tracked.has(line.variant_id))
 			.reduce(
@@ -369,7 +371,7 @@ function pickSite(
 	return (
 		open
 			.filter((id) => canFill(stock, id, lines, tracked))
-			.sort((a, b) => held(b) - held(a) || a - b)[0] ?? null
+			.sort((a, b) => held(b) - held(a) || compareIds(a, b))[0] ?? null
 	);
 }
 

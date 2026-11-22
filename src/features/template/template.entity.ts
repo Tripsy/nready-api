@@ -1,5 +1,6 @@
 import { Column, Entity, Index } from 'typeorm';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export const TemplateTypeEnum = {
 	PAGE: 'page',
@@ -47,7 +48,7 @@ export type TemplateSeedEntry = {
 };
 
 export type EmailTemplate = {
-	id?: number;
+	id?: EntityId;
 	language: string;
 	content: EmailContent;
 };

@@ -12,6 +12,7 @@ import type ProductBundleGroupEntity from '@/features/product/product-bundle-gro
 import type ProductBundleItemPriceEntity from '@/features/product/product-bundle-item-price.entity';
 import type ProductVariantEntity from '@/features/product/product-variant.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 const ENTITY_TABLE_NAME = 'product_bundle_item';
 
@@ -70,18 +71,18 @@ export default class ProductBundleItemEntity extends EntityAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
 
-	@Column('int', {
+	@Column('uuid', {
 		nullable: false,
 		comment: 'The bundle this component belongs to',
 	})
-	product_id!: number;
+	product_id!: EntityId;
 
-	@Column('int', {
+	@Column('uuid', {
 		nullable: false,
 		comment:
 			'The variant consumed when this component is part of the order',
 	})
-	variant_id!: number;
+	variant_id!: EntityId;
 
 	@Column('numeric', {
 		precision: 12,
@@ -93,12 +94,12 @@ export default class ProductBundleItemEntity extends EntityAbstract {
 	})
 	quantity!: number;
 
-	@Column('int', {
+	@Column('uuid', {
 		nullable: true,
 		comment:
 			'The choice this component is a candidate for; NULL means it is not part of one',
 	})
-	group_id!: number | null;
+	group_id!: EntityId | null;
 
 	@Column('int', {
 		nullable: false,

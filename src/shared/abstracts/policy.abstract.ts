@@ -1,5 +1,6 @@
 import { NotAllowedError, UnauthorizedError } from '@/exceptions';
 import { toKebabCase } from '@/helpers/string.helper';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type {
 	AuthContext,
 	AuthContextPermissions,
@@ -14,8 +15,8 @@ class PolicyAbstract {
 		});
 	}
 
-	public getId(auth: AuthContext): number | undefined {
-		return auth?.id;
+	public getId(auth: AuthContext): EntityId | undefined {
+		return auth?.id ?? undefined;
 	}
 
 	public getRole(auth: AuthContext): string {
@@ -55,6 +56,20 @@ class PolicyAbstract {
 		if (!this.isAuthenticated(auth)) {
 			throw new UnauthorizedError();
 		}
+	}
+
+	/**
+	 * The signed-in user's id, or 401 for a visitor - for a caller that acts on the user's own
+	 * rows and has nothing to do without one.
+	 */
+	public requireId(auth: AuthContext): EntityId {
+		const id = this.getId(auth);
+
+		if (!id) {
+			throw new UnauthorizedError();
+		}
+
+		return id;
 	}
 
 	public notAuth(auth: AuthContext): void {

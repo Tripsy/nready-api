@@ -4,13 +4,14 @@ import type { InvoiceWithSources } from '@/features/invoice/invoice.entity';
 import { notifyOrderStateChanged } from '@/features/invoice/invoice.hooks';
 import { invoiceService } from '@/features/invoice/invoice.service';
 import { invoicePaymentService } from '@/features/invoice/invoice-payment.service';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /** Order ids of the documents that name one, once each. */
-const orderIdsOf = (invoices: readonly InvoiceWithSources[]): number[] => [
+const orderIdsOf = (invoices: readonly InvoiceWithSources[]): EntityId[] => [
 	...new Set(
 		invoices
 			.map((invoice) => invoice.order_id)
-			.filter((orderId): orderId is number => orderId !== null),
+			.filter((orderId): orderId is EntityId => orderId !== null),
 	),
 ];
 
@@ -31,7 +32,7 @@ export class InvoiceSettlementService {
 	 * nothing. The ledger entry is not written here - `cash-flow` books it in the transaction that
 	 * completed the movement.
 	 */
-	public async onCashFlowCompleted(cashFlowId: number): Promise<void> {
+	public async onCashFlowCompleted(cashFlowId: EntityId): Promise<void> {
 		const cashFlow = await cashFlowService.findById(cashFlowId, false);
 
 		if (cashFlow.direction !== CashFlowDirectionEnum.IN) {
@@ -72,7 +73,7 @@ export class InvoiceSettlementService {
 	}
 
 	/** The client's open money against their open documents, and the orders that moved. */
-	public async settleClient(clientId: number): Promise<void> {
+	public async settleClient(clientId: EntityId): Promise<void> {
 		const touched = await invoiceService.withSources(
 			await invoicePaymentService.settleClient(clientId),
 		);

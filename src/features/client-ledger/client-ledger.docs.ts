@@ -98,7 +98,7 @@ export const docs: Record<
 					values: Object.values(ClientLedgerEntryTypeEnum),
 				},
 				'filter[currency]': { type: 'string', required: false },
-				'filter[cash_flow_id]': { type: 'number', required: false },
+				'filter[cash_flow_id]': { type: 'string', required: false },
 				'filter[occurred_at_start]': {
 					type: 'string',
 					required: false,

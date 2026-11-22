@@ -28,7 +28,7 @@ const entitySample =
 		unknown
 	>;
 
-const optionsFormat = '[{ term_id: number; sort_order?: number }]';
+const optionsFormat = '[{ term_id: EntityId; sort_order?: number }]';
 
 function manageBody(required: boolean) {
 	return {
@@ -107,9 +107,9 @@ function manageBody(required: boolean) {
 		},
 		...(required
 			? {
-					category_id: { type: 'number' as const, required: true },
+					category_id: { type: 'string' as const, required: true },
 					attribute_label_id: {
-						type: 'number' as const,
+						type: 'string' as const,
 						required: true,
 						condition: 'a term of type attribute_label',
 					},
@@ -151,7 +151,7 @@ export const docs: Record<
 		request: {
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -171,7 +171,7 @@ export const docs: Record<
 			notes: 'Provide at least one body parameter. Changing unit rewrites value_base on every value already recorded under this label in this category’s subtree, so a range filter keeps meaning the same thing',
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -191,7 +191,7 @@ export const docs: Record<
 		request: {
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -209,7 +209,7 @@ export const docs: Record<
 		request: {
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -251,7 +251,7 @@ export const docs: Record<
 		request: {
 			notes: "Positions are the category's definition ids in the order they should be offered - the whole set, since a position only means anything relative to its siblings. Applied ascending, which is how the table is read everywhere",
 			body: {
-				category_id: { type: 'number', required: true },
+				category_id: { type: 'string', required: true },
 				positions: {
 					type: 'array',
 					required: true,
@@ -311,8 +311,8 @@ export const docs: Record<
 					default: OrderDirectionEnum.ASC,
 				},
 				filter: {
-					category_id: { type: 'number', required: false },
-					attribute_label_id: { type: 'number', required: false },
+					category_id: { type: 'string', required: false },
+					attribute_label_id: { type: 'string', required: false },
 					scope: {
 						type: 'enum',
 						required: false,

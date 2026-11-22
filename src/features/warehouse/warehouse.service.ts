@@ -27,6 +27,7 @@ import {
 	assertValidStatusTransition,
 	cleanEntityCacheMany,
 } from '@/shared/abstracts/service.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 const ENTRY_COLUMNS = [
@@ -61,7 +62,7 @@ export class WarehouseService {
 	 *
 	 * `withDeleted` is false: a warehouse must not be filed against an address somebody removed.
 	 */
-	private async checkAddressId(address_id: number): Promise<void> {
+	private async checkAddressId(address_id: EntityId): Promise<void> {
 		await this.addressService.findById(address_id, false);
 	}
 
@@ -75,8 +76,8 @@ export class WarehouseService {
 	 */
 	private async clearDefault(
 		manager: EntityManager,
-		excludeId?: number,
-	): Promise<number[]> {
+		excludeId?: EntityId,
+	): Promise<EntityId[]> {
 		const repository = manager.getRepository(WarehouseEntity);
 
 		const currentDefaults = await repository.find({
@@ -166,7 +167,7 @@ export class WarehouseService {
 	 * @description Update any data
 	 */
 	public async update(
-		data: DeepPartial<WarehouseEntity> & { id: number },
+		data: DeepPartial<WarehouseEntity> & { id: EntityId },
 	): Promise<WarehouseEntity> {
 		try {
 			const { saved, touchedIds } = await dataSource.transaction(
@@ -225,16 +226,16 @@ export class WarehouseService {
 		await this.update(entry);
 	}
 
-	public async delete(id: number) {
+	public async delete(id: EntityId) {
 		await this.repository.createQuery().filterById(id).delete();
 	}
 
-	public async restore(id: number) {
+	public async restore(id: EntityId) {
 		await this.repository.createQuery().filterById(id).restore();
 	}
 
 	public findById(
-		id: number,
+		id: EntityId,
 		withDeleted: boolean,
 	): Promise<WarehouseEntity> {
 		return this.repository
@@ -271,7 +272,7 @@ export class WarehouseService {
 	/**
 	 * @description Used in `read` method from controller; this will return a custom shape
 	 */
-	public async getEntryData(data: { id: number; withDeleted: boolean }) {
+	public async getEntryData(data: { id: EntityId; withDeleted: boolean }) {
 		return await this.repository
 			.createQuery()
 			.select([...ENTRY_COLUMNS, ...ADDRESS_COLUMNS])

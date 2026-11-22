@@ -65,7 +65,7 @@ async function seedAdmin(): Promise<void> {
 
 		await requestContext.run(
 			{
-				auth_id: 0,
+				auth_id: null,
 				performed_by: 'admin.seed',
 				source: RequestContextSourceEnum.SEED,
 				request_id: uuid(),

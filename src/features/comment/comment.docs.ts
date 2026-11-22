@@ -69,7 +69,7 @@ export const docs: Record<
 		request: {
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -89,7 +89,7 @@ export const docs: Record<
 			notes: 'Provide at least one body parameter. The target, the parent and the author are what the comment is and cannot be moved; status has its own route. Changing the text stamps edited_at, which marks the comment as edited in the thread - the marker is about the text no longer being what was posted, not about who rewrote it; a pin or a type change leaves it alone',
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -125,7 +125,7 @@ export const docs: Record<
 			notes: "Hard, and final - the table has no deleted_at, so there is no restore. The replies go with it through the parent cascade, and the ratings and complaints pointing at that subtree are cleared in the same transaction, along with the parent's reply_count",
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -187,7 +187,7 @@ export const docs: Record<
 						required: false,
 						values: Object.values(CommentEntityTypeEnum),
 					},
-					entity_id: { type: 'number', required: false },
+					entity_id: { type: 'string', required: false },
 					type: {
 						type: 'enum',
 						required: false,
@@ -198,8 +198,8 @@ export const docs: Record<
 						required: false,
 						values: Object.values(CommentStatusEnum),
 					},
-					parent_id: { type: 'number', required: false },
-					user_id: { type: 'number', required: false },
+					parent_id: { type: 'string', required: false },
+					user_id: { type: 'string', required: false },
 					is_pinned: { type: 'boolean', required: false },
 					term: {
 						type: 'string',
@@ -233,7 +233,7 @@ export const docs: Record<
 			notes: `Only these transitions are allowed: ${statusTransitionNote}. Nothing returns a comment to ${CommentStatusEnum.PENDING}. Crossing the ${CommentStatusEnum.APPROVED} boundary moves the parent's reply_count, since that counter tracks what a reader can open. The decision is stamped with the authenticated caller, never with an id from the request`,
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 				status: {

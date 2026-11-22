@@ -3,6 +3,7 @@ import { invoiceInputPayloads } from '@/features/invoice/invoice.mock';
 import { InvoiceValidator } from '@/features/invoice/invoice.validator';
 import { InvoiceLineKindEnum } from '@/features/invoice/invoice-line.entity';
 import { withDebugValidated } from '@/tests/jest-validator.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 beforeEach(() => {
 	jest.restoreAllMocks();
@@ -48,7 +49,7 @@ describe(validator, () => {
 	});
 
 	it('update() rejects a payload carrying only the id', () => {
-		const validated = invoiceValidator.update.safeParse({ id: 1 });
+		const validated = invoiceValidator.update.safeParse({ id: mockId(1) });
 
 		expect(validated.success).toBe(false);
 	});
@@ -103,8 +104,8 @@ describe(validator, () => {
 
 	it('lineUpdate() rejects a payload carrying only the ids', () => {
 		const validated = invoiceValidator.lineUpdate.safeParse({
-			id: 1,
-			line_id: 2,
+			id: mockId(1),
+			line_id: mockId(2),
 		});
 
 		expect(validated.success).toBe(false);
@@ -112,8 +113,8 @@ describe(validator, () => {
 
 	it('lineUpdate() accepts a single updatable field', () => {
 		const validated = invoiceValidator.lineUpdate.safeParse({
-			id: 1,
-			line_id: 2,
+			id: mockId(1),
+			line_id: mockId(2),
 			quantity: 3,
 		});
 
@@ -125,7 +126,7 @@ describe(validator, () => {
 	// Free text, but whole: blanks come back as `null` so the snapshot carries every key
 	it('update() accepts a company buyer and fills the blanks with null', () => {
 		const validated = invoiceValidator.update.safeParse({
-			id: 1,
+			id: mockId(1),
 			billing_details: {
 				type: 'company',
 				company_name: 'Acme SRL',
@@ -147,7 +148,7 @@ describe(validator, () => {
 
 	it('update() rejects a buyer with no name or country', () => {
 		const validated = invoiceValidator.update.safeParse({
-			id: 1,
+			id: mockId(1),
 			billing_details: { type: 'person', person_name: '' },
 		});
 
@@ -157,7 +158,7 @@ describe(validator, () => {
 	// `null` hands the party back to issuing, so it counts as something to update
 	it('update() accepts null to clear the seller', () => {
 		const validated = invoiceValidator.update.safeParse({
-			id: 1,
+			id: mockId(1),
 			seller_details: null,
 		});
 
@@ -168,7 +169,7 @@ describe(validator, () => {
 
 	it('createCustom() accepts a client on its own', () => {
 		const validated = invoiceValidator.createCustom.safeParse({
-			client_id: 5,
+			client_id: mockId(5),
 		});
 
 		withDebugValidated(() => {
@@ -185,7 +186,7 @@ describe(validator, () => {
 	// A custom document names no order, so it never comes through the order-backed create
 	it('create() rejects the custom scope', () => {
 		const validated = invoiceValidator.create.safeParse({
-			order_id: 1,
+			order_id: mockId(1),
 			scope: 'custom',
 		});
 

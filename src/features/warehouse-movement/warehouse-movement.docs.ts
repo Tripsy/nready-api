@@ -96,7 +96,7 @@ export const docs: Record<
 			notes: 'on_hand is the sum of open lots on confirmed receipts in active warehouses - an inactive warehouse is listed but not counted. reserved is what live pending and confirmed orders hold; it is taken when an order is placed, restated when its lines are edited, lowered as its deliveries ship (given back if one returns) and released when it is canceled or completed. available = on_hand - reserved, and goes negative when a canceled receipt took back stock already promised. A variant that does not track stock reads 0 everywhere and is never refused',
 			params: {
 				variant_id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -117,7 +117,7 @@ export const docs: Record<
 			notes: ledgerNote,
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -152,9 +152,9 @@ export const docs: Record<
 					required: false,
 					values: Object.values(OrderDirectionEnum),
 				},
-				'filter[warehouse_id]': { type: 'number', required: false },
-				'filter[variant_id]': { type: 'number', required: false },
-				'filter[grn_item_id]': { type: 'number', required: false },
+				'filter[warehouse_id]': { type: 'string', required: false },
+				'filter[variant_id]': { type: 'string', required: false },
+				'filter[grn_item_id]': { type: 'string', required: false },
 				'filter[movement_type]': {
 					type: 'enum',
 					required: false,
@@ -165,8 +165,8 @@ export const docs: Record<
 					required: false,
 					values: Object.values(WarehouseMovementSourceEnum),
 				},
-				'filter[source_id]': { type: 'number', required: false },
-				'filter[reversal_of_id]': { type: 'number', required: false },
+				'filter[source_id]': { type: 'string', required: false },
+				'filter[reversal_of_id]': { type: 'string', required: false },
 				'filter[occurred_at_start]': {
 					type: 'string',
 					required: false,

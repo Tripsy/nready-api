@@ -25,6 +25,7 @@ import {
 	notAuthenticatedSpy,
 } from '@/tests/mocks/policies.mock';
 import { mockAccountEmailService } from '@/tests/mocks/services.mock';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 let app: Express;
 
@@ -1147,7 +1148,7 @@ describe(`${controller} - meEdit / meDelete (rejection branches)`, () => {
 	it('meEdit() should return 404 when the user record is gone', async () => {
 		isAuthenticatedSpy(accountPolicy);
 
-		jest.spyOn(accountPolicy, 'getId').mockReturnValue(1);
+		jest.spyOn(accountPolicy, 'getId').mockReturnValue(mockId(1));
 
 		// Same as above: the 404 comes from `firstOrFail()`, not from the controller.
 		jest.spyOn(userService, 'findById').mockRejectedValue(
@@ -1166,7 +1167,7 @@ describe(`${controller} - meEdit / meDelete (rejection branches)`, () => {
 	it('meDelete() should return 400 when the current password is wrong', async () => {
 		isAuthenticatedSpy(accountPolicy);
 
-		jest.spyOn(accountPolicy, 'getId').mockReturnValue(1);
+		jest.spyOn(accountPolicy, 'getId').mockReturnValue(mockId(1));
 		jest.spyOn(userService, 'findByIdWithPassword').mockResolvedValue(
 			getUserEntityMock(),
 		);

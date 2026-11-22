@@ -2,9 +2,9 @@ import {
 	CreateDateColumn,
 	DeleteDateColumn,
 	Entity,
-	PrimaryGeneratedColumn,
 	UpdateDateColumn,
 } from 'typeorm';
+import { EntityIdAbstract } from '@/shared/abstracts/entity-id.abstract';
 
 export const OrderDirectionEnum = {
 	ASC: 'ASC',
@@ -21,10 +21,7 @@ export type PageMeta = {
 };
 
 @Entity()
-export abstract class EntityAbstract {
-	@PrimaryGeneratedColumn({ type: 'int' })
-	id!: number;
-
+export abstract class EntityAbstract extends EntityIdAbstract {
 	@CreateDateColumn({ type: 'timestamp', nullable: false })
 	created_at!: Date;
 

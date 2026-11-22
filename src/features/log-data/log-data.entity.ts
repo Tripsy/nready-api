@@ -1,10 +1,5 @@
-import {
-	Column,
-	CreateDateColumn,
-	Entity,
-	Index,
-	PrimaryGeneratedColumn,
-} from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index } from 'typeorm';
+import { EntityIdAbstract } from '@/shared/abstracts/entity-id.abstract';
 import {
 	type LogDataCategory,
 	LogDataCategoryEnum,
@@ -24,12 +19,9 @@ const ENTITY_TABLE_NAME = 'log_data';
  * first range predicate - anything ordered after `created_at` could never be used.
  */
 @Index('IDX_log_data', ['level', 'category', 'created_at'])
-export default class LogDataEntity {
+export default class LogDataEntity extends EntityIdAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
-
-	@PrimaryGeneratedColumn({ type: 'int' })
-	id!: number;
 
 	@Column('char', { length: 36, nullable: false })
 	@Index('IDX_log_data_pid')

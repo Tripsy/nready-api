@@ -85,7 +85,7 @@ export const docs: Record<keyof typeof termController, ApiInputDocumentation> =
 				notes: 'Omitting `language` returns every translation, which is what an editor needs; naming one returns that translation alone and answers 404 when the term has none in it',
 				params: {
 					id: {
-						type: 'number',
+						type: 'string',
 						required: true,
 					},
 				},
@@ -112,7 +112,7 @@ export const docs: Record<keyof typeof termController, ApiInputDocumentation> =
 				notes: `Provide at least one of type or contents. ${duplicateNote}, so new wording is re-checked against the other terms of the same type. Translations are upserted by language - a language left out of \`contents\` keeps what it already had, and none is ever removed by an update`,
 				params: {
 					id: {
-						type: 'number',
+						type: 'string',
 						required: true,
 					},
 				},
@@ -136,7 +136,7 @@ export const docs: Record<keyof typeof termController, ApiInputDocumentation> =
 				notes: 'Soft delete, and nothing checks what points at the term - anything already referencing it keeps resolving. The duplicate rule ignores deleted rows, so the wording is free for reuse immediately',
 				params: {
 					id: {
-						type: 'number',
+						type: 'string',
 						required: true,
 					},
 				},
@@ -154,7 +154,7 @@ export const docs: Record<keyof typeof termController, ApiInputDocumentation> =
 			request: {
 				params: {
 					id: {
-						type: 'number',
+						type: 'string',
 						required: true,
 					},
 				},
@@ -220,7 +220,7 @@ export const docs: Record<keyof typeof termController, ApiInputDocumentation> =
 						default: OrderDirectionEnum.ASC,
 					},
 					filter: {
-						id: { type: 'number', required: false },
+						id: { type: 'string', required: false },
 						term: {
 							type: 'string',
 							required: false,

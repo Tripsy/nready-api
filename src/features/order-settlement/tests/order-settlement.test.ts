@@ -12,9 +12,14 @@ import {
 	type OrderSettlementState,
 } from '@/features/order-settlement/order-settlement.service';
 import { shippingService } from '@/features/shipping/shipping.service';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 const orderWith = (status: OrderStatus): OrderEntity =>
-	({ id: 1, client_id: 1, status: status }) as unknown as OrderEntity;
+	({
+		id: mockId(1),
+		client_id: mockId(1),
+		status: status,
+	}) as unknown as OrderEntity;
 
 const state = (
 	overrides: Partial<OrderSettlementState>,

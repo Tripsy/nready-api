@@ -32,6 +32,7 @@ import {
 	getMonthIntervalBasedOnCurrentDate,
 } from '@/helpers/date.helper';
 import type RepositoryAbstract from '@/shared/abstracts/repository.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /** Rows the dashboard's recent-activity panel shows. It renders the list whole, without paging. */
 const RECENT_ACTIVITY_LIMIT = 10;
@@ -55,7 +56,7 @@ export type PendingReviewEntity = (typeof PENDING_REVIEW_ENTITIES)[number];
 
 /** One row of the "waiting for review" queue. */
 export type PendingReviewEntry = {
-	id: number;
+	id: EntityId;
 	/** Best label the row can offer cheaply; `null` where the feature has none. */
 	label: string | null;
 	created_at: Date;
@@ -215,7 +216,7 @@ export class StatsService {
 					.all(true),
 			]);
 
-		const toGroup = <TRow extends { id: number; created_at: Date }>(
+		const toGroup = <TRow extends { id: EntityId; created_at: Date }>(
 			[rows, total]: [TRow[], number],
 			label: (row: TRow) => string | null,
 		): PendingReviewGroup => ({

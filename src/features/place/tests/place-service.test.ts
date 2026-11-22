@@ -17,6 +17,7 @@ import {
 	testServiceFindById,
 	testServiceRestore,
 } from '@/tests/jest-service.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 describe('PlaceService', () => {
 	beforeEach(() => {
@@ -70,7 +71,7 @@ describe('PlaceService', () => {
 
 		mockPlace.query.delete.mockResolvedValue(1);
 
-		await servicePlace.delete(1);
+		await servicePlace.delete(mockId(1));
 
 		expect(mockPlace.query.delete).toHaveBeenCalled();
 	});

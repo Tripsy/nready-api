@@ -109,7 +109,7 @@ export const docs: Record<
 		request: {
 			notes: `Requires an account. An order billed to somebody else's client answers 404, the same as a missing one. The client carries its \`company_cui\`, \`company_reg_com\` and \`contact_phone\` here, beyond what the listing shows. \`awaiting_payment\` is true on a pending order not paid cash on delivery whose payment is still open - requested, authorized or waiting on the buyer - and false otherwise; it is not a status. ${totalsNote}`,
 			params: {
-				id: { type: 'number', required: true },
+				id: { type: 'string', required: true },
 			},
 		},
 	}),
@@ -125,7 +125,7 @@ export const docs: Record<
 		request: {
 			notes: "Requires an account. An order billed to somebody else's client answers 404. Answers 409 when the order is no longer pending, has been invoiced, or has a payment past a request (authorized, awaiting action or captured) - those are the business's to undo. The order's pending payment requests are canceled with it, and its deliveries that have not shipped move to `canceled`",
 			params: {
-				id: { type: 'number', required: true },
+				id: { type: 'string', required: true },
 			},
 		},
 	}),

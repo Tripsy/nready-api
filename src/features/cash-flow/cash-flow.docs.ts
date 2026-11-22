@@ -105,7 +105,7 @@ export const docs: Record<
 				currency: currencyParam,
 				external_reference: { type: 'string', required: false },
 				parent_id: {
-					type: 'number',
+					type: 'string',
 					required: false,
 					condition:
 						'the refunded entry; required when category is refund, and it must be completed, share the currency, and have enough left unrefunded',
@@ -134,7 +134,7 @@ export const docs: Record<
 		request: {
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -154,7 +154,7 @@ export const docs: Record<
 			notes: `Provide at least one body parameter. Only an entry in ${CashFlowStatusEnum.PENDING}, ${CashFlowStatusEnum.AUTHORIZED} or ${CashFlowStatusEnum.REQUIRES_ACTION} can be updated - anything else answers 409. ${consistencyNote}, and the pair is re-checked against whichever half is left unchanged. status and parent_id are not updatable here`,
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -207,7 +207,7 @@ export const docs: Record<
 			notes: 'An entry with refunds answers 409 unless force is set, which deletes those refunds along with it. There is no restore route for this entity',
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -273,9 +273,9 @@ export const docs: Record<
 					default: OrderDirectionEnum.ASC,
 				},
 				filter: {
-					id: { type: 'number', required: false },
+					id: { type: 'string', required: false },
 					parent_id: {
-						type: 'number',
+						type: 'string',
 						required: false,
 						condition: 'returns the refunds of one entry',
 					},
@@ -311,9 +311,9 @@ export const docs: Record<
 						required: false,
 						condition: `an all-digit term matches the id exactly; otherwise notes and external_reference, from ${Configuration.get('filter.termMinLength')} characters`,
 					},
-					client_id: { type: 'number', required: false },
-					vendor_id: { type: 'number', required: false },
-					order_id: { type: 'number', required: false },
+					client_id: { type: 'string', required: false },
+					vendor_id: { type: 'string', required: false },
+					order_id: { type: 'string', required: false },
 					is_deleted: {
 						type: 'boolean',
 						required: false,
@@ -337,7 +337,7 @@ export const docs: Record<
 			notes: `Only these transitions are allowed: ${statusTransitionNote}`,
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 				status: {
@@ -372,7 +372,7 @@ export const docs: Record<
 			notes: 'Each record carries the client or vendor it points at, resolved under a key named for its type. An entry holds at most one record per type',
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},

@@ -66,9 +66,12 @@ export class ProductVariantValidator extends BaseValidator<
 					required: false,
 				},
 			),
-			product_id: this.validateNumber(this.getMessage('invalid_number'), {
-				required: false,
-			}),
+			product_id: this.validateId(
+				this.getMessage('invalid_id', { name: 'product_id' }),
+				{
+					required: false,
+				},
+			),
 			term: this.validateString(this.getMessage('invalid_string'), {
 				required: false,
 				minChars: Configuration.get('filter.termMinLength'),
@@ -88,16 +91,22 @@ export class ProductVariantValidator extends BaseValidator<
 				this.getMessage('invalid_composition'),
 				{ required: false },
 			),
-			brand_id: this.validateNumber(this.getMessage('invalid_number'), {
-				required: false,
-			}),
-			category_id: this.validateNumber(
-				this.getMessage('invalid_number'),
+			brand_id: this.validateId(
+				this.getMessage('invalid_id', { name: 'brand_id' }),
+				{
+					required: false,
+				},
+			),
+			category_id: this.validateId(
+				this.getMessage('invalid_id', { name: 'category_id' }),
 				{ required: false },
 			),
-			tag_id: this.validateNumber(this.getMessage('invalid_number'), {
-				required: false,
-			}),
+			tag_id: this.validateId(
+				this.getMessage('invalid_id', { name: 'tag_id' }),
+				{
+					required: false,
+				},
+			),
 			language: this.validateLanguage(
 				this.getMessage('invalid_language'),
 				{ required: false },

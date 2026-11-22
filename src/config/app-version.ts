@@ -3,4 +3,4 @@
  * a commit range. A file of its own rather than a line in `settings.config.ts`: the bump is
  * then a one-line diff with nothing around it to conflict with.
  */
-export const APP_VERSION = '1.18';
+export const APP_VERSION = '1.22';

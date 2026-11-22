@@ -76,6 +76,7 @@ import {
 	assertValidStatusTransition,
 	cleanEntityCache,
 } from '@/shared/abstracts/service.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 /**
@@ -97,8 +98,8 @@ import type { ValidatorOutput } from '@/shared/types/mock.type';
  * and would leave the second caller converting into a shape it has no reason to know about.
  */
 export type OrderLineInput = {
-	variant_id: number;
-	product_id: number;
+	variant_id: EntityId;
+	product_id: EntityId;
 	quantity: number;
 	/** Unit price excluding VAT, in `currency`, with any option deltas already folded in. */
 	price: number;
@@ -113,7 +114,7 @@ export type OrderLineInput = {
 	options?: ProductOptionSnapshot[] | null;
 	notes?: string | null;
 	/** On a bundle component, the `product_bundle_item` it was taken from. */
-	bundle_item_id?: number | null;
+	bundle_item_id?: EntityId | null;
 	/**
 	 * The components a bundle explodes into, per `product.md` §8.3.
 	 *
@@ -131,7 +132,7 @@ export type OrderLineInput = {
 };
 
 export type OrderCreateInput = {
-	client_id: number;
+	client_id: EntityId;
 	currency: string;
 	/**
 	 * Rate to the base currency, following `order_line.exchange_rate`.
@@ -234,7 +235,10 @@ export type OrderLineWithLabel = OrderLineEntity & {
  */
 function describeManualDiscounts(set: {
 	discount?: ManualDiscount | null;
-	lines: readonly { variant_id: number; discount?: ManualDiscount | null }[];
+	lines: readonly {
+		variant_id: EntityId;
+		discount?: ManualDiscount | null;
+	}[];
 }): string {
 	const describe = (discount: ManualDiscount | null | undefined) =>
 		discount ? `${discount.type}:${Number(discount.value)}` : '-';
@@ -342,7 +346,7 @@ const PUBLIC_DETAIL_CLIENT_COLUMNS = [
  * §8.3). Summed per variant: two lines of one variant draw on one pool.
  */
 function toStockDemands(lines: readonly OrderLineInput[]): StockDemand[] {
-	const totals = new Map<number, number>();
+	const totals = new Map<EntityId, number>();
 
 	for (const line of lines) {
 		const physical =
@@ -408,7 +412,7 @@ export class OrderService {
 	 * `withDeleted` is false: a document must not be raised against a counterparty somebody
 	 * removed.
 	 */
-	private async checkClientId(clientId: number): Promise<void> {
+	private async checkClientId(clientId: EntityId): Promise<void> {
 		await this.clientService.findById(clientId, false);
 	}
 
@@ -462,7 +466,7 @@ export class OrderService {
 		incoming: {
 			discount?: ManualDiscount | null;
 			lines: readonly {
-				variant_id: number;
+				variant_id: EntityId;
 				discount?: ManualDiscount | null;
 			}[];
 		},
@@ -495,8 +499,8 @@ export class OrderService {
 	 * line's own lives (see `DiscountSnapshot.manual`).
 	 */
 	private async readManualLineDiscounts(
-		orderId: number,
-	): Promise<{ variant_id: number; discount: ManualDiscount | null }[]> {
+		orderId: EntityId,
+	): Promise<{ variant_id: EntityId; discount: ManualDiscount | null }[]> {
 		const rows = await dataSource.getRepository(OrderLineEntity).find({
 			select: { id: true, variant_id: true, discount: true },
 			where: { order_id: orderId },
@@ -564,7 +568,7 @@ export class OrderService {
 	 * before it went, but it is not something new can be sold from.
 	 */
 	private async checkLines(
-		lines: readonly { variant_id: number; product_id: number }[],
+		lines: readonly { variant_id: EntityId; product_id: EntityId }[],
 	): Promise<void> {
 		const variantIds = [...new Set(lines.map((line) => line.variant_id))];
 
@@ -669,14 +673,14 @@ export class OrderService {
 	 */
 	private async writeLines(
 		manager: EntityManager,
-		orderId: number,
+		orderId: EntityId,
 		lines: readonly OrderLineInput[],
 		currency: string,
 		exchangeRate: number,
 	): Promise<void> {
 		const build = (
 			line: Omit<OrderLineInput, 'children'>,
-			parentId: number | null,
+			parentId: EntityId | null,
 		) =>
 			manager.create(OrderLineEntity, <Partial<OrderLineEntity>>{
 				order_id: orderId,
@@ -1049,7 +1053,7 @@ export class OrderService {
 	 * Asked fresh on every read rather than cached with it: the document is raised by `invoice`,
 	 * which does not drop this feature's cache, so a cached answer would outlive the change.
 	 */
-	public isInvoiced(orderId: number): Promise<boolean> {
+	public isInvoiced(orderId: EntityId): Promise<boolean> {
 		return isOrderInvoiced(orderId);
 	}
 
@@ -1057,7 +1061,7 @@ export class OrderService {
 	 * Whether the order may no longer move to another client (`updateData`) - billed, or paid for,
 	 * under the one it names. Asked fresh for the reason `isInvoiced` is.
 	 */
-	public isClientLocked(orderId: number): Promise<boolean> {
+	public isClientLocked(orderId: EntityId): Promise<boolean> {
 		return isOrderClientLocked(orderId);
 	}
 
@@ -1123,7 +1127,7 @@ export class OrderService {
 	 * currency and rate, so the first row answers for the set.
 	 */
 	private async readLineDenomination(
-		orderId: number,
+		orderId: EntityId,
 	): Promise<{ currency: string; exchange_rate: number }> {
 		const current = await dataSource.getRepository(OrderLineEntity).find({
 			select: { id: true, currency: true, exchange_rate: true },
@@ -1154,7 +1158,7 @@ export class OrderService {
 	 */
 	private async replaceLines(
 		manager: EntityManager,
-		orderId: number,
+		orderId: EntityId,
 		lines: readonly OrderLineInput[],
 		currency: string,
 		exchangeRate: number,
@@ -1324,16 +1328,16 @@ export class OrderService {
 		return saved;
 	}
 
-	public async delete(id: number) {
+	public async delete(id: EntityId) {
 		await this.repository.createQuery().filterById(id).delete();
 	}
 
-	public async restore(id: number) {
+	public async restore(id: EntityId) {
 		await this.repository.createQuery().filterById(id).restore();
 	}
 
 	public async findById(
-		id: number,
+		id: EntityId,
 		withDeleted = false,
 	): Promise<OrderEntity> {
 		return this.repository
@@ -1353,7 +1357,7 @@ export class OrderService {
 	 * keep it honest.
 	 */
 	public findReferenceById(
-		id: number,
+		id: EntityId,
 	): Promise<Pick<
 		OrderEntity,
 		'id' | 'ref_code' | 'ref_number' | 'created_at'
@@ -1388,10 +1392,10 @@ export class OrderService {
 	 * cuts rows, not a hydrated collection.
 	 */
 	public async findLatestPurchase(
-		userId: number,
-		productId: number,
-		variantId?: number | null,
-	): Promise<number | null> {
+		userId: EntityId,
+		productId: EntityId,
+		variantId?: EntityId | null,
+	): Promise<EntityId | null> {
 		const line = await this.lineRepository
 			.createQuery()
 			.join('order_line.order', 'order', 'INNER')
@@ -1410,7 +1414,7 @@ export class OrderService {
 		return line?.order_id ?? null;
 	}
 
-	public async getLines(orderId: number): Promise<OrderLineWithLabel[]> {
+	public async getLines(orderId: EntityId): Promise<OrderLineWithLabel[]> {
 		const lines = await this.lineRepository
 			.createQuery()
 			.select([...LINE_COLUMNS, ...LINE_VARIANT_COLUMNS])
@@ -1513,7 +1517,7 @@ export class OrderService {
 	 * order and its client twenty times, and the lines carry their own join for the SKU.
 	 */
 	public async getEntryData(data: {
-		id: number;
+		id: EntityId;
 		withDeleted: boolean;
 	}): Promise<OrderWithLines> {
 		const order = await this.repository
@@ -1539,7 +1543,7 @@ export class OrderService {
 	 * else's id reads as missing (404), so no ownership check is left to a later step. A soft-deleted
 	 * order or client counts as missing too: TypeORM applies `deleted_at IS NULL` to the join.
 	 */
-	public findOwnById(id: number, userId: number): Promise<OrderEntity> {
+	public findOwnById(id: EntityId, userId: EntityId): Promise<OrderEntity> {
 		return this.repository
 			.createQuery()
 			.select(PUBLIC_ENTRY_COLUMNS)
@@ -1557,8 +1561,8 @@ export class OrderService {
 	 * account, while the ownership read has to run on every request regardless.
 	 */
 	public async getOwnEntryData(
-		id: number,
-		userId: number,
+		id: EntityId,
+		userId: EntityId,
 	): Promise<OrderWithLines> {
 		const order = await this.repository
 			.createQuery()
@@ -1589,7 +1593,7 @@ export class OrderService {
 	 */
 	private async attachAwaitingPayment<
 		T extends {
-			id: number;
+			id: EntityId;
 			status: OrderStatus;
 			payment_method: OrderPaymentMethod | null;
 		},
@@ -1606,7 +1610,7 @@ export class OrderService {
 
 		const awaiting =
 			candidates.length === 0
-				? new Set<number>()
+				? new Set<EntityId>()
 				: await findOrdersAwaitingPayment(candidates);
 
 		return orders.map((order) =>
@@ -1625,7 +1629,7 @@ export class OrderService {
 	 */
 	public async findOwnByFilter(
 		data: ValidatorOutput<OrderValidator, 'publicFind'>,
-		userId: number,
+		userId: EntityId,
 	): Promise<
 		[
 			(OrderEntity & {
@@ -1685,7 +1689,7 @@ export class OrderService {
 						},
 					});
 
-		const linesByOrder = new Map<number, OrderLineEntity[]>();
+		const linesByOrder = new Map<EntityId, OrderLineEntity[]>();
 
 		for (const line of lines) {
 			const list = linesByOrder.get(line.order_id) ?? [];

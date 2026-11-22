@@ -5,12 +5,13 @@ import {
 	Index,
 	JoinColumn,
 	ManyToOne,
-	PrimaryGeneratedColumn,
 	UpdateDateColumn,
 } from 'typeorm';
 import type AddressEntity from '@/features/address/address.entity';
 import type { AddressSnapshot } from '@/features/address/address.entity';
 import type ClientEntity from '@/features/client/client.entity';
+import { EntityIdAbstract } from '@/shared/abstracts/entity-id.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export const ClientAddressTypeEnum = {
 	BILLING: 'billing',
@@ -48,12 +49,9 @@ const ENTITY_TABLE_NAME = 'client_address';
 // Not `EntityAbstract`: this table carries no `deleted_at`. There is no restore, so a soft-deleted
 // row would be unreachable - a removed client address is deleted outright. Orders keep their own
 // copy of the address they were placed with, so nothing reads a removed row afterward
-export default class ClientAddressEntity {
+export default class ClientAddressEntity extends EntityIdAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
-
-	@PrimaryGeneratedColumn({ type: 'int' })
-	id!: number;
 
 	@CreateDateColumn({ type: 'timestamp', nullable: false })
 	created_at!: Date;
@@ -62,13 +60,13 @@ export default class ClientAddressEntity {
 	updated_at!: Date | null;
 
 	// No index of its own: leftmost column of `IDX_client_address_client_id`
-	@Column('int', { nullable: false })
-	client_id!: number;
+	@Column('uuid', { nullable: false })
+	client_id!: EntityId;
 
 	// Indexed for the `RESTRICT` check a delete of the address runs against this table
-	@Column('int', { nullable: false })
+	@Column('uuid', { nullable: false })
 	@Index('IDX_client_address_address_id')
-	address_id!: number;
+	address_id!: EntityId;
 
 	@Column({
 		type: 'enum',

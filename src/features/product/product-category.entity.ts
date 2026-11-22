@@ -2,6 +2,7 @@ import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import type CategoryEntity from '@/features/category/category.entity';
 import type ProductEntity from '@/features/product/product.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 const ENTITY_TABLE_NAME = 'product_category';
 
@@ -28,11 +29,11 @@ export default class ProductCategoryEntity extends EntityAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
 
-	@Column('int', { nullable: false })
-	product_id!: number;
+	@Column('uuid', { nullable: false })
+	product_id!: EntityId;
 
-	@Column('int', { nullable: false })
-	category_id!: number;
+	@Column('uuid', { nullable: false })
+	category_id!: EntityId;
 
 	@Column('jsonb', {
 		nullable: true,

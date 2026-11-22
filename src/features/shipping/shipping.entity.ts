@@ -8,6 +8,7 @@ import type WarehouseEntity from '@/features/warehouse/warehouse.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import { numericTransformer } from '@/shared/transformers/numeric.transformer';
 import type { StatusTransitions } from '@/shared/types/common.type';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export const ShippingStatusEnum = {
 	PENDING: 'pending',
@@ -166,9 +167,9 @@ export default class ShippingEntity extends EntityAbstract {
 	 * The order this movement serves, on a `delivery` or a `return`. Null on a `relocation`, which
 	 * answers to `document_ref` instead.
 	 */
-	@Column('int', { nullable: true })
+	@Column('uuid', { nullable: true })
 	@Index('IDX_shipping_order_id')
-	order_id!: number | null;
+	order_id!: EntityId | null;
 
 	/**
 	 * The document behind a `relocation`, which has no table in the system yet - so this is a bare
@@ -176,13 +177,13 @@ export default class ShippingEntity extends EntityAbstract {
 	 *
 	 * Null for `delivery` and `return`, whose document is the order above.
 	 */
-	@Column('int', {
+	@Column('uuid', {
 		nullable: true,
 		comment:
 			'Id of the relocation document; no table for it yet, so no key',
 	})
 	@Index('IDX_shipping_document_ref')
-	document_ref!: number | null;
+	document_ref!: EntityId | null;
 
 	@Column({
 		type: 'enum',
@@ -201,9 +202,9 @@ export default class ShippingEntity extends EntityAbstract {
 	@Index('IDX_shipping_method')
 	method!: ShippingMethod;
 
-	@Column('int', { nullable: true })
+	@Column('uuid', { nullable: true })
 	@Index('IDX_shipping_carrier_id')
-	carrier_id!: number | null;
+	carrier_id!: EntityId | null;
 
 	// PICKUP - where the goods leave from
 	/**
@@ -213,25 +214,25 @@ export default class ShippingEntity extends EntityAbstract {
 	 * makes FIFO possible: a lot cannot be chosen before the warehouse holding it is known, which is
 	 * why stock leaves on the shipping transition rather than on order confirmation.
 	 */
-	@Column('int', { nullable: true })
+	@Column('uuid', { nullable: true })
 	@Index('IDX_shipping_pickup_warehouse_id')
-	pickup_warehouse_id!: number | null;
+	pickup_warehouse_id!: EntityId | null;
 
 	/** Where a `return` is collected from - the client's own address. */
-	@Column('int', { nullable: true })
+	@Column('uuid', { nullable: true })
 	@Index('IDX_shipping_pickup_client_address_id')
-	pickup_client_address_id!: number | null;
+	pickup_client_address_id!: EntityId | null;
 
 	// DESTINATION - where they are going
 	/** Where a `relocation` or a `return` lands. */
-	@Column('int', { nullable: true })
+	@Column('uuid', { nullable: true })
 	@Index('IDX_shipping_destination_warehouse_id')
-	destination_warehouse_id!: number | null;
+	destination_warehouse_id!: EntityId | null;
 
 	/** Where a `delivery` lands - the client's own address. */
-	@Column('int', { nullable: true })
+	@Column('uuid', { nullable: true })
 	@Index('IDX_shipping_destination_client_address_id')
-	destination_client_address_id!: number | null;
+	destination_client_address_id!: EntityId | null;
 
 	/**
 	 * Both ends as they stood when the goods left, written by the transition into `shipped`.

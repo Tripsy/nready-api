@@ -6,6 +6,7 @@ import {
 } from '@/features/exchange-rate/exchange-rate.validator';
 import { createPastDate, formatDate } from '@/helpers/date.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 const exchangeRateValidator = new ExchangeRateValidator('exchange-rate');
 
@@ -21,7 +22,7 @@ const rateDate = formatDate(createPastDate(DAY_IN_SECONDS), 'default', {
 
 export function getExchangeRateEntityMock(): ExchangeRateEntity {
 	return {
-		id: 1,
+		id: mockId(1),
 		currency: 'EUR',
 		base_currency: 'RON',
 		rate: 5.2575,
@@ -42,7 +43,7 @@ export const exchangeRateInputPayloads = {
 		notes: 'Closing rate',
 	},
 	update: {
-		id: 1,
+		id: mockId(1),
 		rate: 5.2601,
 		notes: 'Corrected after the published bulletin',
 	},

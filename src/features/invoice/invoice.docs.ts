@@ -69,7 +69,7 @@ export const docs: Record<
 			notes: `What the document itemizes follows from its scope. ${InvoiceScopeEnum.ORDER}: the order's goods not billed yet by another live document, or exactly the parts named in lines - an order may carry several. ${InvoiceScopeEnum.SHIPPING}: the one movement of goods named by shipping_id, refused when a live document already bills it. ${InvoiceScopeEnum.SUBSCRIPTION}: no lines yet; the period is itemized through POST /invoices/:id/lines. ${documentNote}. The client, currency and exchange rate are the order's own. A reversal is raised through POST /invoices/:id/reverse instead`,
 			body: {
 				order_id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 				scope: {
@@ -83,12 +83,12 @@ export const docs: Record<
 					condition: `defaults to ${InvoiceScopeEnum.ORDER}; the three share the invoice series`,
 				},
 				shipping_id: {
-					type: 'number',
+					type: 'string',
 					required: false,
 					condition: `required when scope is ${InvoiceScopeEnum.SHIPPING}; a shipping of this order`,
 				},
 				subscription_id: {
-					type: 'number',
+					type: 'string',
 					required: false,
 					condition: `required when scope is ${InvoiceScopeEnum.SUBSCRIPTION}`,
 				},
@@ -124,7 +124,7 @@ export const docs: Record<
 			notes: `A document built by hand for a client, with no order behind it: scope ${InvoiceScopeEnum.CUSTOM}, in the base currency. It starts with no lines - write them, the parties and the rest through PUT /invoices/:id, the same as on any draft; issuing refuses it until it has a line. The buyer is frozen from the client's billing address when there is one; otherwise it is stated through PUT /invoices/:id before issuing. ${documentNote}`,
 			body: {
 				client_id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 				due_at: {
@@ -256,16 +256,16 @@ export const docs: Record<
 					required: false,
 					values: Object.values(OrderDirectionEnum),
 				},
-				'filter[client_id]': { type: 'number', required: false },
-				'filter[order_id]': { type: 'number', required: false },
-				'filter[subscription_id]': { type: 'number', required: false },
+				'filter[client_id]': { type: 'string', required: false },
+				'filter[order_id]': { type: 'string', required: false },
+				'filter[subscription_id]': { type: 'string', required: false },
 				'filter[shipping_id]': {
-					type: 'number',
+					type: 'string',
 					required: false,
 					condition: 'the movement a shipping invoice bills',
 				},
 				'filter[parent_invoice_id]': {
-					type: 'number',
+					type: 'string',
 					required: false,
 				},
 				'filter[is_reversal]': {
@@ -341,7 +341,7 @@ export const docs: Record<
 			notes: "The movement's order record decides what the document itemizes: with an order named, the order's goods not billed yet; with none, a custom invoice - a single line worth what the movement was worth, billed to the client's billing address. The client's captured money is then allocated against their open documents, oldest due first - so the movement settles this document only if nothing older is still open. Refused with 409 when the order is already billed in full, or when a movement with no order has already been allocated",
 			params: {
 				cash_flow_id: {
-					type: 'number' as const,
+					type: 'string' as const,
 					required: true,
 					condition: 'the cash flow id',
 				},
@@ -447,7 +447,7 @@ export const docs: Record<
 			params: {
 				id: idParam,
 				line_id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 					condition: 'a line of this invoice',
 				},
@@ -487,7 +487,7 @@ export const docs: Record<
 			params: {
 				id: idParam,
 				line_id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 					condition: 'a line of this invoice',
 				},
@@ -511,7 +511,7 @@ export const docs: Record<
 				id: idParam,
 			},
 			body: {
-				cash_flow_id: { type: 'number', required: true },
+				cash_flow_id: { type: 'string', required: true },
 				amount: {
 					type: 'number',
 					required: true,
@@ -553,7 +553,7 @@ export const docs: Record<
 			params: {
 				id: idParam,
 				payment_id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 					condition: 'an allocation of this invoice',
 				},

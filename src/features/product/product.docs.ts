@@ -33,21 +33,21 @@ const contentsFormat =
 	'[{ language: string; slug: string; label: string; description?: string; meta?: { title?: string; description?: string; keywords?: string } }]';
 
 const variantsFormat =
-	'[{ sku: string; barcode?: string; position?: number; is_default: boolean; track_stock?: boolean; low_stock_threshold?: number; allow_backorder?: boolean; cost_price?: number; prices: [{ currency: string; sale_price: number; reference_price?: number; min_price?: number }]; attributes?: [{ attribute_label_id: number; value_term_id?: number; value_numeric?: number; value_text?: string; value_boolean?: boolean }] }]';
+	'[{ sku: string; barcode?: string; position?: number; is_default: boolean; track_stock?: boolean; low_stock_threshold?: number; allow_backorder?: boolean; cost_price?: number; prices: [{ currency: string; sale_price: number; reference_price?: number; min_price?: number }]; attributes?: [{ attribute_label_id: EntityId; value_term_id?: EntityId; value_numeric?: number; value_text?: string; value_boolean?: boolean }] }]';
 
 const attributesFormat =
-	'[{ attribute_label_id: number; value_term_id?: number; value_numeric?: number; value_text?: string; value_boolean?: boolean }]';
+	'[{ attribute_label_id: EntityId; value_term_id?: EntityId; value_numeric?: number; value_text?: string; value_boolean?: boolean }]';
 
 const availabilitiesFormat =
 	'[{ day_of_week?: number; starts_at?: string; ends_at?: string }]';
 
 const optionGroupsFormat =
-	'[{ label_id: number; min_select?: number; max_select?: number; position?: number; options: [{ label_id: number; position?: number; is_default?: boolean; prices: [{ currency: string; price_delta: number }] }] }]';
+	'[{ label_id: EntityId; min_select?: number; max_select?: number; position?: number; options: [{ label_id: EntityId; position?: number; is_default?: boolean; prices: [{ currency: string; price_delta: number }] }] }]';
 
-const bundleGroupsFormat = '[{ label_id: number; position?: number }]';
+const bundleGroupsFormat = '[{ label_id: EntityId; position?: number }]';
 
 const bundleItemsFormat =
-	'[{ variant_id: number; quantity?: number; position?: number; group_label_id?: number; is_optional?: boolean; is_default?: boolean; prices: [{ currency: string; price_delta: number }] }]';
+	'[{ variant_id: EntityId; quantity?: number; position?: number; group_label_id?: EntityId; is_optional?: boolean; is_default?: boolean; prices: [{ currency: string; price_delta: number }] }]';
 
 /** Shared by `create` and `update`; only `required` differs between the two. */
 function manageBody(required: boolean) {
@@ -99,7 +99,7 @@ function manageBody(required: boolean) {
 			required: false,
 			condition: 'permanent withdrawal from the catalog',
 		},
-		brand_id: { type: 'number' as const, required: false },
+		brand_id: { type: 'string' as const, required: false },
 		contents: {
 			type: 'array' as const,
 			required,
@@ -193,7 +193,7 @@ export const docs: Record<
 			notes: 'Omitting language returns every translation, which is what the editing form needs',
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -220,7 +220,7 @@ export const docs: Record<
 			notes: 'Provide at least one body parameter. An omitted branch is left alone; an empty array clears it. A contents array replaces the stored entries for the languages it carries',
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -240,7 +240,7 @@ export const docs: Record<
 		request: {
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -258,7 +258,7 @@ export const docs: Record<
 		request: {
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -277,7 +277,7 @@ export const docs: Record<
 			notes: `Only these transitions are allowed: ${workflowTransitionNote}`,
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 				workflow: {
@@ -367,14 +367,14 @@ export const docs: Record<
 						required: false,
 						values: Object.values(ProductCompositionEnum),
 					},
-					brand_id: { type: 'number', required: false },
+					brand_id: { type: 'string', required: false },
 					category_id: {
-						type: 'number',
+						type: 'string',
 						required: false,
 						condition:
 							'matches the category and everything beneath it',
 					},
-					tag_id: { type: 'number', required: false },
+					tag_id: { type: 'string', required: false },
 					language: {
 						type: 'enum',
 						required: false,

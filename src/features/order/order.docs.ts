@@ -112,7 +112,7 @@ export const docs: Record<keyof typeof orderController, ApiInputDocumentation> =
 				notes: `The order starts as \`${OrderStatusEnum.PENDING}\`, exactly as a checkout's order does, and is given its reference straight away, allocated from the \`ORD\` series - an order canceled before confirmation leaves that number spent. A \`client_id\` that resolves to nothing answers 404. The exchange rate is not a field: it is read from the published \`exchange-rate\` series as of now, and a currency with no rate published answers 400. ${lineNote}`,
 				body: {
 					client_id: {
-						type: 'number',
+						type: 'string',
 						required: true,
 						condition:
 							'must resolve to a client that is not deleted',
@@ -171,7 +171,7 @@ export const docs: Record<keyof typeof orderController, ApiInputDocumentation> =
 				notes: `A deleted order is only visible to a caller holding order delete. \`is_invoiced\` says whether a live goods document bills the order - read fresh on every call, never cached - and while it is true a new line set answers 409. \`is_client_locked\` says whether the order is invoiced or has a payment filed under it - pending, authorized or completed - and while it is true a different \`client_id\` answers 409. A bundle is a header line at price 0 with its components after it, each carrying \`parent_id\` and the \`bundle_item_id\` it was taken from. ${totalsNote}`,
 				params: {
 					id: {
-						type: 'number',
+						type: 'string',
 						required: true,
 					},
 				},
@@ -191,12 +191,12 @@ export const docs: Record<keyof typeof orderController, ApiInputDocumentation> =
 				notes: `Provide at least one of client_id, billing_address, currency, notes or lines. \`billing_address\` is the order's own copy - { details, postal_code, address_city, address_region, country_code, notes }, each optional, null clearing it - and changing it answers 409 once the order is invoiced, since the invoice froze its billing details. \`country_code\` is ISO 3166-1 alpha-2; the country's name is filled in from it, and a code no country carries answers 400. Moving the order to another client without sending one clears the address on file. A \`status\` in the body is ignored - it has its own route. **\`lines\` replaces the whole set and is accepted only while the order is \`${OrderStatusEnum.PENDING}\`** - checkout orders included; on any other status it answers 409, because the business has accepted what the document says. Every line re-states its \`options\` as ids and they are re-resolved from the catalog, so a checkout line keeps its options only when they are sent back. \`currency\` is refused without \`lines\`: no order row holds a currency - each line carries its own - so re-denominating a document means re-stating its prices in the new one, and nothing here converts a figure. Its rate is read from the published \`exchange-rate\` series as of the order's \`created_at\`, never taken from the body`,
 				params: {
 					id: {
-						type: 'number',
+						type: 'string',
 						required: true,
 					},
 				},
 				body: {
-					client_id: { type: 'number', required: false },
+					client_id: { type: 'string', required: false },
 					billing_address: {
 						type: 'object',
 						required: false,
@@ -240,7 +240,7 @@ export const docs: Record<keyof typeof orderController, ApiInputDocumentation> =
 				notes: 'Soft delete, whatever the status. The reference is released with it - `IDX_order_ref` ignores deleted rows - but the series counter does not move back, so the number is not handed out again',
 				params: {
 					id: {
-						type: 'number',
+						type: 'string',
 						required: true,
 					},
 				},
@@ -258,7 +258,7 @@ export const docs: Record<keyof typeof orderController, ApiInputDocumentation> =
 			request: {
 				params: {
 					id: {
-						type: 'number',
+						type: 'string',
 						required: true,
 					},
 				},
@@ -318,8 +318,8 @@ export const docs: Record<keyof typeof orderController, ApiInputDocumentation> =
 						default: OrderDirectionEnum.DESC,
 					},
 					filter: {
-						id: { type: 'number', required: false },
-						client_id: { type: 'number', required: false },
+						id: { type: 'string', required: false },
+						client_id: { type: 'string', required: false },
 						term: {
 							type: 'string',
 							required: false,
@@ -359,7 +359,7 @@ export const docs: Record<keyof typeof orderController, ApiInputDocumentation> =
 				notes: `Allowed moves: ${statusTransitionNote}. Nothing returns to \`${OrderStatusEnum.PENDING}\`, and \`${OrderStatusEnum.COMPLETED}\` is terminal - a fulfilled order that goes wrong is corrected on the money, not on the document. Repeating the current status answers 400, an illegal move 409`,
 				params: {
 					id: {
-						type: 'number',
+						type: 'string',
 						required: true,
 					},
 					status: {

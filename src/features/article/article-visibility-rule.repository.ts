@@ -2,6 +2,7 @@ import type { Repository } from 'typeorm';
 import dataSource from '@/config/data-source.config';
 import ArticleVisibilityRuleEntity from '@/features/article/article-visibility-rule.entity';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * The rule minus its secret. Everything the gate needs to decide, except the password itself:
@@ -36,7 +37,7 @@ export const ArticleVisibilityRuleRepository = dataSource
 		 * gate must read as "restricted", not as "unrestricted".
 		 */
 		async findFields(
-			article_id: number,
+			article_id: EntityId,
 		): Promise<ArticleVisibilityRuleFields | null> {
 			const entry = await this.createQuery()
 				.select([
@@ -68,7 +69,7 @@ export const ArticleVisibilityRuleRepository = dataSource
 		 * already pays for a bcrypt compare, so there is no reason to keep a credential hash
 		 * in Redis for the requests that never supply one.
 		 */
-		async findPassword(article_id: number): Promise<string | null> {
+		async findPassword(article_id: EntityId): Promise<string | null> {
 			const entry = await this.createQuery()
 				.select(['article_visibility_rule.password'])
 				.filterBy('article_visibility_rule.article_id', article_id)

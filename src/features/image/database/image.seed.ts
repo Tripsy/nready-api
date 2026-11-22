@@ -17,6 +17,7 @@ import ImageEntity, {
 } from '@/features/image/image.entity';
 import ProductEntity from '@/features/product/product.entity';
 import ProductVariantEntity from '@/features/product/product-variant.entity';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * Cover art for the public site: article covers, product covers, and the per-variant galleries
@@ -61,23 +62,23 @@ const PRODUCT_COVER_SIZE = 1000;
  * the file it expects, so the fetch script and this row agree without passing state between
  * two projects.
  */
-export function buildArticleCoverPath(articleId: number): string {
+export function buildArticleCoverPath(articleId: EntityId): string {
 	return `article/${articleId}/cover.jpg`;
 }
 
-export function buildProductCoverPath(productId: number): string {
+export function buildProductCoverPath(productId: EntityId): string {
 	return `product/${productId}/cover.jpg`;
 }
 
-export function buildVariantCoverPath(variantId: number): string {
+export function buildVariantCoverPath(variantId: EntityId): string {
 	return `product_variant/${variantId}/cover.jpg`;
 }
 
 /** One section's worth of work: which rows to cover, and what to record for each. */
 type CoverPlan = {
 	section: ImageSection;
-	entityIds: number[];
-	buildPath: (entityId: number) => string;
+	entityIds: EntityId[];
+	buildPath: (entityId: EntityId) => string;
 	width: number;
 	height: number;
 };

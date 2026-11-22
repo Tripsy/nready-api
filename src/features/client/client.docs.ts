@@ -57,7 +57,7 @@ const sharedBody = {
 /** The account a client belongs to; one account may hold several clients, a client one account. */
 const updateAccountBody = {
 	user_id: {
-		type: 'number' as const,
+		type: 'string' as const,
 		required: true,
 		condition:
 			'the account the client belongs to; null unlinks it. Checkout accepts only a client linked to the caller, and a review counts as a verified purchase only through such a client',
@@ -129,7 +129,7 @@ export const docs: Record<
 			notes: "Only the branch the client belongs to is returned - the other branch's fields are stripped, and person_identification_number is never selected. `user` carries the linked account's id, name and email, or null",
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -149,7 +149,7 @@ export const docs: Record<
 			notes: `Provide at least one body parameter besides client_type, which falls back to the stored value when omitted - so switching a client between the two branches means sending the target branch's fields with it. ${branchNote}. ${duplicateNote}. status and the linked account each have their own route`,
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -185,7 +185,7 @@ export const docs: Record<
 		request: {
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -203,7 +203,7 @@ export const docs: Record<
 		request: {
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -286,7 +286,7 @@ export const docs: Record<
 						values: Object.values(ClientStatusEnum),
 					},
 					user_id: {
-						type: 'number',
+						type: 'string',
 						required: false,
 						condition: 'the clients linked to one account',
 					},
@@ -316,7 +316,7 @@ export const docs: Record<
 			notes: 'The account is granted here rather than through update, which no longer accepts user_id. Send null to unlink. An account that does not exist answers 404',
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -337,7 +337,7 @@ export const docs: Record<
 			notes: `Only these transitions are allowed: ${statusTransitionNote}`,
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 				status: {

@@ -15,6 +15,7 @@ import type {
 import type OrderLineEntity from '@/features/order/order-line.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import type { StatusTransitions } from '@/shared/types/common.type';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export const OrderStatusEnum = {
 	PENDING: 'pending', // Placed - by a checkout or from the back office - and awaiting acceptance; lines may still be adjusted
@@ -113,9 +114,9 @@ export default class OrderEntity extends EntityAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
 
-	@Column('int', { nullable: false })
+	@Column('uuid', { nullable: false })
 	@Index('IDX_order_client_id')
-	client_id!: number;
+	client_id!: EntityId;
 
 	@Column('varchar', {
 		length: 10,

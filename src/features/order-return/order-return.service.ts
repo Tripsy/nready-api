@@ -57,11 +57,13 @@ import {
 } from '@/features/shipping/shipping.service';
 import ShippingLineEntity from '@/features/shipping/shipping-line.entity';
 import { runInBackground } from '@/helpers/background.helper';
+import { compareIds } from '@/helpers/id.helper';
 import { roundMoney } from '@/helpers/shop.helper';
 import {
 	assertValidStatusTransition,
 	cleanEntityCache,
 } from '@/shared/abstracts/service.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 const ENTRY_COLUMNS = [
@@ -155,8 +157,8 @@ export type OrderReturnWithLines = Omit<OrderReturnEntity, 'lines'> & {
 
 /** One variant of an order as the return form is drawn from. */
 export type ReturnableLine = {
-	variant_id: number;
-	product_id: number;
+	variant_id: EntityId;
+	product_id: EntityId;
 	sku: string | null;
 	label: string | null;
 	returnable: number;
@@ -194,7 +196,7 @@ export class OrderReturnService {
 	) {}
 
 	public findById(
-		id: number,
+		id: EntityId,
 		withDeleted: boolean,
 	): Promise<OrderReturnEntity> {
 		return this.repository
@@ -211,9 +213,9 @@ export class OrderReturnService {
 	 */
 	private async computeReturnable(
 		manager: EntityManager,
-		orderId: number,
-		excludeReturnId?: number,
-	): Promise<Map<number, number>> {
+		orderId: EntityId,
+		excludeReturnId?: EntityId,
+	): Promise<Map<EntityId, number>> {
 		const returnable = await this.shippingService.getReturnableByVariant(
 			orderId,
 			manager,
@@ -243,10 +245,10 @@ export class OrderReturnService {
 			.select('line.variant_id', 'variant_id')
 			.addSelect('SUM(line.quantity)', 'quantity')
 			.groupBy('line.variant_id')
-			.getRawMany<{ variant_id: number; quantity: string }>();
+			.getRawMany<{ variant_id: EntityId; quantity: string }>();
 
 		for (const row of claimed) {
-			const variantId = Number(row.variant_id);
+			const variantId = row.variant_id;
 			const left = roundMoney(
 				(returnable.get(variantId) ?? 0) - Number(row.quantity),
 			);
@@ -267,7 +269,7 @@ export class OrderReturnService {
 	 */
 	private async resolveDeadline(
 		manager: EntityManager,
-		orderId: number,
+		orderId: EntityId,
 	): Promise<Date | null> {
 		const row = await manager
 			.getRepository(ShippingEntity)
@@ -298,8 +300,8 @@ export class OrderReturnService {
 	/** Every variant the order sold, with the product it belongs to - the pair a line is keyed on. */
 	private async orderVariants(
 		manager: EntityManager,
-		orderId: number,
-	): Promise<Map<number, number>> {
+		orderId: EntityId,
+	): Promise<Map<EntityId, EntityId>> {
 		const lines = await manager.getRepository(OrderLineEntity).find({
 			select: { variant_id: true, product_id: true },
 			where: { order_id: orderId },
@@ -313,7 +315,7 @@ export class OrderReturnService {
 	 *
 	 * What the return form offers: one entry per variant with something left to send back.
 	 */
-	public async getReturnable(orderId: number): Promise<ReturnableSummary> {
+	public async getReturnable(orderId: EntityId): Promise<ReturnableSummary> {
 		const manager = dataSource.manager;
 
 		const [returnable, variants, deadline] = await Promise.all([
@@ -326,13 +328,24 @@ export class OrderReturnService {
 
 		return {
 			deadline: deadline,
-			lines: [...returnable.entries()].map(([variantId, quantity]) => ({
-				variant_id: variantId,
-				product_id: variants.get(variantId) ?? 0,
-				sku: labels.get(variantId)?.sku ?? null,
-				label: labels.get(variantId)?.label ?? null,
-				returnable: quantity,
-			})),
+			// Every returnable variant was sold on the order, so the lookup always finds it
+			lines: [...returnable.entries()].flatMap(
+				([variantId, quantity]) => {
+					const productId = variants.get(variantId);
+
+					return productId === undefined
+						? []
+						: [
+								{
+									variant_id: variantId,
+									product_id: productId,
+									sku: labels.get(variantId)?.sku ?? null,
+									label: labels.get(variantId)?.label ?? null,
+									returnable: quantity,
+								},
+							];
+				},
+			),
 		};
 	}
 
@@ -342,10 +355,12 @@ export class OrderReturnService {
 	 */
 	private async resolveLines(
 		manager: EntityManager,
-		orderId: number,
+		orderId: EntityId,
 		lines: ReturnLinePayload,
-		excludeReturnId?: number,
-	): Promise<{ variant_id: number; product_id: number; quantity: number }[]> {
+		excludeReturnId?: EntityId,
+	): Promise<
+		{ variant_id: EntityId; product_id: EntityId; quantity: number }[]
+	> {
 		const [returnable, variants] = await Promise.all([
 			this.computeReturnable(manager, orderId, excludeReturnId),
 			this.orderVariants(manager, orderId),
@@ -387,7 +402,7 @@ export class OrderReturnService {
 	/** Locks the order for the rest of the caller's transaction, so its returns are judged one at a time. */
 	private async lockOrder(
 		manager: EntityManager,
-		orderId: number,
+		orderId: EntityId,
 	): Promise<OrderEntity> {
 		const order = await manager.getRepository(OrderEntity).findOne({
 			select: { id: true, status: true },
@@ -415,7 +430,7 @@ export class OrderReturnService {
 	 */
 	public async create(
 		data: ValidatorOutput<OrderReturnValidator, 'create'>,
-		options: { userId: number | null; enforceWindow: boolean },
+		options: { userId: EntityId | null; enforceWindow: boolean },
 	): Promise<OrderReturnEntity> {
 		return dataSource.transaction(async (manager) => {
 			const order = await this.lockOrder(manager, data.order_id);
@@ -485,10 +500,10 @@ export class OrderReturnService {
 	/** Replaces a return's lines; removed outright, as `shipping_line` is - they are a statement, not a record. */
 	private async writeLines(
 		manager: EntityManager,
-		orderReturnId: number,
+		orderReturnId: EntityId,
 		lines: readonly {
-			variant_id: number;
-			product_id: number;
+			variant_id: EntityId;
+			product_id: EntityId;
 			quantity: number;
 		}[],
 	): Promise<void> {
@@ -746,10 +761,10 @@ export class OrderReturnService {
 	 * (409 otherwise). Untracked goods have no lot to re-enter, so they may come back anywhere.
 	 */
 	private async resolveDestination(
-		orderId: number,
+		orderId: EntityId,
 		lines: readonly OrderReturnLineEntity[],
-		stated: number | undefined,
-	): Promise<number> {
+		stated: EntityId | undefined,
+	): Promise<EntityId> {
 		const rows = await dataSource
 			.getRepository(ShippingLineEntity)
 			.createQueryBuilder('line')
@@ -771,20 +786,20 @@ export class OrderReturnService {
 			.groupBy('shipping.pickup_warehouse_id')
 			.addGroupBy('line.variant_id')
 			.getRawMany<{
-				warehouse_id: number;
-				variant_id: number;
+				warehouse_id: EntityId;
+				variant_id: EntityId;
 				quantity: string;
 			}>();
 
 		const sent = new Map<string, number>();
-		const sentBySite = new Map<number, number>();
+		const sentBySite = new Map<EntityId, number>();
 		const wanted = new Map(
 			lines.map((line) => [line.variant_id, Number(line.quantity)]),
 		);
 
 		for (const row of rows) {
-			const warehouseId = Number(row.warehouse_id);
-			const variantId = Number(row.variant_id);
+			const warehouseId = row.warehouse_id;
+			const variantId = row.variant_id;
 			const quantity = Number(row.quantity);
 
 			sent.set(`${warehouseId}:${variantId}`, quantity);
@@ -801,7 +816,7 @@ export class OrderReturnService {
 		const destination =
 			stated ??
 			[...sentBySite.entries()].sort(
-				(a, b) => b[1] - a[1] || a[0] - b[0],
+				(a, b) => b[1] - a[1] || compareIds(a[0], b[0]),
 			)[0]?.[0];
 
 		if (!destination) {
@@ -916,7 +931,7 @@ export class OrderReturnService {
 	 * all it was asked to do. The status move is judged under the row lock, so a repeated
 	 * announcement drafts nothing twice.
 	 */
-	public async receiveForMovement(shippingId: number): Promise<void> {
+	public async receiveForMovement(shippingId: EntityId): Promise<void> {
 		const entry = await this.repository
 			.createQuery()
 			.filterBy('shipping_id', shippingId)
@@ -959,7 +974,7 @@ export class OrderReturnService {
 	 * is not reversible, and the operator corrects it instead. Refused once drafts exist, so the
 	 * same goods are not taken back twice through this path; the reversal caps hold regardless.
 	 */
-	public async draftRefund(id: number): Promise<number[]> {
+	public async draftRefund(id: EntityId): Promise<EntityId[]> {
 		const entry = await this.findById(id, false);
 
 		if (
@@ -1001,8 +1016,8 @@ export class OrderReturnService {
 
 	/** The issued originals among the given documents, oldest first - the only ones reversible. */
 	private async issuedOriginals(
-		invoiceIds: readonly number[],
-	): Promise<{ id: number }[]> {
+		invoiceIds: readonly EntityId[],
+	): Promise<{ id: EntityId }[]> {
 		if (invoiceIds.length === 0) {
 			return [];
 		}
@@ -1025,7 +1040,7 @@ export class OrderReturnService {
 	private async draftGoodsReversals(
 		entry: OrderReturnEntity,
 		reference: string,
-	): Promise<number[]> {
+	): Promise<EntityId[]> {
 		const owed = await this.returnedByVariant(entry);
 
 		const documents = await this.issuedOriginals(
@@ -1044,7 +1059,7 @@ export class OrderReturnService {
 			).map((line) => [line.id, line.variant_id]),
 		);
 
-		const raised: number[] = [];
+		const raised: EntityId[] = [];
 
 		for (const document of documents) {
 			const [lines, reversed] = await Promise.all([
@@ -1053,7 +1068,7 @@ export class OrderReturnService {
 			]);
 
 			const selection: {
-				invoice_line_id: number;
+				invoice_line_id: EntityId;
 				quantity: number;
 				amount: undefined;
 			}[] = [];
@@ -1122,7 +1137,7 @@ export class OrderReturnService {
 	private async draftDeliveryFeeReversals(
 		entry: OrderReturnEntity,
 		reference: string,
-	): Promise<number[]> {
+	): Promise<EntityId[]> {
 		const deliveries = await dataSource.getRepository(ShippingEntity).find({
 			select: { id: true },
 			where: {
@@ -1149,7 +1164,7 @@ export class OrderReturnService {
 			sources.map((source) => source.invoice_id),
 		);
 
-		const raised: number[] = [];
+		const raised: EntityId[] = [];
 
 		for (const document of documents) {
 			const [lines, reversed] = await Promise.all([
@@ -1195,8 +1210,8 @@ export class OrderReturnService {
 	/** What came back, per variant: the movement's lines, or the request when it has none. */
 	private async returnedByVariant(
 		entry: OrderReturnEntity,
-	): Promise<Map<number, number>> {
-		const rows: { variant_id: number; quantity: number }[] =
+	): Promise<Map<EntityId, number>> {
+		const rows: { variant_id: EntityId; quantity: number }[] =
 			entry.shipping_id
 				? await dataSource.getRepository(ShippingLineEntity).find({
 						select: { variant_id: true, quantity: true },
@@ -1207,7 +1222,7 @@ export class OrderReturnService {
 						where: { order_return_id: entry.id },
 					});
 
-		const totals = new Map<number, number>();
+		const totals = new Map<EntityId, number>();
 
 		for (const row of rows) {
 			totals.set(
@@ -1225,7 +1240,7 @@ export class OrderReturnService {
 	 * Soft delete, only for a return that moved nothing: still requested, rejected or canceled. One
 	 * that was approved holds a movement, and possibly stock and refunds, that point back at it.
 	 */
-	public async delete(id: number): Promise<void> {
+	public async delete(id: EntityId): Promise<void> {
 		const entry = await this.findById(id, false);
 
 		if (
@@ -1246,7 +1261,7 @@ export class OrderReturnService {
 	 * A restored request claims its lines again, so it is refused when the order no longer has
 	 * them to give - another return took them meanwhile.
 	 */
-	public async restore(id: number): Promise<void> {
+	public async restore(id: EntityId): Promise<void> {
 		const entry = await this.findById(id, true);
 
 		if (
@@ -1276,7 +1291,7 @@ export class OrderReturnService {
 	 * is a courtesy on top of a change already made, and a template or queue failure must not turn
 	 * a committed approval into an error response. Failures are logged.
 	 */
-	private notifyBuyer(id: number, event: OrderReturnEmailEvent): void {
+	private notifyBuyer(id: EntityId, event: OrderReturnEmailEvent): void {
 		runInBackground(
 			this.sendBuyerEmail(id, event),
 			`order-return.email.${event} #${id}`,
@@ -1284,7 +1299,7 @@ export class OrderReturnService {
 	}
 
 	private async sendBuyerEmail(
-		id: number,
+		id: EntityId,
 		event: OrderReturnEmailEvent,
 	): Promise<void> {
 		const entry = await this.getEntryData({ id: id, withDeleted: false });
@@ -1303,7 +1318,7 @@ export class OrderReturnService {
 	 * the default one. Null when the client has neither; a back-office client may have no email.
 	 */
 	private async resolveRecipient(
-		clientId: number | undefined,
+		clientId: EntityId | undefined,
 	): Promise<OrderReturnRecipient | null> {
 		if (!clientId) {
 			return null;
@@ -1351,8 +1366,8 @@ export class OrderReturnService {
 	 * payload is cached per id alone.
 	 */
 	private async resolveLabels(
-		variantIds: readonly number[],
-	): Promise<Map<number, { sku: string | null; label: string | null }>> {
+		variantIds: readonly EntityId[],
+	): Promise<Map<EntityId, { sku: string | null; label: string | null }>> {
 		if (variantIds.length === 0) {
 			return new Map();
 		}
@@ -1400,8 +1415,8 @@ export class OrderReturnService {
 
 	/** The lines of several returns at once, labeled, keyed by return. */
 	private async getLinesFor(
-		orderReturnIds: readonly number[],
-	): Promise<Map<number, OrderReturnLineWithLabel[]>> {
+		orderReturnIds: readonly EntityId[],
+	): Promise<Map<EntityId, OrderReturnLineWithLabel[]>> {
 		if (orderReturnIds.length === 0) {
 			return new Map();
 		}
@@ -1417,7 +1432,7 @@ export class OrderReturnService {
 			lines.map((line) => line.variant_id),
 		);
 
-		const grouped = new Map<number, OrderReturnLineWithLabel[]>();
+		const grouped = new Map<EntityId, OrderReturnLineWithLabel[]>();
 
 		for (const line of lines) {
 			const list = grouped.get(line.order_return_id) ?? [];
@@ -1441,7 +1456,7 @@ export class OrderReturnService {
 	 * The return with its order reference, its movement's progress and its lines.
 	 */
 	public async getEntryData(data: {
-		id: number;
+		id: EntityId;
 		withDeleted: boolean;
 	}): Promise<OrderReturnWithLines> {
 		const entry = await this.repository
@@ -1490,8 +1505,8 @@ export class OrderReturnService {
 	 * movement's tracking. Ownership is proven through the order (`findOwnById`, 404 otherwise).
 	 */
 	public async findForOwnOrder(
-		orderId: number,
-		userId: number,
+		orderId: EntityId,
+		userId: EntityId,
 	): Promise<OrderReturnWithLines[]> {
 		await this.orderService.findOwnById(orderId, userId);
 
@@ -1518,8 +1533,8 @@ export class OrderReturnService {
 
 	/** @description Used in `returnable` method from `OrderReturnPublicController` */
 	public async getOwnReturnable(
-		orderId: number,
-		userId: number,
+		orderId: EntityId,
+		userId: EntityId,
 	): Promise<ReturnableSummary> {
 		await this.orderService.findOwnById(orderId, userId);
 
@@ -1529,7 +1544,7 @@ export class OrderReturnService {
 	/** @description Used in `create` method from `OrderReturnPublicController` */
 	public async createOwn(
 		data: ValidatorOutput<OrderReturnValidator, 'publicCreate'>,
-		userId: number,
+		userId: EntityId,
 	): Promise<OrderReturnEntity> {
 		await this.orderService.findOwnById(data.order_id, userId);
 
@@ -1546,9 +1561,9 @@ export class OrderReturnService {
 	 * the order the caller owns *and* its id, so a foreign id answers 404 like a missing one.
 	 */
 	public async cancelOwn(
-		orderId: number,
-		id: number,
-		userId: number,
+		orderId: EntityId,
+		id: EntityId,
+		userId: EntityId,
 	): Promise<void> {
 		await this.orderService.findOwnById(orderId, userId);
 

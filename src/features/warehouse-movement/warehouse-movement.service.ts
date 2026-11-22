@@ -2,9 +2,10 @@ import { type EntityManager, In, IsNull, Not } from 'typeorm';
 import dataSource from '@/config/data-source.config';
 import { lang } from '@/config/message.setup';
 import { CustomError } from '@/exceptions';
-import { GrnStatusEnum } from '@/features/grn/grn.entity';
+import GrnEntity, { GrnStatusEnum } from '@/features/grn/grn.entity';
 import type { LotMovement, StockReceipt } from '@/features/grn/grn.hooks';
 import { grnService } from '@/features/grn/grn.service';
+import GrnItemEntity from '@/features/grn/grn-item.entity';
 import ProductVariantEntity from '@/features/product/product-variant.entity';
 import ShippingEntity, {
 	ShippingScopeEnum,
@@ -16,11 +17,13 @@ import ShippingLineEntity, {
 } from '@/features/shipping/shipping-line.entity';
 import { stockReservationService } from '@/features/warehouse-movement/stock-reservation.service';
 import WarehouseMovementEntity, {
+	type WarehouseMovementSource,
 	WarehouseMovementSourceEnum,
 	WarehouseMovementTypeEnum,
 } from '@/features/warehouse-movement/warehouse-movement.entity';
 import { getWarehouseMovementRepository } from '@/features/warehouse-movement/warehouse-movement.repository';
 import type { WarehouseMovementValidator } from '@/features/warehouse-movement/warehouse-movement.validator';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 const ENTRY_COLUMNS = [
@@ -40,6 +43,18 @@ const ENTRY_COLUMNS = [
 ];
 
 const WAREHOUSE_COLUMNS = ['warehouse.id', 'warehouse.code', 'warehouse.name'];
+
+/**
+ * The document a movement's source line belongs to - what a reader opens from the ledger.
+ * `source_id` names a line (`grn_item`, `shipping_line`) or the adjustment itself, so the line
+ * kinds resolve to their parent here. `reference` is what the document is cited by: the GRN
+ * number, the movement's tracking number, none for an adjustment. Null when the source row has
+ * gone since - the ledger keeps no foreign key to it.
+ */
+export type MovementSourceDocument = {
+	id: EntityId;
+	reference: string | null;
+} | null;
 
 // Joined LEFT, so a movement is never dropped from the ledger for what its variant became since
 const VARIANT_COLUMNS = ['variant.id', 'variant.sku', 'variant.product_id'];
@@ -103,7 +118,7 @@ export class WarehouseMovementService {
 	 */
 	public async findLotMovement(
 		manager: EntityManager,
-		grnItemIds: number[],
+		grnItemIds: EntityId[],
 	): Promise<LotMovement | null> {
 		if (grnItemIds.length === 0) {
 			return null;
@@ -149,7 +164,7 @@ export class WarehouseMovementService {
 	 */
 	public async reverseReceipts(
 		manager: EntityManager,
-		grnItemIds: number[],
+		grnItemIds: EntityId[],
 		occurredAt: Date,
 	): Promise<void> {
 		if (grnItemIds.length === 0) {
@@ -243,7 +258,7 @@ export class WarehouseMovementService {
 						source_type: WarehouseMovementSourceEnum.SHIPPING_LINE,
 						source_id: piece.key,
 						occurred_at: occurredAt,
-						warehouse_id: move.pickup_warehouse_id as number,
+						warehouse_id: move.pickup_warehouse_id as EntityId,
 						variant_id: piece.variant_id,
 						grn_item_id: piece.grn_item_id,
 						reversal_of_id: null,
@@ -407,7 +422,7 @@ export class WarehouseMovementService {
 	/** The `sale` rows a delivery posted that no row reverses yet, oldest first. */
 	private async openSales(
 		manager: EntityManager,
-		shippingId: number,
+		shippingId: EntityId,
 	): Promise<WarehouseMovementEntity[]> {
 		const lineIds = (
 			await manager.getRepository(ShippingLineEntity).find({
@@ -553,10 +568,10 @@ export class WarehouseMovementService {
 		);
 
 		// What each lot can still take back for this order, and the lots in the order to fill them
-		const room = new Map<number, number>();
+		const room = new Map<EntityId, number>();
 		const lotsByVariant = new Map<
-			number,
-			{ grn_item_id: number; unit_cost_base: number }[]
+			EntityId,
+			{ grn_item_id: EntityId; unit_cost_base: number }[]
 		>();
 
 		for (const sale of sales) {
@@ -601,7 +616,7 @@ export class WarehouseMovementService {
 		}
 
 		const occurredAt = options.occurredAt ?? new Date();
-		const restocked: { grn_item_id: number; qty: number }[] = [];
+		const restocked: { grn_item_id: EntityId; qty: number }[] = [];
 		const rows: WarehouseMovementEntity[] = [];
 
 		for (const line of lines) {
@@ -682,11 +697,11 @@ export class WarehouseMovementService {
 	/** Every line ever written on the order's movements of one scope, deleted movements included. */
 	private async orderLineIds(
 		manager: EntityManager,
-		orderId: number,
+		orderId: EntityId,
 		scope:
 			| typeof ShippingScopeEnum.DELIVERY
 			| typeof ShippingScopeEnum.RETURN,
-	): Promise<number[]> {
+	): Promise<EntityId[]> {
 		const rows = await manager
 			.getRepository(ShippingLineEntity)
 			.createQueryBuilder('line')
@@ -699,9 +714,9 @@ export class WarehouseMovementService {
 			.where('shipping.order_id = :orderId', { orderId: orderId })
 			.andWhere('shipping.scope = :scope', { scope: scope })
 			.select('line.id', 'id')
-			.getRawMany<{ id: number }>();
+			.getRawMany<{ id: EntityId }>();
 
-		return rows.map((row) => Number(row.id));
+		return rows.map((row) => row.id);
 	}
 
 	/**
@@ -720,7 +735,7 @@ export class WarehouseMovementService {
 		limit: number = 500,
 		manager: EntityManager = dataSource.manager,
 	): Promise<{ shippings: number }> {
-		const rows = await manager.query<{ id: number }[]>(
+		const rows = await manager.query<{ id: EntityId }[]>(
 			`
 				SELECT shipping.id FROM shipping
 				WHERE shipping.deleted_at IS NULL
@@ -788,7 +803,7 @@ export class WarehouseMovementService {
 	/** A movement's lines whose variant tracks stock. */
 	private async trackedLines(
 		manager: EntityManager,
-		shippingId: number,
+		shippingId: EntityId,
 	): Promise<ShippingLineEntity[]> {
 		const lines = await manager.getRepository(ShippingLineEntity).find({
 			select: {
@@ -826,9 +841,9 @@ export class WarehouseMovementService {
 	}
 
 	private sumByVariant(
-		rows: readonly { variant_id: number; qty: number }[],
-	): Map<number, number> {
-		const totals = new Map<number, number>();
+		rows: readonly { variant_id: EntityId; qty: number }[],
+	): Map<EntityId, number> {
+		const totals = new Map<EntityId, number>();
 
 		for (const row of rows) {
 			totals.set(
@@ -859,9 +874,9 @@ export class WarehouseMovementService {
 	): Promise<{ grn_items: number }> {
 		const rows = await manager.query<
 			{
-				grn_item_id: number;
-				warehouse_id: number;
-				variant_id: number;
+				grn_item_id: EntityId;
+				warehouse_id: EntityId;
+				variant_id: EntityId;
 				qty: string;
 				unit_cost_base: string;
 				received_at: Date;
@@ -940,15 +955,15 @@ export class WarehouseMovementService {
 	}
 
 	/** @description Used in `read` method from controller */
-	public findById(id: number): Promise<WarehouseMovementEntity> {
+	public findById(id: EntityId): Promise<WarehouseMovementEntity> {
 		return this.createLedgerQuery().filterById(id).firstOrFail();
 	}
 
 	/** @description Used in `find` method from controller */
-	public findByFilter(
+	public async findByFilter(
 		data: ValidatorOutput<WarehouseMovementValidator, 'find'>,
 	) {
-		return this.createLedgerQuery()
+		const [entries, total] = await this.createLedgerQuery()
 			.filterBy('warehouse_id', data.filter.warehouse_id)
 			.filterBy('variant_id', data.filter.variant_id)
 			.filterBy('grn_item_id', data.filter.grn_item_id)
@@ -964,8 +979,97 @@ export class WarehouseMovementService {
 			.orderBy(data.order_by, data.direction)
 			.pagination(data.page, data.limit)
 			.all(true);
+
+		return [await this.withSourceDocuments(entries), total] as const;
+	}
+
+	/**
+	 * Attaches `source_document` to each row. One query per line kind on the page, not per row:
+	 * a page holds at most `limit` source ids, and each lookup is a primary-key `IN` joined to
+	 * its parent.
+	 */
+	private async withSourceDocuments(
+		entries: WarehouseMovementEntity[],
+	): Promise<
+		(WarehouseMovementEntity & {
+			source_document: MovementSourceDocument;
+		})[]
+	> {
+		const idsOf = (sourceType: WarehouseMovementSource): EntityId[] => [
+			...new Set(
+				entries
+					.filter((entry) => entry.source_type === sourceType)
+					.map((entry) => entry.source_id)
+					.filter((id): id is EntityId => id !== null),
+			),
+		];
+
+		const grnItemIds = idsOf(WarehouseMovementSourceEnum.GRN_ITEM);
+		const shippingLineIds = idsOf(
+			WarehouseMovementSourceEnum.SHIPPING_LINE,
+		);
+
+		const [grnItems, shippingLines] = await Promise.all([
+			grnItemIds.length
+				? dataSource
+						.getRepository(GrnItemEntity)
+						.createQueryBuilder('grn_item')
+						.innerJoin(GrnEntity, 'grn', 'grn.id = grn_item.grn_id')
+						.select('grn_item.id', 'line_id')
+						.addSelect('grn.id', 'document_id')
+						.addSelect(
+							"grn.ref_code || '-' || grn.ref_number",
+							'reference',
+						)
+						.where('grn_item.id IN (:...ids)', { ids: grnItemIds })
+						.getRawMany<RawSourceDocument>()
+				: [],
+			shippingLineIds.length
+				? dataSource
+						.getRepository(ShippingLineEntity)
+						.createQueryBuilder('shipping_line')
+						.innerJoin(
+							ShippingEntity,
+							'shipping',
+							'shipping.id = shipping_line.shipping_id',
+						)
+						.select('shipping_line.id', 'line_id')
+						.addSelect('shipping.id', 'document_id')
+						.addSelect('shipping.tracking_number', 'reference')
+						.where('shipping_line.id IN (:...ids)', {
+							ids: shippingLineIds,
+						})
+						.getRawMany<RawSourceDocument>()
+				: [],
+		]);
+
+		const documents = new Map<EntityId, MovementSourceDocument>(
+			[...grnItems, ...shippingLines].map((row) => [
+				row.line_id,
+				{ id: row.document_id, reference: row.reference },
+			]),
+		);
+
+		return entries.map((entry) => {
+			let sourceDocument: MovementSourceDocument = null;
+
+			if (entry.source_id) {
+				sourceDocument =
+					entry.source_type === WarehouseMovementSourceEnum.ADJUSTMENT
+						? { id: entry.source_id, reference: null }
+						: (documents.get(entry.source_id) ?? null);
+			}
+
+			return Object.assign(entry, { source_document: sourceDocument });
+		});
 	}
 }
+
+type RawSourceDocument = {
+	line_id: EntityId;
+	document_id: EntityId;
+	reference: string | null;
+};
 
 export const warehouseMovementService = new WarehouseMovementService(
 	getWarehouseMovementRepository(),

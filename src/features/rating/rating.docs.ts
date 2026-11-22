@@ -58,7 +58,7 @@ export const docs: Record<
 			notes: 'A rating cast without an account is anchored to a hashed origin address, which is not returned - a guest rating carries nothing beyond what it says about the target',
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -77,7 +77,7 @@ export const docs: Record<
 			notes: 'Permanent - this table has no `deleted_at`, so there is no restore. A soft-deleted row would go on holding its slot under both uniques, barring that address from ever rating the target again, and would keep counting in the aggregates',
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -142,7 +142,7 @@ export const docs: Record<
 						required: false,
 						values: Object.values(RatingEntityTypeEnum),
 					},
-					entity_id: { type: 'number', required: false },
+					entity_id: { type: 'string', required: false },
 					type: {
 						type: 'enum',
 						required: false,
@@ -155,7 +155,7 @@ export const docs: Record<
 						condition: 'only emoji ratings carry one',
 					},
 					user_id: {
-						type: 'number',
+						type: 'string',
 						required: false,
 						condition:
 							'guest ratings have none and are never matched',

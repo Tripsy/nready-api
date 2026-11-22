@@ -31,6 +31,7 @@ import PlaceEntity, {
 } from '@/features/place/place.entity';
 import { pickValuesFromObject } from '@/helpers/objects.helper';
 import { cleanEntityCache } from '@/shared/abstracts/service.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 /** The place an address sits in, named - each level null when the chain does not reach it. */
@@ -62,7 +63,7 @@ export class ClientAddressService {
 	 * answers with the owning feature's 404 instead. `withDeleted` is false for both: an address
 	 * must not be filed against a removed client, nor point at a removed address.
 	 */
-	private async checkAddressId(address_id: number): Promise<void> {
+	private async checkAddressId(address_id: EntityId): Promise<void> {
 		await this.addressService.findById(address_id, false);
 	}
 
@@ -88,7 +89,7 @@ export class ClientAddressService {
 	 * @description Update any data
 	 */
 	public async update(
-		data: DeepPartial<ClientAddressEntity> & { id: number },
+		data: DeepPartial<ClientAddressEntity> & { id: EntityId },
 	): Promise<ClientAddressEntity> {
 		const saved = await this.repository.save(data);
 
@@ -117,11 +118,11 @@ export class ClientAddressService {
 	 * Hard delete - the table has no `deleted_at`. The address it pointed at stays: it may be filed
 	 * against other clients, and it is the address feature's to remove.
 	 */
-	public async delete(id: number): Promise<void> {
+	public async delete(id: EntityId): Promise<void> {
 		await this.repository.createQuery().filterById(id).delete(false);
 	}
 
-	public findById(id: number): Promise<ClientAddressEntity> {
+	public findById(id: EntityId): Promise<ClientAddressEntity> {
 		return this.repository.createQuery().filterById(id).firstOrFail();
 	}
 
@@ -200,7 +201,7 @@ export class ClientAddressService {
 	 * Null rather than a 404: a buyer whose address resolves to no country simply fails every
 	 * country condition, which is what failing closed means here - it is not a broken request.
 	 */
-	public async getCountryCodeById(id: number): Promise<string | null> {
+	public async getCountryCodeById(id: EntityId): Promise<string | null> {
 		const entry = await this.createPlaceQuery(Configuration.language())
 			.filterById(id)
 			.first();
@@ -227,7 +228,7 @@ export class ClientAddressService {
 	 * Unpaginated, newest first: a client holds a handful of addresses.
 	 */
 	public async findOwn(
-		clientId: number,
+		clientId: EntityId,
 		type: ClientAddressType | undefined,
 		language: string,
 	): Promise<ClientAddressWithPlace[]> {
@@ -242,7 +243,7 @@ export class ClientAddressService {
 
 	/** One address in the shape `findOwn` lists it, for a write to answer with. */
 	public async getOwnEntry(
-		id: number,
+		id: EntityId,
 		language: string,
 	): Promise<ClientAddressWithPlace> {
 		const entry = await this.createPlaceQuery(language)
@@ -258,8 +259,8 @@ export class ClientAddressService {
 	 * applies `deleted_at IS NULL` to the joined client.
 	 */
 	public findOwnById(
-		id: number,
-		userId: number,
+		id: EntityId,
+		userId: EntityId,
 	): Promise<ClientAddressEntity> {
 		return this.repository
 			.createQuery()
@@ -349,8 +350,8 @@ export class ClientAddressService {
 	 * billing addresses, so somebody else's id answers the same 404 as a missing one.
 	 */
 	public async getBillingCopy(
-		id: number,
-		clientId: number,
+		id: EntityId,
+		clientId: EntityId,
 	): Promise<ClientAddressSnapshot & { country_code: string | null }> {
 		const entry = await this.createPlaceQuery(Configuration.language())
 			.filterById(id)
@@ -416,8 +417,8 @@ export class ClientAddressService {
 	 * absent from the map: the shipment's key is `SET NULL`, but a read can race a removal.
 	 */
 	public async describeByIds(
-		ids: readonly number[],
-	): Promise<Map<number, string>> {
+		ids: readonly EntityId[],
+	): Promise<Map<EntityId, string>> {
 		const unique = [...new Set(ids)];
 
 		if (!unique.length) {
@@ -428,7 +429,7 @@ export class ClientAddressService {
 			.filterBy('id', unique, 'IN')
 			.all();
 
-		const labels = new Map<number, string>();
+		const labels = new Map<EntityId, string>();
 
 		for (const entry of entries) {
 			const snapshot = this.toSnapshot(entry);
@@ -457,7 +458,7 @@ export class ClientAddressService {
 	 * address it is was settled when the order was placed. Nothing here is a permission check.
 	 */
 	public async getSnapshotById(
-		id: number,
+		id: EntityId,
 		manager?: EntityManager,
 	): Promise<ClientAddressSnapshot> {
 		const entry = await this.createPlaceQuery(
@@ -482,7 +483,7 @@ export class ClientAddressService {
 	 * is building.
 	 */
 	public async getBillingSnapshotForClient(
-		clientId: number,
+		clientId: EntityId,
 	): Promise<ClientAddressSnapshot | null> {
 		const entry = await this.createPlaceQuery(Configuration.language())
 			.filterBy('client_address.client_id', clientId)
@@ -505,8 +506,8 @@ export class ClientAddressService {
 	 * whichever language the shopper happened to browse in.
 	 */
 	public async getOrderSnapshot(
-		id: number,
-		clientId: number,
+		id: EntityId,
+		clientId: EntityId,
 		type: ClientAddressType,
 	): Promise<ClientAddressSnapshot> {
 		const entry = await this.createPlaceQuery(Configuration.language())
@@ -523,7 +524,7 @@ export class ClientAddressService {
 	 *
 	 * `language` selects the translation the joined city is returned in.
 	 */
-	public async getEntryData(data: { id: number; language: string }) {
+	public async getEntryData(data: { id: EntityId; language: string }) {
 		const [entry, placed] = await Promise.all([
 			this.readEntry(data),
 			// The flattened copy the order form fills a billing address from
@@ -537,7 +538,7 @@ export class ClientAddressService {
 		});
 	}
 
-	private async readEntry(data: { id: number; language: string }) {
+	private async readEntry(data: { id: EntityId; language: string }) {
 		return await this.repository
 			.createQuery()
 			.joinAndSelect('client_address.client', 'client', 'LEFT')

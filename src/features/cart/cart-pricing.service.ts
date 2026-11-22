@@ -40,6 +40,7 @@ import TermContentEntity from '@/features/term/term-content.entity';
 import { vatRateService } from '@/features/vat-rate/vat-rate.service';
 import { roundMoney } from '@/helpers/shop.helper';
 import { resolveStockAvailability } from '@/shared/registries/stock-availability.registry';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * Why a line cannot be bought as it stands. The line is still returned when one of these is set -
@@ -71,15 +72,15 @@ export type CartLineIssue =
  * computes a document's totals.
  */
 export type CartLine = {
-	id: number;
+	id: EntityId;
 	/** The bundle line this one is a component of; null on every line a shopper added directly. */
-	parent_id: number | null;
+	parent_id: EntityId | null;
 	/** Which `product_bundle_item` this line materializes; null unless it is a component. */
-	bundle_item_id: number | null;
+	bundle_item_id: EntityId | null;
 	/** True on a bundle header, so a client knows to render its components beneath it. */
 	is_bundle: boolean;
-	variant_id: number;
-	product_id: number;
+	variant_id: EntityId;
+	product_id: EntityId;
 	sku: string | null;
 	/**
 	 * The product's name in the served content language, so a basket can say what a line is -
@@ -169,7 +170,7 @@ export type CartPricingContext = {
 	 * ⚠️ A client-scoped discount therefore appears only once the order is raised, which is the
 	 * same point every other figure is frozen at.
 	 */
-	clientId?: number | null;
+	clientId?: EntityId | null;
 	/**
 	 * ISO 3166-1 alpha-2, from the country the billing address resolves to, for
 	 * `conditions.applicable_countries`.
@@ -258,7 +259,7 @@ export class CartPricingService {
 			now,
 		);
 
-		const childrenByParent = new Map<number, CartItemEntity[]>();
+		const childrenByParent = new Map<EntityId, CartItemEntity[]>();
 
 		for (const item of items) {
 			if (item.parent_id === null) {
@@ -466,7 +467,7 @@ export class CartPricingService {
 			...new Set(
 				items
 					.map((item) => item.bundle_item_id)
-					.filter((id): id is number => id !== null),
+					.filter((id): id is EntityId => id !== null),
 			),
 		];
 		// Only the lines a shopper added directly can be a bundle; a component never is, since
@@ -544,7 +545,7 @@ export class CartPricingService {
 							'content.term_id AS term_id',
 							'content.value AS value',
 						])
-						.getRawMany<{ term_id: number; value: string }>(),
+						.getRawMany<{ term_id: EntityId; value: string }>(),
 			/*
 			 * Every question each product asks, so a line whose answers stopped fitting - a
 			 * required group added after the item went in, an answer moved to another group -
@@ -570,7 +571,7 @@ export class CartPricingService {
 			vatRateService.resolverFor(now),
 		]);
 
-		const categoriesByProduct = new Map<number, number[]>();
+		const categoriesByProduct = new Map<EntityId, EntityId[]>();
 
 		for (const row of productCategories) {
 			const list = categoriesByProduct.get(row.product_id) ?? [];
@@ -579,7 +580,7 @@ export class CartPricingService {
 			categoriesByProduct.set(row.product_id, list);
 		}
 
-		const brandByProduct = new Map<number, number | null>();
+		const brandByProduct = new Map<EntityId, EntityId | null>();
 
 		for (const variant of variants) {
 			if (variant.product) {
@@ -658,7 +659,7 @@ export class CartPricingService {
 			return lines;
 		}
 
-		const requested = new Map<number, number>();
+		const requested = new Map<EntityId, number>();
 
 		for (const line of physical) {
 			requested.set(
@@ -667,7 +668,7 @@ export class CartPricingService {
 			);
 		}
 
-		const short = new Set<number>();
+		const short = new Set<EntityId>();
 
 		for (const [variantId, quantity] of requested) {
 			const stock = availability.get(variantId);
@@ -888,7 +889,7 @@ export class CartPricingService {
 			}
 
 			const component = composition.byId.get(
-				child.bundle_item_id as number,
+				child.bundle_item_id as EntityId,
 			);
 
 			if (!component) {

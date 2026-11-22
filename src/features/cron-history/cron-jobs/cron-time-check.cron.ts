@@ -6,6 +6,7 @@ import {
 	formatDate,
 } from '@/helpers/date.helper';
 import { loadEmailTemplate, queueEmail } from '@/providers/email.provider';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export const SCHEDULE_EXPRESSION = '03 02 * * *';
 export const EXPECTED_RUN_TIME = 3; // seconds
@@ -49,7 +50,7 @@ const cronTimeCheck = async () => {
 		[key: string]: {
 			date: string;
 			entries: Array<{
-				id: number;
+				id: EntityId;
 				label: string;
 			}>;
 		};
@@ -59,7 +60,7 @@ const cronTimeCheck = async () => {
 
 	if (entries.length > 0) {
 		entries.forEach(
-			(entry: { id: number; label: string; start_at: Date }) => {
+			(entry: { id: EntityId; label: string; start_at: Date }) => {
 				const start_at = formatDate(entry.start_at) as string;
 
 				if (!results[start_at]) {

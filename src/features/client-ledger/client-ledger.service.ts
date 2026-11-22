@@ -15,6 +15,7 @@ import ClientLedgerEntity, {
 import { getClientLedgerRepository } from '@/features/client-ledger/client-ledger.repository';
 import type { ClientLedgerValidator } from '@/features/client-ledger/client-ledger.validator';
 import { roundMoney } from '@/helpers/shop.helper';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 /** The money that moved with a client in one currency. */
@@ -102,7 +103,9 @@ export class ClientLedgerService {
 	 * Money that changed hands, not a debt: nothing here says what the client owes, only what they
 	 * paid and what was paid back to them.
 	 */
-	public async getBalance(clientId: number): Promise<ClientLedgerBalance[]> {
+	public async getBalance(
+		clientId: EntityId,
+	): Promise<ClientLedgerBalance[]> {
 		const rows = await this.repository
 			.createQueryBuilder('client_ledger')
 			.select('client_ledger.currency', 'currency')
@@ -177,7 +180,7 @@ export class ClientLedgerService {
 		limit: number = 500,
 		manager: EntityManager = dataSource.manager,
 	): Promise<{ cash_flows: number }> {
-		const cashFlows = await manager.query<{ id: number }[]>(
+		const cashFlows = await manager.query<{ id: EntityId }[]>(
 			`
 				SELECT cash_flow.id FROM cash_flow
 				WHERE cash_flow.deleted_at IS NULL

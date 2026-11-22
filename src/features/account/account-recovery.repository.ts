@@ -21,7 +21,7 @@ export const getAccountRecoveryRepository = () =>
 			return new AccountRecoveryQuery(this);
 		},
 
-		// removeRecoveryById(id: number): void {
+		// removeRecoveryById(id: EntityId): void {
 		//     void this.createQuery()
 		//         .filterById(id)
 		//         .delete(false);

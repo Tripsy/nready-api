@@ -6,29 +6,30 @@ import {
 	GONE_DELIVERY_SQL,
 	RESERVING_STATUSES,
 } from '@/features/warehouse-movement/stock-reservation.service';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /** A lot whose ledger no longer explains its balance. */
 export type LotDrift = {
-	grn_item_id: number;
-	variant_id: number;
-	warehouse_id: number;
+	grn_item_id: EntityId;
+	variant_id: EntityId;
+	warehouse_id: EntityId;
 	qty_remaining: number; // What the lot says it holds
 	ledger: number; // What its movements add up to
 };
 
 /** An order whose reservation disagrees with what it still needs. */
 export type ReservationDrift = {
-	order_id: number;
+	order_id: EntityId;
 	order_status: string;
-	variant_id: number;
+	variant_id: EntityId;
 	reserved: number; // What `stock_reservation` holds
 	expected: number; // Tracked lines, less what its deliveries already took away
 };
 
 /** A tracked variant's figures, across active warehouses and live orders. */
 export type VariantAvailability = {
-	variant_id: number;
-	product_id: number;
+	variant_id: EntityId;
+	product_id: EntityId;
 	sku: string;
 	on_hand: number;
 	reserved: number;
@@ -78,8 +79,8 @@ const AVAILABILITY_CTE = `
 `;
 
 type AvailabilityRow = {
-	variant_id: number;
-	product_id: number;
+	variant_id: EntityId;
+	product_id: EntityId;
 	sku: string;
 	on_hand: string;
 	reserved: string;
@@ -89,8 +90,8 @@ type AvailabilityRow = {
 
 function toAvailability(row: AvailabilityRow): VariantAvailability {
 	return {
-		variant_id: Number(row.variant_id),
-		product_id: Number(row.product_id),
+		variant_id: row.variant_id,
+		product_id: row.product_id,
 		sku: row.sku,
 		on_hand: Number(row.on_hand),
 		reserved: Number(row.reserved),
@@ -127,9 +128,9 @@ export class StockReportService {
 	): Promise<LotDrift[]> {
 		const rows = await manager.query<
 			{
-				grn_item_id: number;
-				variant_id: number;
-				warehouse_id: number;
+				grn_item_id: EntityId;
+				variant_id: EntityId;
+				warehouse_id: EntityId;
 				qty_remaining: string;
 				ledger: string;
 			}[]
@@ -154,9 +155,9 @@ export class StockReportService {
 		);
 
 		return rows.map((row) => ({
-			grn_item_id: Number(row.grn_item_id),
-			variant_id: Number(row.variant_id),
-			warehouse_id: Number(row.warehouse_id),
+			grn_item_id: row.grn_item_id,
+			variant_id: row.variant_id,
+			warehouse_id: row.warehouse_id,
 			qty_remaining: Number(row.qty_remaining),
 			ledger: Number(row.ledger),
 		}));
@@ -181,9 +182,9 @@ export class StockReportService {
 	): Promise<ReservationDrift[]> {
 		const rows = await manager.query<
 			{
-				order_id: number;
+				order_id: EntityId;
 				order_status: string;
-				variant_id: number;
+				variant_id: EntityId;
 				reserved: string;
 				expected: string;
 			}[]
@@ -243,9 +244,9 @@ export class StockReportService {
 		);
 
 		return rows.map((row) => ({
-			order_id: Number(row.order_id),
+			order_id: row.order_id,
 			order_status: row.order_status,
-			variant_id: Number(row.variant_id),
+			variant_id: row.variant_id,
 			reserved: Number(row.reserved),
 			expected: Number(row.expected),
 		}));

@@ -5,10 +5,11 @@ import {
 	Index,
 	JoinColumn,
 	ManyToOne,
-	PrimaryGeneratedColumn,
 	UpdateDateColumn,
 } from 'typeorm';
 import type { PageMeta } from '@/shared/abstracts/entity.abstract';
+import { EntityIdAbstract } from '@/shared/abstracts/entity-id.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type CategoryEntity from './category.entity';
 import { type CategoryType, CategoryTypeEnum } from './category.entity';
 
@@ -32,12 +33,9 @@ const ENTITY_TABLE_NAME = 'category_content';
 @Index('IDX_category_content_slug_language', ['type', 'slug', 'language'], {
 	unique: true,
 })
-export default class CategoryContentEntity {
+export default class CategoryContentEntity extends EntityIdAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
-
-	@PrimaryGeneratedColumn({ type: 'int' })
-	id!: number;
 
 	@CreateDateColumn({ type: 'timestamp', nullable: false })
 	created_at!: Date;
@@ -45,8 +43,8 @@ export default class CategoryContentEntity {
 	@UpdateDateColumn({ type: 'timestamp', nullable: true })
 	updated_at!: Date | null;
 
-	@Column('int', { nullable: false })
-	category_id!: number;
+	@Column('uuid', { nullable: false })
+	category_id!: EntityId;
 
 	@Column('varchar', {
 		length: 3,

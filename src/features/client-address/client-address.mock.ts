@@ -7,14 +7,15 @@ import {
 } from '@/features/client-address/client-address.validator';
 import { createPastDate } from '@/helpers/date.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 const clientAddressValidator = new ClientAddressValidator('client-address');
 
 export function getClientAddressEntityMock(): ClientAddressEntity {
 	return Object.assign(new ClientAddressEntity(), {
-		id: 1,
-		client_id: 1,
-		address_id: 1,
+		id: mockId(1),
+		client_id: mockId(1),
+		address_id: mockId(1),
 		type: ClientAddressTypeEnum.DELIVERY,
 		details: 'Ap. 12, floor 3',
 		notes: 'Ring twice, entrance from the back',
@@ -25,14 +26,14 @@ export function getClientAddressEntityMock(): ClientAddressEntity {
 
 export const clientAddressInputPayloads = {
 	create: {
-		client_id: 1,
-		address_id: 1,
+		client_id: mockId(1),
+		address_id: mockId(1),
 		type: ClientAddressTypeEnum.DELIVERY,
 		details: 'Ap. 12, floor 3',
 		notes: 'Ring twice, entrance from the back',
 	},
 	update: {
-		id: 1,
+		id: mockId(1),
 		type: ClientAddressTypeEnum.BILLING,
 		details: 'Ap. 14, floor 4',
 	},
@@ -42,7 +43,7 @@ export const clientAddressInputPayloads = {
 		order_by: OrderByEnum.ID,
 		direction: OrderDirectionEnum.DESC,
 		filter: {
-			client_id: 1,
+			client_id: mockId(1),
 			type: ClientAddressTypeEnum.DELIVERY,
 			term: 'Florio',
 		},

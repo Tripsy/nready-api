@@ -13,18 +13,14 @@ export class ArticleQuery extends RepositoryAbstract<ArticleEntity> {
 
 	filterByTerm(term?: string): this {
 		if (term) {
-			if (!Number.isNaN(Number(term)) && term.trim() !== '') {
-				this.filterBy('article.id', Number(term));
-			} else {
-				if (term.length >= Configuration.get('filter.termMinLength')) {
-					const tsTerm = this.prepareTsTerm(term);
+			if (term.length >= Configuration.get('filter.termMinLength')) {
+				const tsTerm = this.prepareTsTerm(term);
 
-					if (tsTerm !== '') {
-						this.filterRaw(
-							`to_tsvector('simple', COALESCE(content.title, '') || ' ' || COALESCE(content.brief, '')) @@ to_tsquery('simple', :term || ':*')`,
-							{ term: tsTerm },
-						);
-					}
+				if (tsTerm !== '') {
+					this.filterRaw(
+						`to_tsvector('simple', COALESCE(content.title, '') || ' ' || COALESCE(content.brief, '')) @@ to_tsquery('simple', :term || ':*')`,
+						{ term: tsTerm },
+					);
 				}
 			}
 		}

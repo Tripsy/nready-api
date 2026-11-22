@@ -4,12 +4,14 @@ import OrderEntity, { OrderStatusEnum } from '@/features/order/order.entity';
 import ProductVariantEntity from '@/features/product/product-variant.entity';
 import StockReservationEntity from '@/features/warehouse-movement/stock-reservation.entity';
 import { StockReservationService } from '@/features/warehouse-movement/stock-reservation.service';
+import type { EntityId } from '@/shared/types/entity-id.type';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
-type Variant = { id: number; sku: string; allow_backorder: boolean };
+type Variant = { id: EntityId; sku: string; allow_backorder: boolean };
 type Reservation = {
-	id: number;
-	order_id: number;
-	variant_id: number;
+	id: EntityId;
+	order_id: EntityId;
+	variant_id: EntityId;
 	quantity: number;
 };
 
@@ -28,7 +30,7 @@ function fakeManager(state: {
 	const queries: { sql: string; parameters: unknown[] }[] = [];
 
 	const sumBuilder = (
-		answer: () => { variant_id: number; value: number }[],
+		answer: () => { variant_id: EntityId; value: number }[],
 		key: string,
 	) => {
 		const builder = {
@@ -52,7 +54,10 @@ function fakeManager(state: {
 	const reservationRepository = {
 		find: jest.fn(
 			async (options: {
-				where: { order_id: number; variant_id?: { value: number[] } };
+				where: {
+					order_id: EntityId;
+					variant_id?: { value: EntityId[] };
+				};
 			}) =>
 				state.reservations.filter(
 					(row) =>
@@ -64,7 +69,7 @@ function fakeManager(state: {
 				),
 		),
 		delete: jest.fn(
-			async (criteria: { order_id?: number; id?: number }) => {
+			async (criteria: { order_id?: EntityId; id?: EntityId }) => {
 				state.reservations = state.reservations.filter((row) =>
 					criteria.id !== undefined
 						? row.id !== criteria.id
@@ -74,11 +79,14 @@ function fakeManager(state: {
 		),
 		insert: jest.fn(async (rows: Omit<Reservation, 'id'>[]) => {
 			state.reservations.push(
-				...rows.map((row) => ({ ...row, id: nextId++ })),
+				...rows.map((row) => ({ ...row, id: mockId(nextId++) })),
 			);
 		}),
 		update: jest.fn(
-			async (criteria: { id: number }, values: { quantity: number }) => {
+			async (
+				criteria: { id: EntityId },
+				values: { quantity: number },
+			) => {
 				const row = state.reservations.find(
 					(entry) => entry.id === criteria.id,
 				);
@@ -90,9 +98,9 @@ function fakeManager(state: {
 		),
 		// `sumReserved`: every other order's reservation, per variant
 		createQueryBuilder: jest.fn(() => {
-			let excluded: number | undefined;
+			let excluded: EntityId | undefined;
 			const builder = sumBuilder(() => {
-				const totals = new Map<number, number>();
+				const totals = new Map<EntityId, number>();
 
 				for (const row of state.reservations) {
 					if (row.order_id !== excluded) {
@@ -111,7 +119,7 @@ function fakeManager(state: {
 
 			builder.andWhere.mockImplementation(((
 				_condition: string,
-				parameters?: { excludeOrderId?: number },
+				parameters?: { excludeOrderId?: EntityId },
 			) => {
 				excluded = parameters?.excludeOrderId ?? excluded;
 
@@ -132,7 +140,7 @@ function fakeManager(state: {
 				return {
 					find: jest.fn(
 						async (options: {
-							where: { id: { value: number[] } };
+							where: { id: { value: EntityId[] } };
 						}) =>
 							state.variants.filter((variant) =>
 								options.where.id.value.includes(variant.id),
@@ -146,7 +154,7 @@ function fakeManager(state: {
 					findOne: jest.fn(async () =>
 						state.orderStatus === null
 							? null
-							: { id: 1, status: state.orderStatus },
+							: { id: mockId(1), status: state.orderStatus },
 					),
 				};
 			}
@@ -157,7 +165,7 @@ function fakeManager(state: {
 					sumBuilder(
 						() =>
 							Object.entries(state.onHand).map(([id, value]) => ({
-								variant_id: Number(id),
+								variant_id: mockId(Number(id)),
 								value,
 							})),
 						'on_hand',
@@ -173,7 +181,7 @@ function fakeManager(state: {
 	return { manager: manager as unknown as EntityManager, state, queries };
 }
 
-const quantities = (rows: Reservation[], orderId: number) =>
+const quantities = (rows: Reservation[], orderId: EntityId) =>
 	Object.fromEntries(
 		rows
 			.filter((row) => row.order_id === orderId)
@@ -186,11 +194,18 @@ describe('StockReservationService', () => {
 	// Variant 7: 10 on hand, 6 promised to order 2. Variant 8 sells on backorder. 99 is untracked.
 	const picture = () => ({
 		variants: [
-			{ id: 7, sku: 'TSH-M-RED', allow_backorder: false },
-			{ id: 8, sku: 'MUG-BLK', allow_backorder: true },
+			{ id: mockId(7), sku: 'TSH-M-RED', allow_backorder: false },
+			{ id: mockId(8), sku: 'MUG-BLK', allow_backorder: true },
 		],
 		onHand: { 7: 10, 8: 0 } as Record<number, number>,
-		reservations: [{ id: 1, order_id: 2, variant_id: 7, quantity: 6 }],
+		reservations: [
+			{
+				id: mockId(1),
+				order_id: mockId(2),
+				variant_id: mockId(7),
+				quantity: 6,
+			},
+		],
 	});
 
 	beforeEach(() => {
@@ -201,34 +216,38 @@ describe('StockReservationService', () => {
 		it('reserves what others leave available, dropping untracked goods', async () => {
 			const { manager, state } = fakeManager(picture());
 
-			await service.reserveForOrder(manager, 1, [
-				{ variant_id: 7, quantity: 4 },
-				{ variant_id: 99, quantity: 3 },
+			await service.reserveForOrder(manager, mockId(1), [
+				{ variant_id: mockId(7), quantity: 4 },
+				{ variant_id: mockId(99), quantity: 3 },
 			]);
 
-			expect(quantities(state.reservations, 1)).toEqual({ 7: 4 });
+			expect(quantities(state.reservations, mockId(1))).toEqual({
+				[mockId(7)]: 4,
+			});
 		});
 
 		it('refuses growing past what others leave available', async () => {
 			const { manager, state } = fakeManager(picture());
 
 			await expect(
-				service.reserveForOrder(manager, 1, [
-					{ variant_id: 7, quantity: 5 },
+				service.reserveForOrder(manager, mockId(1), [
+					{ variant_id: mockId(7), quantity: 5 },
 				]),
 			).rejects.toMatchObject({ statusCode: 409 });
 			// Nothing was rewritten
-			expect(quantities(state.reservations, 1)).toEqual({});
+			expect(quantities(state.reservations, mockId(1))).toEqual({});
 		});
 
 		it('lets a backorder variant grow past its stock', async () => {
 			const { manager, state } = fakeManager(picture());
 
-			await service.reserveForOrder(manager, 1, [
-				{ variant_id: 8, quantity: 5 },
+			await service.reserveForOrder(manager, mockId(1), [
+				{ variant_id: mockId(8), quantity: 5 },
 			]);
 
-			expect(quantities(state.reservations, 1)).toEqual({ 8: 5 });
+			expect(quantities(state.reservations, mockId(1))).toEqual({
+				[mockId(8)]: 5,
+			});
 		});
 
 		// An edit asking for what the order already held is never refused, whatever stock did since
@@ -236,52 +255,58 @@ describe('StockReservationService', () => {
 			const start = picture();
 			start.onHand[7] = 1;
 			start.reservations.push({
-				id: 2,
-				order_id: 1,
-				variant_id: 7,
+				id: mockId(2),
+				order_id: mockId(1),
+				variant_id: mockId(7),
 				quantity: 3,
 			});
 			const { manager, state } = fakeManager(start);
 
-			await service.reserveForOrder(manager, 1, [
-				{ variant_id: 7, quantity: 2 },
+			await service.reserveForOrder(manager, mockId(1), [
+				{ variant_id: mockId(7), quantity: 2 },
 			]);
 
-			expect(quantities(state.reservations, 1)).toEqual({ 7: 2 });
-			expect(quantities(state.reservations, 2)).toEqual({ 7: 6 });
+			expect(quantities(state.reservations, mockId(1))).toEqual({
+				[mockId(7)]: 2,
+			});
+			expect(quantities(state.reservations, mockId(2))).toEqual({
+				[mockId(7)]: 6,
+			});
 		});
 
 		// Its own rows are left out of the count, so restating an order never competes with itself
 		it('counts only the other orders against a growing line', async () => {
 			const start = picture();
 			start.reservations.push({
-				id: 2,
-				order_id: 1,
-				variant_id: 7,
+				id: mockId(2),
+				order_id: mockId(1),
+				variant_id: mockId(7),
 				quantity: 3,
 			});
 			const { manager, state } = fakeManager(start);
 
-			await service.reserveForOrder(manager, 1, [
-				{ variant_id: 7, quantity: 4 },
+			await service.reserveForOrder(manager, mockId(1), [
+				{ variant_id: mockId(7), quantity: 4 },
 			]);
 
-			expect(quantities(state.reservations, 1)).toEqual({ 7: 4 });
+			expect(quantities(state.reservations, mockId(1))).toEqual({
+				[mockId(7)]: 4,
+			});
 		});
 
 		it('drops a line the order no longer asks for', async () => {
 			const start = picture();
 			start.reservations.push({
-				id: 2,
-				order_id: 1,
-				variant_id: 7,
+				id: mockId(2),
+				order_id: mockId(1),
+				variant_id: mockId(7),
 				quantity: 3,
 			});
 			const { manager, state } = fakeManager(start);
 
-			await service.reserveForOrder(manager, 1, []);
+			await service.reserveForOrder(manager, mockId(1), []);
 
-			expect(quantities(state.reservations, 1)).toEqual({});
+			expect(quantities(state.reservations, mockId(1))).toEqual({});
 		});
 	});
 
@@ -289,38 +314,56 @@ describe('StockReservationService', () => {
 		it('lowers what is left and removes a row reaching zero', async () => {
 			const start = picture();
 			start.reservations.push(
-				{ id: 2, order_id: 1, variant_id: 7, quantity: 3 },
-				{ id: 3, order_id: 1, variant_id: 8, quantity: 2 },
+				{
+					id: mockId(2),
+					order_id: mockId(1),
+					variant_id: mockId(7),
+					quantity: 3,
+				},
+				{
+					id: mockId(3),
+					order_id: mockId(1),
+					variant_id: mockId(8),
+					quantity: 2,
+				},
 			);
 			const { manager, state } = fakeManager(start);
 
 			await service.consumeForOrder(
 				manager,
-				1,
+				mockId(1),
 				new Map([
-					[7, 1],
-					[8, 2],
+					[mockId(7), 1],
+					[mockId(8), 2],
 				]),
 			);
 
-			expect(quantities(state.reservations, 1)).toEqual({ 7: 2 });
+			expect(quantities(state.reservations, mockId(1))).toEqual({
+				[mockId(7)]: 2,
+			});
 		});
 
 		// Shipped beyond its lines, or reserved with a gap: the row simply goes
 		it('removes a row the shipment exceeds', async () => {
 			const start = picture();
 			start.reservations.push({
-				id: 2,
-				order_id: 1,
-				variant_id: 7,
+				id: mockId(2),
+				order_id: mockId(1),
+				variant_id: mockId(7),
 				quantity: 1,
 			});
 			const { manager, state } = fakeManager(start);
 
-			await service.consumeForOrder(manager, 1, new Map([[7, 3]]));
+			await service.consumeForOrder(
+				manager,
+				mockId(1),
+				new Map([[mockId(7), 3]]),
+			);
 
-			expect(quantities(state.reservations, 1)).toEqual({});
-			expect(quantities(state.reservations, 2)).toEqual({ 7: 6 });
+			expect(quantities(state.reservations, mockId(1))).toEqual({});
+			expect(quantities(state.reservations, mockId(2))).toEqual({
+				[mockId(7)]: 6,
+			});
 		});
 	});
 
@@ -335,16 +378,16 @@ describe('StockReservationService', () => {
 
 				await service.restoreForOrder(
 					manager,
-					1,
+					mockId(1),
 					new Map([
-						[8, 2],
-						[7, 1.5],
+						[mockId(8), 2],
+						[mockId(7), 1.5],
 					]),
 				);
 
 				expect(queries.map((query) => query.parameters)).toEqual([
-					[1, 7, 1.5],
-					[1, 8, 2],
+					[mockId(1), mockId(7), 1.5],
+					[mockId(1), mockId(8), 2],
 				]);
 				expect(queries[0].sql).toContain(
 					'ON CONFLICT (order_id, variant_id)',
@@ -360,7 +403,11 @@ describe('StockReservationService', () => {
 					orderStatus: status,
 				});
 
-				await service.restoreForOrder(manager, 1, new Map([[7, 1]]));
+				await service.restoreForOrder(
+					manager,
+					mockId(1),
+					new Map([[mockId(7), 1]]),
+				);
 
 				expect(queries).toEqual([]);
 			},
@@ -370,16 +417,18 @@ describe('StockReservationService', () => {
 	it('releaseForOrder drops every row of the order and no other', async () => {
 		const start = picture();
 		start.reservations.push({
-			id: 2,
-			order_id: 1,
-			variant_id: 7,
+			id: mockId(2),
+			order_id: mockId(1),
+			variant_id: mockId(7),
 			quantity: 3,
 		});
 		const { manager, state } = fakeManager(start);
 
-		await service.releaseForOrder(manager, 1);
+		await service.releaseForOrder(manager, mockId(1));
 
-		expect(quantities(state.reservations, 1)).toEqual({});
-		expect(quantities(state.reservations, 2)).toEqual({ 7: 6 });
+		expect(quantities(state.reservations, mockId(1))).toEqual({});
+		expect(quantities(state.reservations, mockId(2))).toEqual({
+			[mockId(7)]: 6,
+		});
 	});
 });

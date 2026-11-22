@@ -103,7 +103,7 @@ export const docs: Record<keyof typeof userController, ApiInputDocumentation> =
 			request: {
 				params: {
 					id: {
-						type: 'number',
+						type: 'string',
 						required: true,
 					},
 				},
@@ -122,7 +122,7 @@ export const docs: Record<keyof typeof userController, ApiInputDocumentation> =
 			request: {
 				params: {
 					id: {
-						type: 'number',
+						type: 'string',
 						required: true,
 					},
 				},
@@ -181,7 +181,7 @@ export const docs: Record<keyof typeof userController, ApiInputDocumentation> =
 			request: {
 				params: {
 					id: {
-						type: 'number',
+						type: 'string',
 						required: true,
 					},
 				},
@@ -199,7 +199,7 @@ export const docs: Record<keyof typeof userController, ApiInputDocumentation> =
 			request: {
 				params: {
 					id: {
-						type: 'number',
+						type: 'string',
 						required: true,
 					},
 				},
@@ -219,7 +219,7 @@ export const docs: Record<keyof typeof userController, ApiInputDocumentation> =
 				notes: `Only these transitions are allowed: ${statusTransitionNote}`,
 				params: {
 					id: {
-						type: 'number',
+						type: 'string',
 						required: true,
 					},
 					status: {
@@ -283,7 +283,7 @@ export const docs: Record<keyof typeof userController, ApiInputDocumentation> =
 					},
 					filter: {
 						id: {
-							type: 'number',
+							type: 'string',
 							required: false,
 						},
 						term: {

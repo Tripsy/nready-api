@@ -3,12 +3,13 @@ import { BrandStatusEnum, BrandTypeEnum } from '@/features/brand/brand.entity';
 import { BrandValidator, OrderByEnum } from '@/features/brand/brand.validator';
 import { createPastDate } from '@/helpers/date.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 const brandValidator = new BrandValidator('brand');
 
 export function getBrandEntityMock(): BrandEntity {
 	return {
-		id: 1,
+		id: mockId(1),
 		name: 'Pepsi',
 		slug: 'pepsi',
 		brand_type: BrandTypeEnum.PRODUCT,
@@ -40,7 +41,7 @@ export const brandInputPayloads = {
 		],
 	},
 	update: {
-		id: 1,
+		id: mockId(1),
 		name: 'Pepsi',
 		slug: 'pepsi',
 		brand_type: BrandTypeEnum.PRODUCT,
@@ -80,7 +81,7 @@ export const brandInputPayloads = {
 		},
 	},
 	orderUpdate: {
-		positions: [1, 2],
+		positions: [mockId(1), mockId(2)],
 	},
 };
 

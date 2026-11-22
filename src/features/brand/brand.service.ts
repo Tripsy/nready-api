@@ -20,6 +20,7 @@ import {
 	cleanEntityCache,
 	cleanEntityCacheMany,
 } from '@/shared/abstracts/service.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 /**
@@ -69,7 +70,7 @@ export class BrandService {
 	 * @description Update any data
 	 */
 	public async update(
-		data: DeepPartial<BrandEntity> & { id: number },
+		data: DeepPartial<BrandEntity> & { id: EntityId },
 	): Promise<BrandEntity> {
 		const saved = await this.repository.save(data);
 
@@ -135,7 +136,7 @@ export class BrandService {
 
 	public async updateOrder(
 		brand_type: BrandType,
-		ids: number[], // Array of IDs in the desired order
+		ids: EntityId[], // Array of IDs in the desired order
 	): Promise<void> {
 		await dataSource.transaction(async (manager) => {
 			const brandRepository = manager.getRepository(BrandEntity);
@@ -178,7 +179,7 @@ export class BrandService {
 		await cleanEntityCacheMany(BrandEntity, ids);
 	}
 
-	public async delete(id: number) {
+	public async delete(id: EntityId) {
 		await this.repository.createQuery().filterById(id).delete();
 	}
 
@@ -191,7 +192,7 @@ export class BrandService {
 	 * `withoutId` excludes the row being restored, which matters when it is not actually
 	 * deleted: it would otherwise match itself and turn a no-op restore into a conflict.
 	 */
-	public async restore(id: number) {
+	public async restore(id: EntityId) {
 		const entry = await this.findById(id, true);
 
 		const existing = await this.findBySlug(
@@ -207,7 +208,7 @@ export class BrandService {
 		await this.repository.createQuery().filterById(id).restore();
 	}
 
-	public findById(id: number, withDeleted: boolean): Promise<BrandEntity> {
+	public findById(id: EntityId, withDeleted: boolean): Promise<BrandEntity> {
 		return this.repository
 			.createQuery()
 			.filterById(id)
@@ -215,7 +216,11 @@ export class BrandService {
 			.firstOrFail();
 	}
 
-	public findBySlug(slug: string, brand_type: BrandType, withoutId?: number) {
+	public findBySlug(
+		slug: string,
+		brand_type: BrandType,
+		withoutId?: EntityId,
+	) {
 		const q = this.repository
 			.createQuery()
 			.filterBy('slug', slug)
@@ -232,7 +237,7 @@ export class BrandService {
 	 * @description Used in `read` method from controller; this will return a custom shape
 	 */
 	public async getEntryData(data: {
-		id: number;
+		id: EntityId;
 		language?: string;
 		withDeleted: boolean;
 	}) {

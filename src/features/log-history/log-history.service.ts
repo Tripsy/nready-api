@@ -1,6 +1,7 @@
 import type LogHistoryEntity from '@/features/log-history/log-history.entity';
 import { getLogHistoryRepository } from '@/features/log-history/log-history.repository';
 import type { LogHistoryValidator } from '@/features/log-history/log-history.validator';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 export class LogHistoryService {
@@ -15,7 +16,7 @@ export class LogHistoryService {
 			.delete(false, true, true);
 	}
 
-	public findById(id: number): Promise<LogHistoryEntity> {
+	public findById(id: EntityId): Promise<LogHistoryEntity> {
 		return this.repository
 			.createQuery()
 			.join('log_history.user', 'user', 'LEFT')

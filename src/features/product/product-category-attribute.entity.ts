@@ -12,6 +12,7 @@ import type ProductCategoryAttributeOptionEntity from '@/features/product/produc
 import type TermEntity from '@/features/term/term.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import { numericTransformer } from '@/shared/transformers/numeric.transformer';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { MeasureUnit } from '@/shared/types/measure-unit.type';
 
 /**
@@ -139,13 +140,13 @@ export default class ProductCategoryAttributeEntity extends EntityAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
 
-	@Column('int', { nullable: false })
-	category_id!: number;
+	@Column('uuid', { nullable: false })
+	category_id!: EntityId;
 
 	// A `term` of type `attribute_label`, so the wording renders per language while everything that
 	// points at it stores the language-neutral id
-	@Column('int', { nullable: false })
-	attribute_label_id!: number;
+	@Column('uuid', { nullable: false })
+	attribute_label_id!: EntityId;
 
 	@Column({
 		type: 'enum',

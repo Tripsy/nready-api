@@ -1,5 +1,6 @@
 import { pathToFileURL } from 'node:url';
 import type { DataSource, EntityManager, ObjectLiteral } from 'typeorm';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * Deterministic PRNG (mulberry32). Demo data has to be reproducible: two developers
@@ -148,14 +149,14 @@ export async function loadIds(
 	// biome-ignore lint/suspicious/noExplicitAny: TypeORM's entity target accepts any constructor
 	entityClass: new () => any,
 	where: ObjectLiteral = {},
-): Promise<number[]> {
+): Promise<EntityId[]> {
 	const rows = await manager.getRepository(entityClass).find({
 		select: { id: true },
 		where,
 		order: { id: 'ASC' },
 	});
 
-	return rows.map((row) => row.id as number);
+	return rows.map((row) => row.id as EntityId);
 }
 
 export function formatSummary(summary: SeedSummary): string {

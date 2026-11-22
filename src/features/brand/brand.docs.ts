@@ -82,7 +82,7 @@ export const docs: Record<keyof typeof brandController, ApiInputDocumentation> =
 			request: {
 				params: {
 					id: {
-						type: 'number',
+						type: 'string',
 						required: true,
 					},
 				},
@@ -104,7 +104,7 @@ export const docs: Record<keyof typeof brandController, ApiInputDocumentation> =
 			request: {
 				params: {
 					id: {
-						type: 'number',
+						type: 'string',
 						required: true,
 					},
 				},
@@ -140,7 +140,7 @@ export const docs: Record<keyof typeof brandController, ApiInputDocumentation> =
 			request: {
 				params: {
 					id: {
-						type: 'number',
+						type: 'string',
 						required: true,
 					},
 				},
@@ -159,7 +159,7 @@ export const docs: Record<keyof typeof brandController, ApiInputDocumentation> =
 				notes: 'Answers 409 if the slug has been taken again in the meantime, since it is unique per brand_type only among the rows that are not deleted',
 				params: {
 					id: {
-						type: 'number',
+						type: 'string',
 						required: true,
 					},
 				},
@@ -179,7 +179,7 @@ export const docs: Record<keyof typeof brandController, ApiInputDocumentation> =
 				notes: `Only these transitions are allowed: ${statusTransitionNote}`,
 				params: {
 					id: {
-						type: 'number',
+						type: 'string',
 						required: true,
 					},
 					status: {

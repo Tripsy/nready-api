@@ -3,6 +3,7 @@ import type OrderReturnEntity from '@/features/order-return/order-return.entity'
 import type ProductVariantEntity from '@/features/product/product-variant.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import { numericTransformer } from '@/shared/transformers/numeric.transformer';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 const ENTITY_TABLE_NAME = 'order_return_line';
 
@@ -31,15 +32,15 @@ export default class OrderReturnLineEntity extends EntityAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
 
-	@Column('int', { nullable: false })
-	order_return_id!: number;
+	@Column('uuid', { nullable: false })
+	order_return_id!: EntityId;
 
-	@Column('int', { nullable: false })
+	@Column('uuid', { nullable: false })
 	@Index('IDX_order_return_line_variant_id')
-	variant_id!: number;
+	variant_id!: EntityId;
 
-	@Column('int', { nullable: false })
-	product_id!: number;
+	@Column('uuid', { nullable: false })
+	product_id!: EntityId;
 
 	// `numeric` for the reason `shipping_line.quantity` is: `kg` and `litre` units exist
 	@Column('numeric', {

@@ -86,7 +86,7 @@ export const docs: Record<
 			notes: 'A deleted vendor is only visible to a caller holding vendor delete',
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -106,7 +106,7 @@ export const docs: Record<
 			notes: 'Provide at least one of name or type. A `status` in the body is ignored - it has its own route',
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -133,7 +133,7 @@ export const docs: Record<
 			notes: 'Soft delete, whatever the status - a deleted vendor keeps the status it had, and anything already pointing at it keeps resolving',
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -151,7 +151,7 @@ export const docs: Record<
 		request: {
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -211,7 +211,7 @@ export const docs: Record<
 					default: OrderDirectionEnum.ASC,
 				},
 				filter: {
-					id: { type: 'number', required: false },
+					id: { type: 'string', required: false },
 					term: {
 						type: 'string',
 						required: false,
@@ -262,7 +262,7 @@ export const docs: Record<
 			notes: `Only these transitions are allowed: ${statusTransitionNote} - nothing returns a vendor to \`pending\`. Asking for the status it already holds answers 400, and a transition that is not allowed answers 409. A deleted vendor cannot be moved at all`,
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 				status: {

@@ -8,6 +8,7 @@ import {
 } from 'typeorm';
 import type PlaceContentEntity from '@/features/place/place-content.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export const PlaceTypeEnum = {
 	COUNTRY: 'country',
@@ -35,9 +36,9 @@ export default class PlaceEntity extends EntityAbstract {
 	})
 	place_type!: PlaceType;
 
-	@Column('int', { nullable: true })
+	@Column('uuid', { nullable: true })
 	@Index('IDX_place_parent_id')
-	parent_id!: number | null; // country -> null, region -> country_id, city -> region_id or country_id
+	parent_id!: EntityId | null;
 
 	@Column('varchar', { length: 3, nullable: true, comment: 'Abbreviation' })
 	@Index('IDX_place_code')

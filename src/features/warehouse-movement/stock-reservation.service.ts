@@ -18,7 +18,9 @@ import WarehouseEntity, {
 	WarehouseStatusEnum,
 } from '@/features/warehouse/warehouse.entity';
 import StockReservationEntity from '@/features/warehouse-movement/stock-reservation.entity';
+import { compareIds } from '@/helpers/id.helper';
 import type { VariantAvailability } from '@/shared/registries/stock-availability.registry';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /** Stock figures for one variant. */
 export type VariantStock = {
@@ -29,7 +31,7 @@ export type VariantStock = {
 
 /** One warehouse's share of a variant's stock. */
 export type WarehouseStock = {
-	warehouse_id: number;
+	warehouse_id: EntityId;
 	code: string;
 	name: string;
 	status: string;
@@ -94,13 +96,13 @@ export class StockReservationService {
 	 */
 	public async reserveForOrder(
 		manager: EntityManager,
-		orderId: number,
+		orderId: EntityId,
 		demands: readonly StockDemand[],
 	): Promise<void> {
 		const requested = demands.filter((demand) => demand.quantity > 0);
 		const variantIds = [
 			...new Set(requested.map((demand) => demand.variant_id)),
-		].sort((a, b) => a - b);
+		].sort(compareIds);
 
 		const variants =
 			variantIds.length === 0
@@ -182,7 +184,7 @@ export class StockReservationService {
 	/** @description Used through `order.hooks.ts` by `orderService.cancel`, inside its transaction */
 	public async releaseForOrder(
 		manager: EntityManager,
-		orderId: number,
+		orderId: EntityId,
 	): Promise<void> {
 		await manager
 			.getRepository(StockReservationEntity)
@@ -201,10 +203,10 @@ export class StockReservationService {
 	 */
 	public async consumeForOrder(
 		manager: EntityManager,
-		orderId: number,
-		shipped: ReadonlyMap<number, number>,
+		orderId: EntityId,
+		shipped: ReadonlyMap<EntityId, number>,
 	): Promise<void> {
-		const variantIds = [...shipped.keys()].sort((a, b) => a - b);
+		const variantIds = [...shipped.keys()].sort(compareIds);
 
 		if (variantIds.length === 0) {
 			return;
@@ -240,10 +242,10 @@ export class StockReservationService {
 	 */
 	public async restoreForOrder(
 		manager: EntityManager,
-		orderId: number,
-		returned: ReadonlyMap<number, number>,
+		orderId: EntityId,
+		returned: ReadonlyMap<EntityId, number>,
 	): Promise<void> {
-		const variantIds = [...returned.keys()].sort((a, b) => a - b);
+		const variantIds = [...returned.keys()].sort(compareIds);
 
 		if (variantIds.length === 0) {
 			return;
@@ -283,7 +285,7 @@ export class StockReservationService {
 	/** Takes the serializing lock on tracked variants, in id order - see the class note. */
 	private async lockVariants(
 		manager: EntityManager,
-		variantIds: number[],
+		variantIds: EntityId[],
 	): Promise<void> {
 		await manager.getRepository(ProductVariantEntity).find({
 			select: { id: true },
@@ -301,8 +303,8 @@ export class StockReservationService {
 	 * no lock: it quotes a basket, and the reservation at checkout is what holds the units.
 	 */
 	public async getAvailability(
-		variantIds: readonly number[],
-	): Promise<Map<number, VariantAvailability>> {
+		variantIds: readonly EntityId[],
+	): Promise<Map<EntityId, VariantAvailability>> {
 		if (variantIds.length === 0) {
 			return new Map();
 		}
@@ -349,9 +351,9 @@ export class StockReservationService {
 	 * A variant's figures, with on hand broken down per warehouse. Inactive warehouses are listed -
 	 * the goods are physically there - but left out of `on_hand` and `available`.
 	 */
-	public async getVariantStock(variantId: number): Promise<
+	public async getVariantStock(variantId: EntityId): Promise<
 		VariantStock & {
-			variant_id: number;
+			variant_id: EntityId;
 			warehouses: WarehouseStock[];
 		}
 	> {
@@ -381,7 +383,7 @@ export class StockReservationService {
 			.groupBy('warehouse.id')
 			.orderBy('warehouse.id')
 			.getRawMany<{
-				warehouse_id: number;
+				warehouse_id: EntityId;
 				code: string;
 				name: string;
 				status: string;
@@ -389,7 +391,7 @@ export class StockReservationService {
 			}>();
 
 		const warehouses = rows.map((row) => ({
-			warehouse_id: Number(row.warehouse_id),
+			warehouse_id: row.warehouse_id,
 			code: row.code,
 			name: row.name,
 			status: row.status,
@@ -432,7 +434,7 @@ export class StockReservationService {
 		limit: number = 500,
 		manager: EntityManager = dataSource.manager,
 	): Promise<{ orders: number }> {
-		const orders = await manager.query<{ id: number }[]>(
+		const orders = await manager.query<{ id: EntityId }[]>(
 			`
 				SELECT "order".id FROM "order"
 				WHERE "order".deleted_at IS NULL
@@ -472,13 +474,13 @@ export class StockReservationService {
 			.groupBy('line.order_id')
 			.addGroupBy('line.variant_id')
 			.getRawMany<{
-				order_id: number;
-				variant_id: number;
+				order_id: EntityId;
+				variant_id: EntityId;
 				quantity: string;
 			}>();
 
 		const shipped = await manager.query<
-			{ order_id: number; variant_id: number; quantity: string }[]
+			{ order_id: EntityId; variant_id: EntityId; quantity: string }[]
 		>(
 			`
 				SELECT shipping.order_id, shipping_line.variant_id, SUM(shipping_line.quantity) AS quantity
@@ -500,8 +502,8 @@ export class StockReservationService {
 
 		const reservations = rows
 			.map((row) => ({
-				order_id: Number(row.order_id),
-				variant_id: Number(row.variant_id),
+				order_id: row.order_id,
+				variant_id: row.variant_id,
 				quantity: roundQuantity(
 					Number(row.quantity) -
 						(gone.get(`${row.order_id}:${row.variant_id}`) ?? 0),
@@ -526,7 +528,7 @@ export class StockReservationService {
 	 * each caller adds the grouping it needs, so the per-variant and per-site figures stay one
 	 * definition of "on hand".
 	 */
-	private onHandQuery(manager: EntityManager, variantIds: number[]) {
+	private onHandQuery(manager: EntityManager, variantIds: EntityId[]) {
 		return manager
 			.getRepository(GrnItemEntity)
 			.createQueryBuilder('item')
@@ -553,15 +555,15 @@ export class StockReservationService {
 	/** Open lots on confirmed, live receipts in active warehouses, per variant. */
 	private async sumOnHand(
 		manager: EntityManager,
-		variantIds: number[],
-	): Promise<Map<number, number>> {
+		variantIds: EntityId[],
+	): Promise<Map<EntityId, number>> {
 		const rows = await this.onHandQuery(manager, variantIds)
 			.groupBy('item.variant_id')
-			.getRawMany<{ variant_id: number; on_hand: string }>();
+			.getRawMany<{ variant_id: EntityId; on_hand: string }>();
 
 		return new Map(
 			rows.map((row) => [
-				Number(row.variant_id),
+				row.variant_id,
 				roundQuantity(Number(row.on_hand)),
 			]),
 		);
@@ -584,7 +586,7 @@ export class StockReservationService {
 	 */
 	public async getWarehouseAvailability(
 		manager: EntityManager,
-		variantIds: readonly number[],
+		variantIds: readonly EntityId[],
 	): Promise<WarehouseAvailability> {
 		if (variantIds.length === 0) {
 			return new Map();
@@ -608,8 +610,8 @@ export class StockReservationService {
 			.groupBy('item.variant_id')
 			.addGroupBy('grn.warehouse_id')
 			.getRawMany<{
-				variant_id: number;
-				warehouse_id: number;
+				variant_id: EntityId;
+				warehouse_id: EntityId;
 				on_hand: string;
 			}>();
 
@@ -644,28 +646,25 @@ export class StockReservationService {
 			.groupBy('line.variant_id')
 			.addGroupBy('shipping.pickup_warehouse_id')
 			.getRawMany<{
-				variant_id: number;
-				warehouse_id: number;
+				variant_id: EntityId;
+				warehouse_id: EntityId;
 				committed: string;
 			}>();
 
 		const result: WarehouseAvailability = new Map(
-			ids.map((id) => [id, new Map<number, number>()]),
+			ids.map((id) => [id, new Map<EntityId, number>()]),
 		);
 
 		for (const row of onHand) {
 			result
-				.get(Number(row.variant_id))
-				?.set(
-					Number(row.warehouse_id),
-					roundQuantity(Number(row.on_hand)),
-				);
+				.get(row.variant_id)
+				?.set(row.warehouse_id, roundQuantity(Number(row.on_hand)));
 		}
 
 		// Only sites with stock are listed: a claim on a site holding nothing is no supply either way
 		for (const row of committed) {
-			const sites = result.get(Number(row.variant_id));
-			const siteId = Number(row.warehouse_id);
+			const sites = result.get(row.variant_id);
+			const siteId = row.warehouse_id;
 			const held = sites?.get(siteId);
 
 			if (sites && held !== undefined) {
@@ -679,9 +678,9 @@ export class StockReservationService {
 	/** What live orders reserve per variant, leaving out `excludeOrderId`'s own rows. */
 	private async sumReserved(
 		manager: EntityManager,
-		variantIds: number[],
-		excludeOrderId?: number,
-	): Promise<Map<number, number>> {
+		variantIds: EntityId[],
+		excludeOrderId?: EntityId,
+	): Promise<Map<EntityId, number>> {
 		const query = manager
 			.getRepository(StockReservationEntity)
 			.createQueryBuilder('reservation')
@@ -704,13 +703,13 @@ export class StockReservationService {
 		}
 
 		const rows = await query.getRawMany<{
-			variant_id: number;
+			variant_id: EntityId;
 			reserved: string;
 		}>();
 
 		return new Map(
 			rows.map((row) => [
-				Number(row.variant_id),
+				row.variant_id,
 				roundQuantity(Number(row.reserved)),
 			]),
 		);

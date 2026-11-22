@@ -26,6 +26,7 @@ import { shippingService } from '@/features/shipping/shipping.service';
 import WarehouseEntity, {
 	WarehouseStatusEnum,
 } from '@/features/warehouse/warehouse.entity';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 const TARGET = 8;
 
@@ -138,7 +139,7 @@ export const orderReturnSeed: SeedDefinition = {
 				DocumentTypeEnum.ORDER_RETURN,
 			);
 
-			let shippingId: number | null = null;
+			let shippingId: EntityId | null = null;
 
 			if (
 				status === OrderReturnStatusEnum.APPROVED &&
@@ -224,10 +225,10 @@ export const orderReturnSeed: SeedDefinition = {
  */
 async function firstReturnable(
 	manager: EntityManager,
-	orderId: number,
+	orderId: EntityId,
 ): Promise<{
-	variant_id: number;
-	product_id: number;
+	variant_id: EntityId;
+	product_id: EntityId;
 	quantity: number;
 } | null> {
 	const returnable = await shippingService.getReturnableByVariant(
@@ -250,10 +251,10 @@ async function firstReturnable(
 		.select('line.variant_id', 'variant_id')
 		.addSelect('SUM(line.quantity)', 'quantity')
 		.groupBy('line.variant_id')
-		.getRawMany<{ variant_id: number; quantity: string }>();
+		.getRawMany<{ variant_id: EntityId; quantity: string }>();
 
 	for (const row of requested) {
-		const variantId = Number(row.variant_id);
+		const variantId = row.variant_id;
 
 		returnable.set(
 			variantId,

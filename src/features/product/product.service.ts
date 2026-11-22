@@ -61,6 +61,7 @@ import {
 	type VatResolver,
 	vatRateService,
 } from '@/features/vat-rate/vat-rate.service';
+import { compareIds } from '@/helpers/id.helper';
 import { pickValuesFromObject } from '@/helpers/objects.helper';
 import { apportion, roundMoney } from '@/helpers/shop.helper';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
@@ -74,6 +75,7 @@ import {
 	type TargetImage,
 	TargetImageTypeEnum,
 } from '@/shared/registries/target-image.registry';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { MeasureUnit } from '@/shared/types/measure-unit.type';
 import { toBaseUnit } from '@/shared/types/measure-unit.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
@@ -136,11 +138,11 @@ export type WithPublicAttributes<T> = T & {
  * because it edits them all at once; a visitor is served one.
  */
 export type PublicBundleGroup = {
-	id: number;
-	label_id: number;
+	id: EntityId;
+	label_id: EntityId;
 	position: number;
 	label: {
-		id: number;
+		id: EntityId;
 		contents: { language: string; value: string }[];
 	} | null;
 };
@@ -162,16 +164,16 @@ export type PublicBundleGroup = {
  * projection on this route.
  */
 export type PublicBundleComponent = {
-	id: number;
-	variant_id: number;
+	id: EntityId;
+	variant_id: EntityId;
 	quantity: number;
-	group_id: number | null;
+	group_id: EntityId | null;
 	position: number;
 	is_optional: boolean;
 	is_default: boolean;
 	prices: { currency: string; price_delta: number }[];
 	variant: {
-		id: number;
+		id: EntityId;
 		sku: string;
 		prices: {
 			currency: string;
@@ -197,7 +199,7 @@ export type WithComposition<T> = T & {
 
 /** A term reference narrowed to the served language - the shape every public prompt takes. */
 type PublicTermRef = {
-	id: number;
+	id: EntityId;
 	contents: { language: string; value: string }[];
 } | null;
 
@@ -207,8 +209,8 @@ type PublicTermRef = {
  * folds into the line's unit price. Per currency for the reason `PublicBundleComponent` gives.
  */
 export type PublicProductOption = {
-	id: number;
-	label_id: number;
+	id: EntityId;
+	label_id: EntityId;
 	position: number;
 	is_default: boolean;
 	prices: { currency: string; price_delta: number }[];
@@ -217,8 +219,8 @@ export type PublicProductOption = {
 
 /** A question asked at order time, with its bounds and answers - see `attachPublicOptions`. */
 export type PublicProductOptionGroup = {
-	id: number;
-	label_id: number;
+	id: EntityId;
+	label_id: EntityId;
 	min_select: number;
 	max_select: number | null;
 	position: number;
@@ -436,7 +438,7 @@ export class ProductService {
 	 * @description Update any data
 	 */
 	public async update(
-		data: DeepPartial<ProductEntity> & { id: number },
+		data: DeepPartial<ProductEntity> & { id: EntityId },
 	): Promise<ProductEntity> {
 		const saved = await this.repository.save(data);
 
@@ -499,7 +501,7 @@ export class ProductService {
 		return updatedEntry;
 	}
 
-	private async loadCategoryIds(product_id: number): Promise<number[]> {
+	private async loadCategoryIds(product_id: EntityId): Promise<EntityId[]> {
 		const links = await ProductCategoryRepository.createQuery()
 			.select(['product_category.category_id'])
 			.filterBy('product_category.product_id', product_id)
@@ -520,7 +522,7 @@ export class ProductService {
 		manager: EntityManager,
 		entry: ProductEntity,
 		data: Partial<ValidatorOutput<ProductValidator, 'create'>>,
-		categoryIds: number[],
+		categoryIds: EntityId[],
 	): Promise<void> {
 		await ProductContentRepository.saveContent(
 			manager,
@@ -637,7 +639,7 @@ export class ProductService {
 	 */
 	private async resolveComponentGroups(
 		manager: EntityManager,
-		product_id: number,
+		product_id: EntityId,
 		items: ProductBundleItemType[],
 	): Promise<ResolvedBundleItem[]> {
 		const needsGroup = items.some((item) => item.group_label_id);
@@ -689,7 +691,7 @@ export class ProductService {
 	 */
 	private async assertBundleGroupsAreUsable(
 		manager: EntityManager,
-		product_id: number,
+		product_id: EntityId,
 	): Promise<void> {
 		const groups = await manager
 			.getRepository(ProductBundleGroupEntity)
@@ -786,7 +788,7 @@ export class ProductService {
 	 */
 	private async assertBundleIsComposed(
 		manager: EntityManager,
-		product_id: number,
+		product_id: EntityId,
 	): Promise<void> {
 		const includedUnits = await manager
 			.getRepository(ProductBundleItemEntity)
@@ -811,7 +813,7 @@ export class ProductService {
 	 */
 	private async resolveVariants(
 		variants: ValidatorOutput<ProductValidator, 'create'>['variants'],
-		categoryIds: number[],
+		categoryIds: EntityId[],
 		composition: ProductComposition,
 	): Promise<ResolvedVariant[]> {
 		const definitions =
@@ -860,7 +862,7 @@ export class ProductService {
 	 * translation the term carries is the closest thing to a name available here.
 	 */
 	private assertRequiredSupplied(
-		definitions: Map<number, ProductCategoryAttributeEntity>,
+		definitions: Map<EntityId, ProductCategoryAttributeEntity>,
 		values: ProductAttributeType[] | undefined,
 	): void {
 		const supplied = new Set(
@@ -883,7 +885,7 @@ export class ProductService {
 
 	private async resolveAttributeValues(
 		values: ProductAttributeType[],
-		categoryIds: number[],
+		categoryIds: EntityId[],
 		scope: typeof ProductCategoryAttributeScopeEnum.PRODUCT,
 	): Promise<ResolvedAttributeValue[]> {
 		const definitions =
@@ -914,7 +916,7 @@ export class ProductService {
 	 */
 	private resolveAttributeValue(
 		value: ProductAttributeType,
-		definitions: Map<number, ProductCategoryAttributeEntity>,
+		definitions: Map<EntityId, ProductCategoryAttributeEntity>,
 	): ResolvedAttributeValue {
 		const definition = definitions.get(value.attribute_label_id);
 
@@ -947,7 +949,7 @@ export class ProductService {
 				(option) => option.term_id,
 			);
 
-			if (!admissible.includes(value.value_term_id as number)) {
+			if (!admissible.includes(value.value_term_id as EntityId)) {
 				throw new CustomError(
 					422,
 					lang('product.error.attribute_value_not_admissible'),
@@ -1020,15 +1022,18 @@ export class ProductService {
 		return true;
 	}
 
-	public async delete(id: number) {
+	public async delete(id: EntityId) {
 		await this.repository.createQuery().filterById(id).delete();
 	}
 
-	public async restore(id: number) {
+	public async restore(id: EntityId) {
 		await this.repository.createQuery().filterById(id).restore();
 	}
 
-	public findById(id: number, withDeleted: boolean): Promise<ProductEntity> {
+	public findById(
+		id: EntityId,
+		withDeleted: boolean,
+	): Promise<ProductEntity> {
 		return this.repository
 			.createQuery()
 			.filterById(id)
@@ -1045,8 +1050,8 @@ export class ProductService {
 	 * branch. Public for that last caller, which sits in a sibling module of the same feature.
 	 */
 	public async resolveCategorySubtree(
-		category_id: number,
-	): Promise<number[]> {
+		category_id: EntityId,
+	): Promise<EntityId[]> {
 		const treeRepository =
 			RepositoryAbstract.getTreeRepository(CategoryEntity);
 
@@ -1172,7 +1177,7 @@ export class ProductService {
 	 * all of them at once and has no other way to ask for them.
 	 */
 	public async getEntryData(data: {
-		id: number;
+		id: EntityId;
 		language?: string;
 		withDeleted: boolean;
 	}) {
@@ -1327,7 +1332,7 @@ export class ProductService {
 	 * by any of its codes rather than only its default one.
 	 */
 	private async attachVariants<
-		T extends { id: number; categories?: { category_id: number }[] },
+		T extends { id: EntityId; categories?: { category_id: EntityId }[] },
 	>(entries: T[], language: string | undefined): Promise<WithVariants<T>[]> {
 		if (entries.length === 0) {
 			return [];
@@ -1421,9 +1426,9 @@ export class ProductService {
 					categoryIds,
 					ProductCategoryAttributeScopeEnum.VARIANT,
 				)
-			: new Map<number, ProductCategoryAttributeEntity>();
+			: new Map<EntityId, ProductCategoryAttributeEntity>();
 
-		const sortOrderOf = (label_id: number): number =>
+		const sortOrderOf = (label_id: EntityId): number =>
 			definitions.get(label_id)?.sort_order ?? Number.MAX_SAFE_INTEGER;
 
 		/*
@@ -1442,7 +1447,7 @@ export class ProductService {
 		);
 
 		const byProduct = new Map<
-			number,
+			EntityId,
 			WithCoverImage<ProductVariantEntity>[]
 		>();
 
@@ -1451,7 +1456,10 @@ export class ProductService {
 				(left, right) =>
 					sortOrderOf(left.attribute_label_id) -
 						sortOrderOf(right.attribute_label_id) ||
-					left.attribute_label_id - right.attribute_label_id,
+					compareIds(
+						left.attribute_label_id,
+						right.attribute_label_id,
+					),
 			);
 
 			/*
@@ -1512,7 +1520,7 @@ export class ProductService {
 	 */
 	private async attachGrossPrices<
 		T extends {
-			id: number;
+			id: EntityId;
 			composition: ProductComposition;
 			vat_category: ProductVatCategory;
 			variants: {
@@ -1530,7 +1538,10 @@ export class ProductService {
 			)
 			.map((entry) => entry.id);
 
-		const kits = new Map<number, { variant_id: number; units: number }[]>();
+		const kits = new Map<
+			EntityId,
+			{ variant_id: EntityId; units: number }[]
+		>();
 
 		if (bundleIds.length > 0) {
 			const compositions =
@@ -1682,7 +1693,7 @@ export class ProductService {
 	 * shuffle the moment an attribute is re-saved.
 	 */
 	private async attachPublicAttributes<
-		T extends { id: number; categories?: { category_id: number }[] },
+		T extends { id: EntityId; categories?: { category_id: EntityId }[] },
 	>(
 		entry: T,
 		language: string | undefined,
@@ -1740,9 +1751,9 @@ export class ProductService {
 					categoryIds,
 					ProductCategoryAttributeScopeEnum.PRODUCT,
 				)
-			: new Map<number, ProductCategoryAttributeEntity>();
+			: new Map<EntityId, ProductCategoryAttributeEntity>();
 
-		const sortOrderOf = (label_id: number): number =>
+		const sortOrderOf = (label_id: EntityId): number =>
 			definitions.get(label_id)?.sort_order ?? Number.MAX_SAFE_INTEGER;
 
 		const attributes: PublicProductAttribute[] = rows
@@ -1759,8 +1770,11 @@ export class ProductService {
 				(left, right) =>
 					sortOrderOf(left.attribute_label_id) -
 						sortOrderOf(right.attribute_label_id) ||
-					left.attribute_label_id - right.attribute_label_id ||
-					left.id - right.id,
+					compareIds(
+						left.attribute_label_id,
+						right.attribute_label_id,
+					) ||
+					compareIds(left.id, right.id),
 			);
 
 		return { ...entry, attributes };
@@ -1779,7 +1793,7 @@ export class ProductService {
 	 * which is what an uninstalled `image` looks like.
 	 */
 	private async attachPublicGalleries<
-		T extends { id: number; variants?: { id: number }[] },
+		T extends { id: EntityId; variants?: { id: EntityId }[] },
 	>(entry: T): Promise<WithGallery<T>> {
 		const variants = entry.variants ?? [];
 
@@ -1815,7 +1829,7 @@ export class ProductService {
 	 * stays present either way: a client must not have to tell "no image" apart from "no image
 	 * feature".
 	 */
-	private async attachCoverImages<T extends { id: number }>(
+	private async attachCoverImages<T extends { id: EntityId }>(
 		entries: T[],
 	): Promise<WithCoverImage<T>[]> {
 		if (entries.length === 0) {
@@ -1842,7 +1856,7 @@ export class ProductService {
 	 * Resolving the slug first (`resolvePublicRef`) also keeps the sellable window out of the
 	 * cached value, which moves without the payload changing.
 	 */
-	public async getPublicEntryById(id: number, language: string) {
+	public async getPublicEntryById(id: EntityId, language: string) {
 		const entry = await this.repository
 			.createQuery()
 			.select([
@@ -2119,7 +2133,7 @@ export class ProductService {
 		const narrow = (
 			term:
 				| {
-						id: number;
+						id: EntityId;
 						contents?: { language: string; value: string }[];
 				  }
 				| null
@@ -2182,7 +2196,7 @@ export class ProductService {
 			ProductValidator,
 			'publicFind'
 		>['filter']['attribute'],
-		categoryIds: number[],
+		categoryIds: EntityId[],
 	): Promise<void> {
 		if (!facets?.length) {
 			return;
@@ -2203,7 +2217,7 @@ export class ProductService {
 				`facet_value_${index}.deleted_at IS NULL`,
 			];
 
-			const parameters: Record<string, number | number[]> = {
+			const parameters: Record<string, number | EntityId | EntityId[]> = {
 				[`facetLabel${index}`]: facet.label_id,
 			};
 

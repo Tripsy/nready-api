@@ -4,6 +4,7 @@ import BrandContentEntity, {
 	type BrandContentType,
 } from '@/features/brand/brand-content.entity';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export class BrandContentQuery extends RepositoryAbstract<BrandContentEntity> {
 	constructor(repository: Repository<BrandContentEntity>) {
@@ -21,7 +22,7 @@ export const BrandContentRepository = dataSource
 		async saveContent(
 			manager: EntityManager,
 			contents: BrandContentType[],
-			brand_id: number,
+			brand_id: EntityId,
 		) {
 			if (!contents.length) {
 				return;

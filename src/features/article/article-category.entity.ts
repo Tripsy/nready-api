@@ -2,6 +2,7 @@ import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import type ArticleEntity from '@/features/article/article.entity';
 import type CategoryEntity from '@/features/category/category.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 const ENTITY_TABLE_NAME = 'article_category';
 
@@ -18,12 +19,12 @@ export default class ArticleCategoryEntity extends EntityAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = false;
 
-	@Column('int', { nullable: false })
-	article_id!: number;
+	@Column('uuid', { nullable: false })
+	article_id!: EntityId;
 
-	@Column('int', { nullable: false })
+	@Column('uuid', { nullable: false })
 	@Index('IDX_article_category_category_id')
-	category_id!: number;
+	category_id!: EntityId;
 
 	@Column('jsonb', {
 		nullable: true,

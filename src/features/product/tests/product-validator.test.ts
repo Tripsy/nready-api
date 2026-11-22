@@ -1,7 +1,9 @@
 import { jest } from '@jest/globals';
 import { productInputPayloads } from '@/features/product/product.mock';
 import { ProductValidator } from '@/features/product/product.validator';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import { withDebugValidated } from '@/tests/jest-validator.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 beforeEach(() => {
 	jest.restoreAllMocks();
@@ -88,7 +90,7 @@ describe(validator, () => {
 
 		it('rejects an update that empties the category list', () => {
 			const validated = productValidator.update.safeParse({
-				id: 1,
+				id: mockId(1),
 				categories: [],
 			});
 
@@ -265,7 +267,7 @@ describe(validator, () => {
 	describe('attributes', () => {
 		it('rejects a value that fills no column', () => {
 			const validated = createWith({
-				attributes: [{ attribute_label_id: 8 }],
+				attributes: [{ attribute_label_id: mockId(8) }],
 			});
 
 			expect(validated.success).toBe(false);
@@ -275,8 +277,8 @@ describe(validator, () => {
 			const validated = createWith({
 				attributes: [
 					{
-						attribute_label_id: 8,
-						value_term_id: 13,
+						attribute_label_id: mockId(8),
+						value_term_id: mockId(13),
 						value_numeric: 5,
 					},
 				],
@@ -287,7 +289,9 @@ describe(validator, () => {
 
 		it('accepts a boolean-only value', () => {
 			const validated = createWith({
-				attributes: [{ attribute_label_id: 8, value_boolean: false }],
+				attributes: [
+					{ attribute_label_id: mockId(8), value_boolean: false },
+				],
 			});
 
 			withDebugValidated(() => {
@@ -301,7 +305,7 @@ describe(validator, () => {
 			const validated = createWith({
 				attributes: [
 					{
-						attribute_label_id: 8,
+						attribute_label_id: mockId(8),
 						value_numeric: 500,
 						value_base: 999999,
 					},
@@ -348,7 +352,7 @@ describe(validator, () => {
 	});
 
 	describe('option groups', () => {
-		const option = (label_id: number) => ({
+		const option = (label_id: EntityId) => ({
 			label_id,
 			prices: [{ currency: 'RON', price_delta: 0 }],
 		});
@@ -357,12 +361,12 @@ describe(validator, () => {
 			const validated = createWith({
 				option_groups: [
 					{
-						label_id: 8,
+						label_id: mockId(8),
 						min_select: 0,
 						max_select: 1,
 						options: [
 							{
-								label_id: 12,
+								label_id: mockId(12),
 								prices: [{ currency: 'RON', price_delta: -5 }],
 							},
 						],
@@ -378,7 +382,7 @@ describe(validator, () => {
 		it('rejects a group offering no answers', () => {
 			expect(
 				createWith({
-					option_groups: [{ label_id: 8, options: [] }],
+					option_groups: [{ label_id: mockId(8), options: [] }],
 				}).success,
 			).toBe(false);
 		});
@@ -388,10 +392,10 @@ describe(validator, () => {
 				createWith({
 					option_groups: [
 						{
-							label_id: 8,
+							label_id: mockId(8),
 							min_select: 2,
 							max_select: 1,
-							options: [option(12), option(13)],
+							options: [option(mockId(12)), option(mockId(13))],
 						},
 					],
 				}).success,
@@ -404,9 +408,9 @@ describe(validator, () => {
 				createWith({
 					option_groups: [
 						{
-							label_id: 8,
+							label_id: mockId(8),
 							min_select: 2,
-							options: [option(12)],
+							options: [option(mockId(12))],
 						},
 					],
 				}).success,
@@ -418,10 +422,10 @@ describe(validator, () => {
 				createWith({
 					option_groups: [
 						{
-							label_id: 8,
+							label_id: mockId(8),
 							options: [
-								{ ...option(12), is_default: true },
-								{ ...option(13), is_default: true },
+								{ ...option(mockId(12)), is_default: true },
+								{ ...option(mockId(13)), is_default: true },
 							],
 						},
 					],
@@ -434,14 +438,14 @@ describe(validator, () => {
 		it('rejects a component with no quantity left', () => {
 			expect(
 				createWith({
-					bundle_items: [{ variant_id: 3, quantity: 0 }],
+					bundle_items: [{ variant_id: mockId(3), quantity: 0 }],
 				}).success,
 			).toBe(false);
 		});
 
 		it('defaults an omitted quantity rather than rejecting it', () => {
 			const validated = createWith({
-				bundle_items: [{ variant_id: 3 }],
+				bundle_items: [{ variant_id: mockId(3) }],
 			});
 
 			withDebugValidated(() => {
@@ -451,7 +455,7 @@ describe(validator, () => {
 
 		it('defaults a component to always included and free of deltas', () => {
 			const validated = createWith({
-				bundle_items: [{ variant_id: 3 }],
+				bundle_items: [{ variant_id: mockId(3) }],
 			});
 
 			withDebugValidated(() => {
@@ -470,7 +474,7 @@ describe(validator, () => {
 				bundle_items: [
 					{
 						// On an optional component this is the ceiling, not a count
-						variant_id: 3,
+						variant_id: mockId(3),
 						quantity: 2,
 						is_optional: true,
 						is_default: true,
@@ -493,7 +497,7 @@ describe(validator, () => {
 		it('rejects preselecting a component that is always included', () => {
 			expect(
 				createWith({
-					bundle_items: [{ variant_id: 3, is_default: true }],
+					bundle_items: [{ variant_id: mockId(3), is_default: true }],
 				}).success,
 			).toBe(false);
 		});
@@ -503,7 +507,7 @@ describe(validator, () => {
 				createWith({
 					bundle_items: [
 						{
-							variant_id: 3,
+							variant_id: mockId(3),
 							prices: [{ currency: 'RON', price_delta: -10 }],
 						},
 					],
@@ -515,19 +519,19 @@ describe(validator, () => {
 	describe('bundle choice groups', () => {
 		it('accepts a swap: one group of two candidates, each priced', () => {
 			const validated = createWith({
-				bundle_groups: [{ label_id: 41, position: 0 }],
+				bundle_groups: [{ label_id: mockId(41), position: 0 }],
 				bundle_items: [
-					{ variant_id: 3, quantity: 1 },
-					{ variant_id: 4, quantity: 1 },
+					{ variant_id: mockId(3), quantity: 1 },
+					{ variant_id: mockId(4), quantity: 1 },
 					{
-						variant_id: 9,
-						group_label_id: 41,
+						variant_id: mockId(9),
+						group_label_id: mockId(41),
 						is_default: true,
 						prices: [{ currency: 'RON', price_delta: -5 }],
 					},
 					{
-						variant_id: 10,
-						group_label_id: 41,
+						variant_id: mockId(10),
+						group_label_id: mockId(41),
 						prices: [{ currency: 'RON', price_delta: -5 }],
 					},
 				],
@@ -540,11 +544,11 @@ describe(validator, () => {
 
 		it('accepts preselecting and pricing a candidate, which an ungrouped mandatory component cannot carry', () => {
 			const validated = createWith({
-				bundle_groups: [{ label_id: 41 }],
+				bundle_groups: [{ label_id: mockId(41) }],
 				bundle_items: [
 					{
-						variant_id: 9,
-						group_label_id: 41,
+						variant_id: mockId(9),
+						group_label_id: mockId(41),
 						is_default: true,
 						prices: [{ currency: 'RON', price_delta: -5 }],
 					},
@@ -557,7 +561,7 @@ describe(validator, () => {
 
 			// The group decides how many candidates are taken, so the row itself is not optional
 			expect(validated.data?.bundle_items?.[0]).toMatchObject({
-				group_label_id: 41,
+				group_label_id: mockId(41),
 				is_optional: false,
 			});
 		});
@@ -565,11 +569,11 @@ describe(validator, () => {
 		it('rejects a candidate that is also optional on its own terms', () => {
 			expect(
 				createWith({
-					bundle_groups: [{ label_id: 41 }],
+					bundle_groups: [{ label_id: mockId(41) }],
 					bundle_items: [
 						{
-							variant_id: 9,
-							group_label_id: 41,
+							variant_id: mockId(9),
+							group_label_id: mockId(41),
 							is_optional: true,
 						},
 					],
@@ -583,7 +587,9 @@ describe(validator, () => {
 		 */
 		it('ignores a cardinality bound, which a bundle choice does not carry', () => {
 			const validated = createWith({
-				bundle_groups: [{ label_id: 41, min_select: 2, max_select: 1 }],
+				bundle_groups: [
+					{ label_id: mockId(41), min_select: 2, max_select: 1 },
+				],
 			});
 
 			withDebugValidated(() => {
@@ -591,15 +597,17 @@ describe(validator, () => {
 			}, validated);
 
 			expect(validated.data?.bundle_groups?.[0]).toEqual({
-				label_id: 41,
+				label_id: mockId(41),
 				position: undefined,
 			});
 		});
 
 		it('accepts a group carrying nothing but its prompt', () => {
 			const validated = createWith({
-				bundle_groups: [{ label_id: 41 }],
-				bundle_items: [{ variant_id: 9, group_label_id: 41 }],
+				bundle_groups: [{ label_id: mockId(41) }],
+				bundle_items: [
+					{ variant_id: mockId(9), group_label_id: mockId(41) },
+				],
 			});
 
 			withDebugValidated(() => {
@@ -643,7 +651,7 @@ describe(validator, () => {
 		it('update() does not count a sku as an updatable field', () => {
 			// Nothing updatable was supplied, so `params_at_least_one` still fires
 			expect(
-				productValidator.update.safeParse({ id: 1, sku: 'ANY' })
+				productValidator.update.safeParse({ id: mockId(1), sku: 'ANY' })
 					.success,
 			).toBe(false);
 		});
@@ -677,15 +685,15 @@ describe(validator, () => {
 
 	describe('update', () => {
 		it('rejects a payload carrying only the id', () => {
-			expect(productValidator.update.safeParse({ id: 1 }).success).toBe(
-				false,
-			);
+			expect(
+				productValidator.update.safeParse({ id: mockId(1) }).success,
+			).toBe(false);
 		});
 
 		it('accepts a single branch on its own', () => {
 			const validated = productValidator.update.safeParse({
-				id: 1,
-				tags: [2],
+				id: mockId(1),
+				tags: [mockId(2)],
 			});
 
 			withDebugValidated(() => {
@@ -697,7 +705,7 @@ describe(validator, () => {
 			// Nothing updatable was supplied, so `params_at_least_one` still fires
 			expect(
 				productValidator.update.safeParse({
-					id: 1,
+					id: mockId(1),
 					workflow: 'ready',
 				}).success,
 			).toBe(false);
@@ -706,7 +714,7 @@ describe(validator, () => {
 		it('ignores sale_status - it is derived from the availability dates', () => {
 			expect(
 				productValidator.update.safeParse({
-					id: 1,
+					id: mockId(1),
 					sale_status: 'available',
 				}).success,
 			).toBe(false);
@@ -720,7 +728,11 @@ describe(validator, () => {
 			});
 
 		it('accepts a range facet', () => {
-			const validated = facet({ label_id: 11, min: 300, max: 600 });
+			const validated = facet({
+				label_id: mockId(11),
+				min: 300,
+				max: 600,
+			});
 
 			withDebugValidated(() => {
 				expect(validated.success).toBe(true);
@@ -728,18 +740,21 @@ describe(validator, () => {
 		});
 
 		it('wraps a single term id into a list', () => {
-			const validated = facet({ label_id: 8, value_term_id: 13 });
+			const validated = facet({
+				label_id: mockId(8),
+				value_term_id: mockId(13),
+			});
 
 			withDebugValidated(() => {
 				expect(validated.success).toBe(true);
 				expect(
 					validated.data?.filter.attribute?.[0].value_term_id,
-				).toEqual([13]);
+				).toEqual([mockId(13)]);
 			}, validated);
 		});
 
 		it('rejects a facet naming a label and nothing to match on', () => {
-			expect(facet({ label_id: 8 }).success).toBe(false);
+			expect(facet({ label_id: mockId(8) }).success).toBe(false);
 		});
 	});
 

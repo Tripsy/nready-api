@@ -31,13 +31,11 @@ export class LogDataValidator extends BaseValidator<typeof validatorMessages> {
 
 	readonly delete = z.object({
 		ids: z.array(
-			z.coerce
-				.number({
-					message: this.getMessage('invalid_ids', {
-						name: 'ids',
-					}),
-				})
-				.positive(),
+			this.validateId(
+				this.getMessage('invalid_ids', {
+					name: 'ids',
+				}),
+			),
 			{
 				message: this.getMessage('invalid_ids', {
 					name: 'ids',
@@ -57,7 +55,7 @@ export class LogDataValidator extends BaseValidator<typeof validatorMessages> {
 		defaultPage: 1,
 
 		filterSchema: {
-			id: this.validateNumber(this.getMessage('invalid_number'), {
+			id: this.validateId(this.getMessage('invalid_id', { name: 'id' }), {
 				required: false,
 			}),
 			category: this.validateEnum(

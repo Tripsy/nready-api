@@ -12,6 +12,7 @@ import type ShippingEntity from '@/features/shipping/shipping.entity';
 import type UserEntity from '@/features/user/user.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import type { StatusTransitions } from '@/shared/types/common.type';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export const OrderReturnStatusEnum = {
 	REQUESTED: 'requested', // Asked for - by the buyer or by an operator on their behalf; nothing has moved
@@ -187,14 +188,14 @@ export default class OrderReturnEntity extends EntityAbstract {
 	})
 	closed_at!: Date | null;
 
-	@Column('int', {
+	@Column('uuid', {
 		array: true,
 		nullable: false,
 		default: () => "'{}'",
 		comment:
 			'Draft reversals raised for the returned goods; no FK, an array cannot carry one',
 	})
-	reversal_invoice_ids!: number[];
+	reversal_invoice_ids!: EntityId[];
 
 	/**
 	 * Whether the refund also pays back what the buyer was charged to have the goods delivered -
@@ -217,21 +218,21 @@ export default class OrderReturnEntity extends EntityAbstract {
 	notes!: string | null;
 
 	// RELATIONS
-	@Column('int', { nullable: false })
-	order_id!: number;
+	@Column('uuid', { nullable: false })
+	order_id!: EntityId;
 
-	@Column('int', {
+	@Column('uuid', {
 		nullable: true,
 		comment: 'The return movement, once approved',
 	})
-	shipping_id!: number | null;
+	shipping_id!: EntityId | null;
 
-	@Column('int', {
+	@Column('uuid', {
 		nullable: true,
 		comment: 'The account that asked; null when raised in the back office',
 	})
 	@Index('IDX_order_return_user_id')
-	user_id!: number | null;
+	user_id!: EntityId | null;
 
 	@ManyToOne('OrderEntity', {
 		onDelete: 'RESTRICT',

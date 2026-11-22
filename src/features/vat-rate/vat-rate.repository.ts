@@ -21,11 +21,7 @@ export class VatRateQuery extends RepositoryAbstract<VatRateEntity> {
 
 	filterByTerm(term?: string): this {
 		if (term) {
-			if (!Number.isNaN(Number(term)) && term.trim() !== '') {
-				this.filterBy('id', Number(term));
-			} else if (
-				term.length >= Configuration.get('filter.termMinLength')
-			) {
+			if (term.length >= Configuration.get('filter.termMinLength')) {
 				this.filterAny([
 					{
 						column: 'country_code',

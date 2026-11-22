@@ -12,6 +12,7 @@ import DiscountTargetEntity, {
 } from '@/features/discount/discount-target.entity';
 import { isoWeekday } from '@/helpers/date.helper';
 import { apportion, roundMoney } from '@/helpers/shop.helper';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * What every condition is judged against, whichever scope is being resolved.
@@ -52,12 +53,12 @@ export type DiscountBasketContext = {
 
 /** Everything the resolver needs about one basket line, on top of the basket it sits in. */
 export type DiscountLineContext = DiscountBasketContext & {
-	clientId?: number | null;
-	variantId: number;
-	productId: number;
-	brandId?: number | null;
+	clientId?: EntityId | null;
+	variantId: EntityId;
+	productId: EntityId;
+	brandId?: EntityId | null;
 	/** The product's own categories. Ancestors are expanded here, not by the caller. */
-	categoryIds?: readonly number[];
+	categoryIds?: readonly EntityId[];
 
 	quantity: number;
 	/** Unit price excluding VAT, in the sale currency. */
@@ -98,8 +99,8 @@ function inCyclicRange(value: number, [from, to]: [number, number]): boolean {
 
 /** Expands categories to themselves plus every ancestor, so a discount on "Shoes" reaches "Shoes > Running". */
 async function expandCategoryAncestors(
-	categoryIds: readonly number[],
-): Promise<number[]> {
+	categoryIds: readonly EntityId[],
+): Promise<EntityId[]> {
 	if (categoryIds.length === 0) {
 		return [];
 	}
@@ -110,7 +111,7 @@ async function expandCategoryAncestors(
 	 * replaces a recursive walk, and re-parenting a category moves its discounts with it
 	 * because the closure rows are rebuilt by TypeORM, not by us.
 	 */
-	const rows: { id_ancestor: number }[] = await dataSource.query(
+	const rows: { id_ancestor: EntityId }[] = await dataSource.query(
 		`SELECT DISTINCT id_ancestor FROM category_closure WHERE id_descendant = ANY($1)`,
 		[[...categoryIds]],
 	);
@@ -124,8 +125,8 @@ async function expandCategoryAncestors(
  */
 async function buildTargetGroups(
 	context: DiscountLineContext,
-): Promise<Map<DiscountTargetType, number[]>> {
-	const groups = new Map<DiscountTargetType, number[]>([
+): Promise<Map<DiscountTargetType, EntityId[]>> {
+	const groups = new Map<DiscountTargetType, EntityId[]>([
 		[DiscountTargetTypeEnum.VARIANT, [context.variantId]],
 		[DiscountTargetTypeEnum.PRODUCT, [context.productId]],
 	]);
@@ -466,7 +467,7 @@ export function computeOrderReductions(
 
 /** What the shipping pass needs: the basket it is judged against, the buyer, and the price. */
 export type DiscountShippingContext = DiscountBasketContext & {
-	clientId?: number | null;
+	clientId?: EntityId | null;
 	/** The shipment price excluding VAT, sale currency. */
 	price: number;
 };

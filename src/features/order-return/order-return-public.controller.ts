@@ -37,7 +37,7 @@ class OrderReturnPublicController extends BaseController {
 
 		const entries = await this.orderReturnService.findForOwnOrder(
 			data.order_id,
-			this.policy.getId(res.locals.auth) ?? 0,
+			this.policy.requireId(res.locals.auth),
 		);
 
 		res.locals.output.data({
@@ -55,7 +55,7 @@ class OrderReturnPublicController extends BaseController {
 		res.locals.output.data(
 			await this.orderReturnService.getOwnReturnable(
 				data.order_id,
-				this.policy.getId(res.locals.auth) ?? 0,
+				this.policy.requireId(res.locals.auth),
 			),
 		);
 
@@ -76,7 +76,7 @@ class OrderReturnPublicController extends BaseController {
 
 		const entry = await this.orderReturnService.createOwn(
 			data,
-			this.policy.getId(res.locals.auth) ?? 0,
+			this.policy.requireId(res.locals.auth),
 		);
 
 		res.locals.output.data({
@@ -102,7 +102,7 @@ class OrderReturnPublicController extends BaseController {
 		await this.orderReturnService.cancelOwn(
 			data.order_id,
 			data.id,
-			this.policy.getId(res.locals.auth) ?? 0,
+			this.policy.requireId(res.locals.auth),
 		);
 
 		res.locals.output.message(lang('order-return.success.cancel'));

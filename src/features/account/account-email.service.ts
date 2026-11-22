@@ -2,11 +2,12 @@ import type AccountRecoveryEntity from '@/features/account/account-recovery.enti
 import type UserEntity from '@/features/user/user.entity';
 import { formatDate } from '@/helpers/date.helper';
 import { loadEmailTemplate, queueEmail } from '@/providers/email.provider';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export class AccountEmailService {
 	public async sendEmailConfirmUpdate(
 		user: Partial<UserEntity> & {
-			id: number;
+			id: EntityId;
 			name: string;
 			email: string;
 			language: string;
@@ -34,7 +35,7 @@ export class AccountEmailService {
 
 	public async sendEmailConfirmCreate(
 		user: Partial<UserEntity> & {
-			id: number;
+			id: EntityId;
 			name: string;
 			email: string;
 			language: string;

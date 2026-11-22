@@ -6,6 +6,7 @@ import {
 import { runSeedFile } from '@/database/seed/seed.runner';
 import PlaceEntity, { PlaceTypeEnum } from '@/features/place/place.entity';
 import PlaceContentEntity from '@/features/place/place-content.entity';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * Real geography rather than generated strings: places are referenced by every address in
@@ -267,7 +268,7 @@ export const placeSeed: SeedDefinition = {
 		});
 
 		// Code → id for every place already stored, extended as this run inserts more.
-		const idByCode = new Map<string, number>(
+		const idByCode = new Map<string, EntityId>(
 			existingPlaces
 				.filter((place) => place.code)
 				.map((place) => [place.code as string, place.id]),
@@ -323,7 +324,7 @@ export const placeSeed: SeedDefinition = {
 			})
 			.map((place) =>
 				contentRepository.create({
-					place_id: idByCode.get(place.code) as number,
+					place_id: idByCode.get(place.code) as EntityId,
 					language: 'en',
 					name: place.name,
 					type_label: TYPE_LABELS[place.place_type],

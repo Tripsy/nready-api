@@ -12,6 +12,7 @@ import type UserEntity from '@/features/user/user.entity';
 import { UserStatusEnum } from '@/features/user/user.entity';
 import { type UserService, userService } from '@/features/user/user.service';
 import { createCurrentDate } from '@/helpers/date.helper';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * The provider round-trip, as a function. Injected rather than imported directly so it can
@@ -88,7 +89,7 @@ export class AccountOAuthService {
 	 * @description Attaches a provider identity to an existing user
 	 */
 	private linkIdentity(
-		user_id: number,
+		user_id: EntityId,
 		provider: AccountIdentityProvider,
 		profile: OAuthProfile,
 	): Promise<AccountIdentityEntity> {
@@ -220,7 +221,7 @@ export class AccountOAuthService {
 	/**
 	 * @description Lists the providers linked to a user (for the account settings screen)
 	 */
-	public async findForUser(user_id: number): Promise<
+	public async findForUser(user_id: EntityId): Promise<
 		{
 			provider: AccountIdentityProvider;
 			email: string | null;

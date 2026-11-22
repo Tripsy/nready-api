@@ -6,6 +6,7 @@ import type UserEntity from '@/features/user/user.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import { numericTransformer } from '@/shared/transformers/numeric.transformer';
 import type { StatusTransitions } from '@/shared/types/common.type';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export const ReviewStatusEnum = {
 	PENDING: 'pending', // Awaiting moderation
@@ -126,10 +127,10 @@ export default class ReviewEntity extends EntityAbstract {
 	static readonly HAS_CACHE: boolean = true;
 
 	@Column({
-		type: 'int',
+		type: 'uuid',
 		nullable: false,
 	})
-	product_id!: number;
+	product_id!: EntityId;
 
 	/**
 	 * The variant the review is *about* - the 32 cm Margherita, the black M shirt - kept because
@@ -145,10 +146,10 @@ export default class ReviewEntity extends EntityAbstract {
 	 * answer is known".
 	 */
 	@Column({
-		type: 'int',
+		type: 'uuid',
 		nullable: true,
 	})
-	variant_id?: number | null;
+	variant_id?: EntityId | null;
 
 	/**
 	 * The order the reviewed purchase was made on, when it is known.
@@ -163,10 +164,10 @@ export default class ReviewEntity extends EntityAbstract {
 	 * written before the lookup existed.
 	 */
 	@Column({
-		type: 'int',
+		type: 'uuid',
 		nullable: true,
 	})
-	order_id?: number | null;
+	order_id?: EntityId | null;
 
 	@Column({
 		type: 'jsonb',
@@ -216,10 +217,10 @@ export default class ReviewEntity extends EntityAbstract {
 	// Author - always a registered user, which is what `UQ_review_user` counts on to hold one
 	// review per product.
 	@Column({
-		type: 'int',
+		type: 'uuid',
 		nullable: false,
 	})
-	user_id!: number;
+	user_id!: EntityId;
 
 	// Flags
 	@Column({
@@ -248,11 +249,11 @@ export default class ReviewEntity extends EntityAbstract {
 	moderated_at?: Date | null;
 
 	@Column({
-		type: 'int',
+		type: 'uuid',
 		nullable: true,
 		comment: 'Moderator user ID',
 	})
-	moderated_by?: number | null;
+	moderated_by?: EntityId | null;
 
 	@Column({
 		type: 'varchar',

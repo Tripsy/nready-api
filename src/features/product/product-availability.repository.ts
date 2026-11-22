@@ -3,6 +3,7 @@ import dataSource from '@/config/data-source.config';
 import type { ProductAvailabilityType } from '@/features/product/product.validator';
 import ProductAvailabilityEntity from '@/features/product/product-availability.entity';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * Postgres hands a `time` column back as `HH:MM:SS` while the validator produces `HH:MM`, so the
@@ -56,7 +57,7 @@ export const ProductAvailabilityRepository = dataSource
 		 */
 		async syncWindows(
 			manager: EntityManager,
-			product_id: number,
+			product_id: EntityId,
 			windows: ProductAvailabilityType[],
 		): Promise<void> {
 			const repository = manager.getRepository(ProductAvailabilityEntity);

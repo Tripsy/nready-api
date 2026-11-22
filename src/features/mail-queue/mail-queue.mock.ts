@@ -6,11 +6,12 @@ import {
 } from '@/features/mail-queue/mail-queue.validator';
 import { createPastDate, formatDate } from '@/helpers/date.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 export function getMailQueueEntityMock(): MailQueueEntity {
 	return {
-		id: 1,
-		template_id: 1,
+		id: mockId(1),
+		template_id: mockId(1),
 		language: 'en',
 		content: {
 			subject: 'Test email',
@@ -38,7 +39,7 @@ export const mailQueueInputPayloads = {
 		order_by: OrderByEnum.ID,
 		direction: OrderDirectionEnum.DESC,
 		filter: {
-			id: 1,
+			id: mockId(1),
 			template: 'test',
 			status: MailQueueStatusEnum.ERROR,
 			content: 'test',
@@ -47,7 +48,7 @@ export const mailQueueInputPayloads = {
 			sent_date_end: formatDate(createPastDate(7200)),
 		},
 	},
-	delete: { ids: [1, 2, 3] },
+	delete: { ids: [mockId(1), mockId(2), mockId(3)] },
 };
 
 export const mailQueueOutputPayloads = {

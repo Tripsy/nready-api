@@ -5,6 +5,7 @@ import type {
 } from '@/features/invoice/invoice.hooks';
 import type ShippingEntity from '@/features/shipping/shipping.entity';
 import { shippingService } from '@/features/shipping/shipping.service';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * A movement of goods as something an order bills on a document of its own. The fee lives on the
@@ -40,12 +41,12 @@ const toSource = (shipping: ShippingEntity): BillableSource | null => {
 export const shippingBillableSource: BillableSourceProvider = {
 	billedOnce: true,
 
-	listBillable: async (orderId: number) =>
+	listBillable: async (orderId: EntityId) =>
 		(await shippingService.findBillable({ order_id: orderId }))
 			.map(toSource)
 			.filter((source) => source !== null),
 
-	findBillable: async (sourceId: number) => {
+	findBillable: async (sourceId: EntityId) => {
 		const [shipping] = await shippingService.findBillable({
 			id: sourceId,
 		});
@@ -53,7 +54,7 @@ export const shippingBillableSource: BillableSourceProvider = {
 		return shipping ? toSource(shipping) : null;
 	},
 
-	getLineCaps: async (sourceIds: readonly number[]) => {
+	getLineCaps: async (sourceIds: readonly EntityId[]) => {
 		const prices = await shippingService.getPrices(sourceIds);
 
 		return new Map(

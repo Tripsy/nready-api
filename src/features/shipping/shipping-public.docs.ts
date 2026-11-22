@@ -61,7 +61,7 @@ export const docs: Record<
 		request: {
 			notes: "Requires an account. An order billed to somebody else's client answers 404, the same as a missing one. Unpaginated. `destination_data` is null until the movement ships - the address is frozen at that transition. `pickup_warehouse` is where a `self_pickup` is collected from. `price` excludes VAT; what the client paid is `(price - discount_reduction) x (1 + vat_rate / 100)`",
 			params: {
-				order_id: { type: 'number', required: true },
+				order_id: { type: 'string', required: true },
 			},
 		},
 	}),

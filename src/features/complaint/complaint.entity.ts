@@ -1,6 +1,7 @@
 import { Check, Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import type UserEntity from '@/features/user/user.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export const ComplaintEntityTypeEnum = {
 	ARTICLE: 'article',
@@ -64,14 +65,14 @@ export default class ComplaintEntity extends EntityAbstract {
 	entity_type!: ComplaintEntityType;
 
 	@Column({
-		type: 'int',
+		type: 'uuid',
 		nullable: false,
 	})
-	entity_id!: number;
+	entity_id!: EntityId;
 
-	@Column('int', { nullable: false })
+	@Column('uuid', { nullable: false })
 	@Index('IDX_complaint_user_id')
-	user_id!: number;
+	user_id!: EntityId;
 
 	@Column({
 		type: 'enum',
@@ -100,11 +101,11 @@ export default class ComplaintEntity extends EntityAbstract {
 	resolved_at?: Date | null;
 
 	@Column({
-		type: 'int',
+		type: 'uuid',
 		nullable: true,
 		comment: 'Moderator user ID',
 	})
-	resolved_by?: number | null;
+	resolved_by?: EntityId | null;
 
 	// RELATIONS
 	@ManyToOne('UserEntity', {

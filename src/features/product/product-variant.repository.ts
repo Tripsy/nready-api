@@ -11,6 +11,7 @@ import ProductPriceEntity from '@/features/product/product-price.entity';
 import ProductVariantEntity from '@/features/product/product-variant.entity';
 import ProductVariantAttributeEntity from '@/features/product/product-variant-attribute.entity';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * A payload variant whose attribute values already carry their normalized `value_base`.
@@ -46,10 +47,6 @@ export class ProductVariantQuery extends RepositoryAbstract<ProductVariantEntity
 	filterByTerm(term?: string): this {
 		if (!term) {
 			return this;
-		}
-
-		if (!Number.isNaN(Number(term)) && term.trim() !== '') {
-			return this.filterBy('product_variant.id', Number(term));
 		}
 
 		if (term.length < Configuration.get('filter.termMinLength')) {
@@ -127,7 +124,7 @@ export const ProductVariantRepository = dataSource
 		 */
 		async syncVariants(
 			manager: EntityManager,
-			product_id: number,
+			product_id: EntityId,
 			variants: ResolvedVariant[],
 		): Promise<void> {
 			const repository = manager.getRepository(ProductVariantEntity);
@@ -193,7 +190,7 @@ export const ProductVariantRepository = dataSource
 		/** One price row per currency, keyed the way the table's unique index is. */
 		async syncPrices(
 			manager: EntityManager,
-			variant_id: number,
+			variant_id: EntityId,
 			prices: ProductPriceType[],
 		): Promise<void> {
 			const repository = manager.getRepository(ProductPriceEntity);
@@ -242,7 +239,7 @@ export const ProductVariantRepository = dataSource
 		 */
 		async syncAttributes(
 			manager: EntityManager,
-			variant_id: number,
+			variant_id: EntityId,
 			values: ResolvedAttributeValue[],
 		): Promise<void> {
 			const repository = manager.getRepository(

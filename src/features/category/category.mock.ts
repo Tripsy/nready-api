@@ -9,6 +9,7 @@ import {
 } from '@/features/category/category.validator';
 import { createPastDate } from '@/helpers/date.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 const categoryValidator = new CategoryValidator('category');
 
@@ -22,14 +23,14 @@ export function getCategoryEntityMock(): CategoryEntity {
 		status: CategoryStatusEnum.ACTIVE,
 		type: CategoryTypeEnum.ARTICLE,
 		updated_at: null,
-		id: 1,
+		id: mockId(1),
 	};
 }
 
 export const categoryInputPayloads = {
 	create: {
 		type: CategoryTypeEnum.ARTICLE,
-		parent_id: 1,
+		parent_id: mockId(1),
 		contents: [
 			{
 				language: 'en',
@@ -60,8 +61,8 @@ export const categoryInputPayloads = {
 		with_children: false,
 	},
 	update: {
-		id: 1,
-		parent_id: 3,
+		id: mockId(1),
+		parent_id: mockId(3),
 		contents: [
 			{
 				language: 'en',
@@ -105,8 +106,8 @@ export const categoryInputPayloads = {
 	},
 	orderUpdate: {
 		type: CategoryTypeEnum.ARTICLE,
-		parent_id: 1,
-		positions: [3, 2],
+		parent_id: mockId(1),
+		positions: [mockId(3), mockId(2)],
 	},
 };
 

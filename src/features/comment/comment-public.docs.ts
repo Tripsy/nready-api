@@ -75,7 +75,7 @@ export const docs: Record<
 					condition:
 						'articles only - neither a product nor a review takes comments',
 				},
-				entity_id: { type: 'number', required: true },
+				entity_id: { type: 'string', required: true },
 				content: {
 					type: 'string',
 					required: true,
@@ -88,7 +88,7 @@ export const docs: Record<
 					default: CommentTypeEnum.COMMENT,
 				},
 				parent_id: {
-					type: 'number',
+					type: 'string',
 					required: false,
 					condition: 'the comment being replied to',
 				},
@@ -135,7 +135,7 @@ export const docs: Record<
 			notes: 'Deliberately thin - the target and the parent, which is what a link in an email needs to build the page address and the anchor inside it. A comment that is not approved is not found',
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -153,7 +153,7 @@ export const docs: Record<
 			notes: `Only the text moves - the target, the parent and the type are what the comment is. Open while the comment is ${CommentStatusEnum.PENDING} or ${CommentStatusEnum.APPROVED} and refused once a moderator has acted on it. The edit stamps edited_at, which is what marks the comment as edited in the thread. ${ownershipNote}`,
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -180,7 +180,7 @@ export const docs: Record<
 			notes: `Hard, and it takes the replies with it. ${ownershipNote}`,
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -210,7 +210,7 @@ export const docs: Record<
 					required: true,
 					values: Object.values(CommentEntityTypeEnum),
 				},
-				entity_id: { type: 'number', required: true },
+				entity_id: { type: 'string', required: true },
 			},
 			query: {
 				page: {
@@ -236,7 +236,7 @@ export const docs: Record<
 					default: OrderDirectionEnum.DESC,
 				},
 				filter: {
-					parent_id: { type: 'number', required: false },
+					parent_id: { type: 'string', required: false },
 					type: {
 						type: 'enum',
 						required: false,

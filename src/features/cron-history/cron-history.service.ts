@@ -1,6 +1,7 @@
 import type CronHistoryEntity from '@/features/cron-history/cron-history.entity';
 import { getCronHistoryRepository } from '@/features/cron-history/cron-history.repository';
 import type { CronHistoryValidator } from '@/features/cron-history/cron-history.validator';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 export class CronHistoryService {
 	constructor(
@@ -14,7 +15,7 @@ export class CronHistoryService {
 			.delete(false, true, true);
 	}
 
-	public findById(id: number): Promise<CronHistoryEntity> {
+	public findById(id: EntityId): Promise<CronHistoryEntity> {
 		return this.repository.createQuery().filterById(id).firstOrFail();
 	}
 

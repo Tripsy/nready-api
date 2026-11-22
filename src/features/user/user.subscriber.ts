@@ -5,6 +5,7 @@ import UserEntity, { UserStatusEnum } from '@/features/user/user.entity';
 import { createCurrentDate } from '@/helpers/date.helper';
 import { encryptPassword } from '@/helpers/security.helper';
 import SubscriberAbstract from '@/shared/abstracts/subscriber.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import { LogHistoryActionEnum } from '@/shared/types/log-history.type';
 
 @EventSubscriber()
@@ -54,7 +55,7 @@ export class UserSubscriber extends SubscriberAbstract<UserEntity> {
 	}
 
 	async afterUpdate(event: UpdateEvent<UserEntity>) {
-		const id: number = event.entity?.id || event.databaseEntity.id;
+		const id: EntityId = event.entity?.id || event.databaseEntity.id;
 
 		this.logHistory(
 			id,

@@ -16,6 +16,7 @@ import { ClientAddressValidator } from '@/features/client-address/client-address
 import asyncHandler from '@/helpers/async.handler';
 import { getRouteParam } from '@/helpers/request.helper';
 import { BaseController } from '@/shared/abstracts/controller.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * The shopper's own billing and delivery addresses, filed under one of their clients.
@@ -39,16 +40,14 @@ class ClientAddressPublicController extends BaseController {
 		super();
 	}
 
-	/** See `ClientPublicController.resolveOwner` - the `?? 0` never fires after `requiredAuth`. */
-	private resolveOwner(res: Response): number {
-		this.policy.requiredAuth(res.locals.auth);
-
-		return this.policy.getId(res.locals.auth) ?? 0;
+	/** Who the request counts as - 401 for a visitor. */
+	private resolveOwner(res: Response): EntityId {
+		return this.policy.requireId(res.locals.auth);
 	}
 
-	private async findOwnEntry(req: Request, userId: number) {
+	private async findOwnEntry(req: Request, userId: EntityId) {
 		return this.clientAddressService.findOwnById(
-			parseInt(getRouteParam(req, 'id') ?? '', 10),
+			getRouteParam(req, 'id') ?? '',
 			userId,
 		);
 	}

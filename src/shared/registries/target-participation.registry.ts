@@ -1,4 +1,5 @@
 import { createKeyedProvider } from '@/helpers/hook.helper';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * Whether a polymorphic target still accepts what a reader is about to add to it.
@@ -38,7 +39,7 @@ export type Participation =
  * since nothing may be attached to a page no reader can open.
  */
 export type ParticipationResolver = (
-	entityId: number,
+	entityId: EntityId,
 	participation: Participation,
 ) => Promise<boolean>;
 
@@ -53,7 +54,7 @@ export const registerParticipationResolver = resolvers.register;
 
 export const isParticipationAllowed = async (
 	entityType: string,
-	entityId: number,
+	entityId: EntityId,
 	participation: Participation,
 ): Promise<boolean> => {
 	const resolver = resolvers.get(entityType);

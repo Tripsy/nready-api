@@ -1,11 +1,12 @@
 import { EventEmitter } from 'node:events';
 import type UserEntity from '@/features/user/user.entity';
 import type { UserStatus } from '@/features/user/user.entity';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { LogHistoryAction } from '@/shared/types/log-history.type';
 
 export type LogHistoryEventPayload = {
 	entity: string;
-	entity_ids: number[];
+	entity_ids: EntityId[];
 	action: LogHistoryAction;
 	data?: Record<string, string | number>;
 };
@@ -27,7 +28,7 @@ export type LogHistoryEventPayload = {
  */
 export type EntityRemovedEventPayload = {
 	entity_type: string;
-	entity_ids: number[];
+	entity_ids: EntityId[];
 };
 
 /**
@@ -42,7 +43,7 @@ export type EntityRemovedEventPayload = {
  */
 export type ComplaintFiledEventPayload = {
 	entity_type: string;
-	entity_id: number;
+	entity_id: EntityId;
 	/** Distinct reporters, resolved by the rule in `ComplaintQuery.countDistinctReporters`. */
 	reporters: number;
 };
@@ -55,9 +56,9 @@ export type ComplaintFiledEventPayload = {
  * address a notification goes to has to be the one the account holds when it is sent.
  */
 export type CommentPostedEventPayload = {
-	comment_id: number;
+	comment_id: EntityId;
 	entity_type: string;
-	entity_id: number;
+	entity_id: EntityId;
 	/**
 	 * The language the comment was written from, captured while a request still exists - the
 	 * listener runs after the response and the digest runs from a cron, and neither has one.
@@ -66,7 +67,7 @@ export type CommentPostedEventPayload = {
 };
 
 export type UserRegisteredEventPayload = Partial<UserEntity> & {
-	id: number;
+	id: EntityId;
 	name: string;
 	email: string;
 	language: string;

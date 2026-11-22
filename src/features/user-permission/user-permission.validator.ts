@@ -24,13 +24,11 @@ export class UserPermissionValidator extends BaseValidator<
 		),
 		permission_ids: z
 			.array(
-				z
-					.number({
-						message: this.getMessage('invalid_ids', {
-							name: 'ids',
-						}),
-					})
-					.positive(),
+				this.validateId(
+					this.getMessage('invalid_ids', {
+						name: 'ids',
+					}),
+				),
 			)
 			.min(1, {
 				message: this.getMessage('array_min', {

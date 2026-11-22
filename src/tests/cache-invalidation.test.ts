@@ -6,6 +6,7 @@ import {
 	cleanEntityCacheBy,
 	cleanEntityCacheMany,
 } from '@/shared/abstracts/service.abstract';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 /**
  * Cache invalidation is owned by the service layer and the repository terminals, and this pins its
@@ -44,17 +45,19 @@ describe('cleanEntityCache', () => {
 	it('deletes one pattern keyed by entity name and id', async () => {
 		const captured = capturePatterns();
 
-		await cleanEntityCache(CachedEntity, 12);
+		await cleanEntityCache(CachedEntity, mockId(12));
 
 		// Built rather than written out: `buildKey` prefixes the whole keyspace with the app
 		// name, and the pattern has to be the one the keys were stored under.
-		expect(captured).toEqual([`${cacheProvider.buildKey('brand', '12')}*`]);
+		expect(captured).toEqual([
+			`${cacheProvider.buildKey('brand', mockId(12))}*`,
+		]);
 	});
 
 	it('stays silent for an entity that is not cached', async () => {
 		const captured = capturePatterns();
 
-		await cleanEntityCache(UncachedEntity, 12);
+		await cleanEntityCache(UncachedEntity, mockId(12));
 
 		expect(captured).toEqual([]);
 	});
@@ -75,7 +78,7 @@ describe('cleanEntityCache', () => {
 			},
 		);
 
-		await cleanEntityCache(CachedEntity, 12);
+		await cleanEntityCache(CachedEntity, mockId(12));
 
 		expect(finished).toBe(true);
 	});
@@ -136,10 +139,10 @@ describe('cleanEntityCacheMany', () => {
 			.spyOn(cacheProvider, 'deleteByIdents')
 			.mockResolvedValue();
 
-		await cleanEntityCacheMany(CachedEntity, [7]);
+		await cleanEntityCacheMany(CachedEntity, [mockId(7)]);
 
 		expect(deleteByPattern).toHaveBeenCalledWith(
-			`${cacheProvider.buildKey('brand', '7')}*`,
+			`${cacheProvider.buildKey('brand', mockId(7))}*`,
 		);
 		expect(deleteByIdents).not.toHaveBeenCalled();
 	});
@@ -156,10 +159,18 @@ describe('cleanEntityCacheMany', () => {
 			.spyOn(cacheProvider, 'deleteByIdents')
 			.mockResolvedValue();
 
-		await cleanEntityCacheMany(CachedEntity, [4, 5, 6]);
+		await cleanEntityCacheMany(CachedEntity, [
+			mockId(4),
+			mockId(5),
+			mockId(6),
+		]);
 
 		expect(deleteByIdents).toHaveBeenCalledTimes(1);
-		expect(deleteByIdents).toHaveBeenCalledWith('brand', ['4', '5', '6']);
+		expect(deleteByIdents).toHaveBeenCalledWith('brand', [
+			mockId(4),
+			mockId(5),
+			mockId(6),
+		]);
 		expect(deleteByPattern).not.toHaveBeenCalled();
 	});
 
@@ -168,7 +179,7 @@ describe('cleanEntityCacheMany', () => {
 			.spyOn(cacheProvider, 'deleteByIdents')
 			.mockResolvedValue();
 
-		await cleanEntityCacheMany(UncachedEntity, [4, 5]);
+		await cleanEntityCacheMany(UncachedEntity, [mockId(4), mockId(5)]);
 		await cleanEntityCacheMany(CachedEntity, []);
 
 		expect(deleteByIdents).not.toHaveBeenCalled();

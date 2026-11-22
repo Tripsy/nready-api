@@ -6,10 +6,11 @@ import {
 	Index,
 	JoinColumn,
 	ManyToOne,
-	PrimaryGeneratedColumn,
 } from 'typeorm';
 import type PermissionEntity from '@/features/permission/permission.entity';
 import type UserEntity from '@/features/user/user.entity';
+import { EntityIdAbstract } from '@/shared/abstracts/entity-id.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 const ENTITY_TABLE_NAME = 'user_permission';
 
@@ -22,19 +23,16 @@ const ENTITY_TABLE_NAME = 'user_permission';
 	unique: true,
 	where: 'deleted_at IS NULL',
 })
-export default class UserPermissionEntity {
+export default class UserPermissionEntity extends EntityIdAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
 
-	@PrimaryGeneratedColumn({ type: 'int' })
-	id!: number;
+	@Column('uuid', { nullable: false })
+	user_id!: EntityId;
 
-	@Column('int', { unsigned: false, nullable: false })
-	user_id!: number;
-
-	@Column('int', { unsigned: false, nullable: false })
+	@Column('uuid', { nullable: false })
 	@Index('IDX_user_permission_permission_id')
-	permission_id!: number;
+	permission_id!: EntityId;
 
 	@CreateDateColumn({ type: 'timestamp', nullable: false })
 	created_at!: Date;

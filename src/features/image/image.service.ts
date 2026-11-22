@@ -18,6 +18,7 @@ import {
 	cleanEntityCacheMany,
 } from '@/shared/abstracts/service.abstract';
 import type { TargetImage } from '@/shared/registries/target-image.registry';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 export class ImageService {
@@ -58,7 +59,7 @@ export class ImageService {
 	 * @description Update any data
 	 */
 	public async update(
-		data: DeepPartial<ImageEntity> & { id: number },
+		data: DeepPartial<ImageEntity> & { id: EntityId },
 	): Promise<ImageEntity> {
 		const saved = await this.repository.save(data);
 
@@ -105,8 +106,8 @@ export class ImageService {
 
 	public async updateOrder(
 		section: ImageSection,
-		entity_id: number,
-		positions: { id: number; sort_order: number }[],
+		entity_id: EntityId,
+		positions: { id: EntityId; sort_order: number }[],
 	): Promise<void> {
 		const ids = positions.map((p) => p.id);
 
@@ -177,15 +178,15 @@ export class ImageService {
 	public async getPrimaryByTargets(
 		section: ImageSection,
 		imageType: ImageType,
-		entityIds: number[],
-	): Promise<Map<number, TargetImage>> {
+		entityIds: EntityId[],
+	): Promise<Map<EntityId, TargetImage>> {
 		const galleries = await this.getGalleryByTargets(
 			section,
 			imageType,
 			entityIds,
 		);
 
-		const primary = new Map<number, TargetImage>();
+		const primary = new Map<EntityId, TargetImage>();
 
 		// The first of each gallery, which `getGalleryByTargets` has already ordered - so "the
 		// picture that stands for this row" and "the first picture of this row" cannot drift.
@@ -213,9 +214,9 @@ export class ImageService {
 	public async getGalleryByTargets(
 		section: ImageSection,
 		imageType: ImageType,
-		entityIds: number[],
-	): Promise<Map<number, TargetImage[]>> {
-		const galleries = new Map<number, TargetImage[]>();
+		entityIds: EntityId[],
+	): Promise<Map<EntityId, TargetImage[]>> {
+		const galleries = new Map<EntityId, TargetImage[]>();
 
 		if (entityIds.length === 0) {
 			return galleries;
@@ -268,7 +269,7 @@ export class ImageService {
 		return galleries;
 	}
 
-	public async delete(id: number) {
+	public async delete(id: EntityId) {
 		await this.repository.createQuery().filterById(id).delete(false);
 	}
 
@@ -289,7 +290,7 @@ export class ImageService {
 	 */
 	public async deleteByTargets(
 		section: ImageSection,
-		entityIds: number[],
+		entityIds: EntityId[],
 	): Promise<void> {
 		if (entityIds.length === 0) {
 			return;
@@ -313,14 +314,14 @@ export class ImageService {
 		}
 	}
 
-	public findById(id: number): Promise<ImageEntity> {
+	public findById(id: EntityId): Promise<ImageEntity> {
 		return this.repository.createQuery().filterById(id).firstOrFail();
 	}
 
 	/**
 	 * @description Used in `read` method from controller; this will return a custom shape
 	 */
-	public async getEntryData(data: { id: number; language?: string }) {
+	public async getEntryData(data: { id: EntityId; language?: string }) {
 		const query = this.repository.createQuery().filterById(data.id);
 
 		if (data.language) {
@@ -364,12 +365,16 @@ export class ImageService {
 				'content.description',
 			])
 			.filterById(data.filter.id)
-			.filterBy('image.entity_id', data.filter.entity_id)
 			.filterBy('image.section', data.filter.section)
 			.filterBy('image.image_type', data.filter.image_type)
 			.filterBy('image.status', data.filter.status)
 			.orderBy(data.order_by, data.direction)
 			.pagination(data.page, data.limit);
+
+		// A list, never empty - the validator refuses `[]`, which would reach Postgres as `IN ()`
+		if (data.filter.entity_id) {
+			query.filterBy('image.entity_id', data.filter.entity_id, 'IN');
+		}
 
 		if (data.filter.language) {
 			query.filterBy('content.language', data.filter.language);

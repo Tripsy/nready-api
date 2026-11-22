@@ -54,6 +54,7 @@ import {
 	assertValidStatusTransition,
 	cleanEntityCache,
 } from '@/shared/abstracts/service.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 export class CashFlowService {
@@ -96,7 +97,7 @@ export class CashFlowService {
 		}
 	}
 
-	public checkCategory(category: CashFlowCategory, parent_id?: number) {
+	public checkCategory(category: CashFlowCategory, parent_id?: EntityId) {
 		if (category === CashFlowCategoryEnum.REFUND && !parent_id) {
 			throw new BadRequestError(
 				lang('cash-flow.error.refund_parent_required'),
@@ -201,7 +202,7 @@ export class CashFlowService {
 		return rate;
 	}
 
-	public async getRefundedAmountSum(parent_id: number): Promise<number> {
+	public async getRefundedAmountSum(parent_id: EntityId): Promise<number> {
 		const result = await this.repository
 			.createQuery()
 			.select(['SUM(cash_flow.amount) AS total'], false)
@@ -432,7 +433,7 @@ export class CashFlowService {
 	 * @description Update any data
 	 */
 	public async update(
-		data: DeepPartial<CashFlowEntity> & { id: number },
+		data: DeepPartial<CashFlowEntity> & { id: EntityId },
 	): Promise<CashFlowEntity> {
 		const saved = await this.repository.save(data);
 
@@ -660,7 +661,7 @@ export class CashFlowService {
 	 * and the unique index over `(cash_flow_id, operational_record_type)` means there is at most
 	 * one of them.
 	 */
-	public findOrderId(cashFlowId: number): Promise<number | null> {
+	public findOrderId(cashFlowId: EntityId): Promise<EntityId | null> {
 		return this.findOperationalRecordId(
 			cashFlowId,
 			OperationalRecordTypeEnum.ORDER,
@@ -674,7 +675,7 @@ export class CashFlowService {
 	 */
 	private findForOrder(
 		manager: EntityManager,
-		orderId: number,
+		orderId: EntityId,
 		statuses: readonly CashFlowStatus[],
 		lockRows = false,
 	): Promise<CashFlowEntity[]> {
@@ -710,9 +711,9 @@ export class CashFlowService {
 	 * Not filtered by client here: the caller has already resolved the order through its owner, and
 	 * a movement filed under an order belongs to that order's client.
 	 */
-	public async findPublicForOrder(orderId: number): Promise<
+	public async findPublicForOrder(orderId: EntityId): Promise<
 		{
-			id: number;
+			id: EntityId;
 			direction: CashFlowDirection;
 			method: CashFlowMethod;
 			status: CashFlowStatus;
@@ -751,8 +752,8 @@ export class CashFlowService {
 	 * since a buyer's order list asks it per page.
 	 */
 	public async findOrdersWithOpenPayment(
-		orderIds: readonly number[],
-	): Promise<Set<number>> {
+		orderIds: readonly EntityId[],
+	): Promise<Set<EntityId>> {
 		if (orderIds.length === 0) {
 			return new Set();
 		}
@@ -782,9 +783,9 @@ export class CashFlowService {
 					CashFlowStatusEnum.REQUIRES_ACTION,
 				],
 			})
-			.getRawMany<{ order_id: number | string }>();
+			.getRawMany<{ order_id: EntityId | string }>();
 
-		return new Set(rows.map((row) => Number(row.order_id)));
+		return new Set(rows.map((row) => row.order_id));
 	}
 
 	/**
@@ -793,7 +794,7 @@ export class CashFlowService {
 	 * Whether any movement still stands under an order - pending, authorized or completed. A failed,
 	 * canceled or expired one never moved money and holds nothing for the client it names.
 	 */
-	public async hasMovementsForOrder(orderId: number): Promise<boolean> {
+	public async hasMovementsForOrder(orderId: EntityId): Promise<boolean> {
 		const rows = await this.findForOrder(dataSource.manager, orderId, [
 			CashFlowStatusEnum.PENDING,
 			CashFlowStatusEnum.AUTHORIZED,
@@ -812,7 +813,7 @@ export class CashFlowService {
 	 * written, so it is filed under the same order. Compared against the order's own total, which is
 	 * in the currency the checkout asked for the money in.
 	 */
-	public async sumCompletedForOrder(orderId: number): Promise<number> {
+	public async sumCompletedForOrder(orderId: EntityId): Promise<number> {
 		const rows = await this.findForOrder(dataSource.manager, orderId, [
 			CashFlowStatusEnum.COMPLETED,
 		]);
@@ -843,9 +844,9 @@ export class CashFlowService {
 	 */
 	public async restatePendingForOrder(
 		manager: EntityManager,
-		orderId: number,
+		orderId: EntityId,
 		grossTotal: number,
-	): Promise<number | null> {
+	): Promise<EntityId | null> {
 		const pending = (
 			await this.findForOrder(
 				manager,
@@ -883,8 +884,8 @@ export class CashFlowService {
 	 */
 	public async cancelPendingForOrder(
 		manager: EntityManager,
-		orderId: number,
-	): Promise<{ hasProcessed: boolean; canceledIds: number[] }> {
+		orderId: EntityId,
+	): Promise<{ hasProcessed: boolean; canceledIds: EntityId[] }> {
 		const rows = (
 			await this.findForOrder(
 				manager,
@@ -935,7 +936,7 @@ export class CashFlowService {
 	public async findClientId(
 		cashFlow: Pick<CashFlowEntity, 'id' | 'parent_id'>,
 		manager: EntityManager = dataSource.manager,
-	): Promise<number | null> {
+	): Promise<EntityId | null> {
 		const own = await this.findRecordIdWithin(
 			manager,
 			cashFlow.id,
@@ -956,7 +957,7 @@ export class CashFlowService {
 	/** Every live record a movement is filed under, as `{ type: entity_id }`. */
 	private async findRecordsWithin(
 		manager: EntityManager,
-		cashFlowId: number,
+		cashFlowId: EntityId,
 	): Promise<Partial<Record<OperationalRecordType, number>>> {
 		const records = await manager
 			.getRepository(OperationalRecordEntity)
@@ -975,9 +976,9 @@ export class CashFlowService {
 
 	private async findRecordIdWithin(
 		manager: EntityManager,
-		cashFlowId: number,
+		cashFlowId: EntityId,
 		type: OperationalRecordType,
-	): Promise<number | null> {
+	): Promise<EntityId | null> {
 		const record = await manager
 			.getRepository(OperationalRecordEntity)
 			.findOne({
@@ -999,9 +1000,9 @@ export class CashFlowService {
 	 * caller's business - `order` in particular lives in a table this feature does not import.
 	 */
 	public async findOperationalRecordId(
-		cashFlowId: number,
+		cashFlowId: EntityId,
 		type: OperationalRecordType,
-	): Promise<number | null> {
+	): Promise<EntityId | null> {
 		const record = await getOperationalRecordRepository()
 			.createQuery()
 			.select(['operational_record.entity_id'])
@@ -1012,7 +1013,7 @@ export class CashFlowService {
 		return record?.entity_id ?? null;
 	}
 
-	public async delete(id: number, force: boolean) {
+	public async delete(id: EntityId, force: boolean) {
 		const entry = await this.repository
 			.createQuery()
 			.joinAndSelect('cash_flow.refunds', 'refunds', 'LEFT')
@@ -1047,7 +1048,10 @@ export class CashFlowService {
 	 * @param id
 	 * @param withDeleted
 	 */
-	public findById(id: number, withDeleted: boolean): Promise<CashFlowEntity> {
+	public findById(
+		id: EntityId,
+		withDeleted: boolean,
+	): Promise<CashFlowEntity> {
 		const query = this.repository
 			.createQuery()
 			.filterById(id)
@@ -1136,7 +1140,7 @@ export class CashFlowService {
 		return query.all(true);
 	}
 
-	public async findOperationalRecords(cash_flow_id: number) {
+	public async findOperationalRecords(cash_flow_id: EntityId) {
 		const entries = (await getOperationalRecordRepository()
 			.createQuery()
 			.filterBy('cash_flow_id', cash_flow_id)

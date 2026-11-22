@@ -105,16 +105,19 @@ export class WarehouseValidator extends BaseValidator<
 		defaultPage: 1,
 
 		filterSchema: {
-			id: this.validateNumber(this.getMessage('invalid_number'), {
+			id: this.validateId(this.getMessage('invalid_id', { name: 'id' }), {
 				required: false,
 			}),
 			term: this.validateString(this.getMessage('invalid_string'), {
 				required: false,
 				minChars: Configuration.get('filter.termMinLength'),
 			}),
-			address_id: this.validateNumber(this.getMessage('invalid_number'), {
-				required: false,
-			}),
+			address_id: this.validateId(
+				this.getMessage('invalid_id', { name: 'address_id' }),
+				{
+					required: false,
+				},
+			),
 			status: this.validateEnum(
 				WarehouseStatusEnum,
 				this.getMessage('invalid_status'),

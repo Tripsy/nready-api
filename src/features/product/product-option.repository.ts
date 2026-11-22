@@ -8,6 +8,7 @@ import ProductOptionEntity from '@/features/product/product-option.entity';
 import ProductOptionGroupEntity from '@/features/product/product-option-group.entity';
 import ProductOptionPriceEntity from '@/features/product/product-option-price.entity';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export class ProductOptionGroupQuery extends RepositoryAbstract<ProductOptionGroupEntity> {
 	constructor(repository: Repository<ProductOptionGroupEntity>) {
@@ -32,7 +33,7 @@ export const ProductOptionRepository = dataSource
 
 		async syncGroups(
 			manager: EntityManager,
-			product_id: number,
+			product_id: EntityId,
 			groups: ProductOptionGroupType[],
 		): Promise<void> {
 			const repository = manager.getRepository(ProductOptionGroupEntity);
@@ -73,7 +74,7 @@ export const ProductOptionRepository = dataSource
 
 		async syncOptions(
 			manager: EntityManager,
-			option_group_id: number,
+			option_group_id: EntityId,
 			options: ProductOptionGroupType['options'],
 		): Promise<void> {
 			const repository = manager.getRepository(ProductOptionEntity);
@@ -129,7 +130,7 @@ export const ProductOptionRepository = dataSource
 		/** One delta per currency, keyed the way the table's unique index is. */
 		async syncPrices(
 			manager: EntityManager,
-			option_id: number,
+			option_id: EntityId,
 			prices: ProductPriceDeltaType[],
 		): Promise<void> {
 			const repository = manager.getRepository(ProductOptionPriceEntity);

@@ -82,7 +82,7 @@ export const docs: Record<
 							'the variant id, not the product id; one or several, and a single value may be sent unwrapped',
 					},
 					product_id: {
-						type: 'number',
+						type: 'string',
 						required: false,
 						condition: 'every variant of one product',
 					},
@@ -106,14 +106,14 @@ export const docs: Record<
 						required: false,
 						values: Object.values(ProductCompositionEnum),
 					},
-					brand_id: { type: 'number', required: false },
+					brand_id: { type: 'string', required: false },
 					category_id: {
-						type: 'number',
+						type: 'string',
 						required: false,
 						condition:
 							'matches the category and everything beneath it',
 					},
-					tag_id: { type: 'number', required: false },
+					tag_id: { type: 'string', required: false },
 					language: {
 						type: 'enum',
 						required: false,

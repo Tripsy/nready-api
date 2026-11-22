@@ -23,6 +23,7 @@ import {
 	registerShippingChangedHandler,
 	type ShippingChangedPayload,
 } from '@/features/shipping/shipping.hooks';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * Bills orders and spreads the money clients pay over their documents - the billing half of the
@@ -59,18 +60,18 @@ export default function registerInvoiceBootstrap() {
 		shippingBillableSource,
 	);
 
-	registerOrderInvoicedResolver((orderId: number) =>
+	registerOrderInvoicedResolver((orderId: EntityId) =>
 		invoiceService.hasLiveOrderInvoice(orderId),
 	);
 
 	// A document is raised for one client and a payment filed under one: either pins the order
 	registerOrderClientLockedResolver(
-		async (orderId: number) =>
+		async (orderId: EntityId) =>
 			(await invoiceService.hasLiveOrderInvoice(orderId)) ||
 			(await cashFlowService.hasMovementsForOrder(orderId)),
 	);
 
-	registerOperationalRecordOrderResolver((orderId: number) =>
+	registerOperationalRecordOrderResolver((orderId: EntityId) =>
 		orderService.findReferenceById(orderId),
 	);
 

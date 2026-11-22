@@ -14,6 +14,7 @@ import StockAdjustmentEntity, {
 	StockAdjustmentDirectionEnum,
 } from '@/features/warehouse-movement/stock-adjustment.entity';
 import { stockAdjustmentService } from '@/features/warehouse-movement/stock-adjustment.service';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 const TARGET = 6;
 
@@ -23,7 +24,7 @@ const TARGET = 6;
  */
 const SLACK = 10;
 
-type SiteStock = { warehouse_id: number; variant_id: number };
+type SiteStock = { warehouse_id: EntityId; variant_id: EntityId };
 
 /**
  * A few adjustments over the seeded receipts, so the adjustments page and the ledger have
@@ -47,7 +48,7 @@ export const stockAdjustmentSeed: SeedDefinition = {
 		);
 
 		const rows = await manager.query<
-			{ warehouse_id: number; variant_id: number }[]
+			{ warehouse_id: EntityId; variant_id: EntityId }[]
 		>(
 			`SELECT grn.warehouse_id, item.variant_id
 			   FROM grn_item item
@@ -67,8 +68,8 @@ export const stockAdjustmentSeed: SeedDefinition = {
 		);
 
 		const sites: SiteStock[] = rows.map((row) => ({
-			warehouse_id: Number(row.warehouse_id),
-			variant_id: Number(row.variant_id),
+			warehouse_id: row.warehouse_id,
+			variant_id: row.variant_id,
 		}));
 
 		let alreadyPresent = 0;

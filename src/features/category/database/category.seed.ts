@@ -10,6 +10,7 @@ import CategoryEntity, {
 	CategoryTypeEnum,
 } from '@/features/category/category.entity';
 import CategoryContentEntity from '@/features/category/category-content.entity';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * A readable two-level tree rather than generated strings: categories are what the product
@@ -231,7 +232,7 @@ export const categorySeed: SeedDefinition = {
 		});
 
 		// Key → id for every category already stored, extended as this run inserts more.
-		const idByKey = new Map<string, number>(
+		const idByKey = new Map<string, EntityId>(
 			existingContent.map((content) => [
 				categoryKey(content.type, content.slug),
 				content.category_id,
@@ -307,7 +308,7 @@ export const categorySeed: SeedDefinition = {
 				contentRepository.create({
 					category_id: idByKey.get(
 						categoryKey(category.type, category.slug),
-					) as number,
+					) as EntityId,
 					language: 'en',
 					type: category.type,
 					label: category.label,

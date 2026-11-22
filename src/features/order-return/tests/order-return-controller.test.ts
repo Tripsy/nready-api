@@ -28,6 +28,7 @@ import {
 	notAuthenticatedSpy,
 	notAuthorizedSpy,
 } from '@/tests/mocks/policies.mock';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 let app: Express;
 
@@ -129,14 +130,14 @@ describe(`${controller} - approve`, () => {
 			.mockResolvedValue(
 				getOrderReturnEntityMock({
 					status: OrderReturnStatusEnum.APPROVED,
-					shipping_id: 64,
+					shipping_id: mockId(64),
 					refund_shipping: true,
 				}),
 			);
 
 		const response = await request(app)
 			.post(route)
-			.send({ carrier_id: 3, refund_shipping: true });
+			.send({ carrier_id: mockId(3), refund_shipping: true });
 
 		withDebugResponse(() => {
 			expect(response.status).toBe(200);
@@ -148,7 +149,7 @@ describe(`${controller} - approve`, () => {
 				entityMock,
 				expect.objectContaining({
 					id: entityMock.id,
-					carrier_id: 3,
+					carrier_id: mockId(3),
 					refund_shipping: true,
 				}),
 			);
@@ -175,7 +176,8 @@ describe(`${controller} - refund`, () => {
 		authorizedSpy(orderReturnPolicy);
 
 		jest.spyOn(orderReturnService, 'draftRefund').mockResolvedValue([
-			212, 213,
+			mockId(212),
+			mockId(213),
 		]);
 
 		const response = await request(app).post(route).send();
@@ -183,7 +185,7 @@ describe(`${controller} - refund`, () => {
 		withDebugResponse(() => {
 			expect(response.status).toBe(200);
 			expect(response.body.data).toEqual({
-				reversal_invoice_ids: [212, 213],
+				reversal_invoice_ids: [mockId(212), mockId(213)],
 			});
 		}, response);
 	});
@@ -235,8 +237,8 @@ describe(`${controller} - statusUpdate`, () => {
 });
 
 describe('OrderReturnPublicController', () => {
-	const orderId = 118;
-	const userId = 42;
+	const orderId = mockId(118);
+	const userId = mockId(42);
 
 	const signedIn = () => {
 		isAuthenticatedSpy(orderReturnPolicy);
@@ -283,7 +285,10 @@ describe('OrderReturnPublicController', () => {
 
 		const response = await request(app)
 			.post(`${publicBasePath}/orders/${orderId}/returns`)
-			.send({ ...orderReturnInputPayloads.publicCreate, order_id: 999 });
+			.send({
+				...orderReturnInputPayloads.publicCreate,
+				order_id: mockId(999),
+			});
 
 		withDebugResponse(() => {
 			expect(response.status).toBe(201);

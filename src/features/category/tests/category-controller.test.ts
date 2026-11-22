@@ -22,6 +22,7 @@ import {
 	withDebugResponse,
 } from '@/tests/jest-controller.setup';
 import { authorizedSpy, notAuthorizedSpy } from '@/tests/mocks/policies.mock';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 let app: Express;
 
@@ -160,7 +161,10 @@ describe(`${controller} - orderUpdate`, () => {
 
 		const response = await request(app)
 			.patch(route)
-			.send({ ...categoryInputPayloads.orderUpdate, positions: [3] });
+			.send({
+				...categoryInputPayloads.orderUpdate,
+				positions: [mockId(3)],
+			});
 
 		withDebugResponse(() => {
 			expect(response.status).toBe(422);

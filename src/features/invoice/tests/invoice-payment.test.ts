@@ -13,7 +13,9 @@ import {
 import { getInvoiceEntityMock } from '@/features/invoice/invoice.mock';
 import { maxAllocatableAmount } from '@/features/invoice/invoice-payment.entity';
 import { invoicePaymentService } from '@/features/invoice/invoice-payment.service';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import { setupTransactionMock } from '@/tests/jest-service.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 /** A movement's stored `amount`, from the money figure a person would quote. */
 const scaled = (value: number): number =>
@@ -96,7 +98,7 @@ describe('InvoicePaymentService.settleClient', () => {
 
 	type Internals = {
 		findOpenMovements: () => Promise<
-			{ id: number; currency: string; available: number }[]
+			{ id: EntityId; currency: string; available: number }[]
 		>;
 		getOutstanding: (
 			manager: unknown,
@@ -104,8 +106,8 @@ describe('InvoicePaymentService.settleClient', () => {
 		) => Promise<number>;
 		allocate: (
 			manager: unknown,
-			invoiceId: number,
-			cashFlowId: number,
+			invoiceId: EntityId,
+			cashFlowId: EntityId,
 			amount: number,
 		) => Promise<void>;
 	};
@@ -117,8 +119,8 @@ describe('InvoicePaymentService.settleClient', () => {
 	 * left over moves on to the next - whatever order each was raised for.
 	 */
 	it('spreads the oldest money over the earliest documents first', async () => {
-		const older = getInvoiceEntityMock({ id: 1, total_gross: 100 });
-		const newer = getInvoiceEntityMock({ id: 2, total_gross: 100 });
+		const older = getInvoiceEntityMock({ id: mockId(1), total_gross: 100 });
+		const newer = getInvoiceEntityMock({ id: mockId(2), total_gross: 100 });
 
 		const { manager } = setupTransactionMock({
 			createQueryBuilder: jest.fn(() => ({
@@ -131,8 +133,8 @@ describe('InvoicePaymentService.settleClient', () => {
 		});
 
 		jest.spyOn(internals, 'findOpenMovements').mockResolvedValue([
-			{ id: 10, currency: 'RON', available: 60 },
-			{ id: 11, currency: 'RON', available: 80 },
+			{ id: mockId(10), currency: 'RON', available: 60 },
+			{ id: mockId(11), currency: 'RON', available: 80 },
 		]);
 		jest.spyOn(internals, 'getOutstanding').mockResolvedValue(100);
 
@@ -152,23 +154,26 @@ describe('InvoicePaymentService.settleClient', () => {
 			},
 		);
 
-		const touched = await invoicePaymentService.settleClient(1);
+		const touched = await invoicePaymentService.settleClient(mockId(1));
 
 		expect(manager.query).toHaveBeenCalledWith(
 			'SELECT pg_advisory_xact_lock(hashtext($1), $2)',
-			['invoice_payment.client', 1],
+			['invoice_payment.client', mockId(1)],
 		);
 		expect(allocate.mock.calls.map((call) => call.slice(1))).toEqual([
-			[1, 10, 60],
-			[1, 11, 40],
-			[2, 11, 40],
+			[mockId(1), mockId(10), 60],
+			[mockId(1), mockId(11), 40],
+			[mockId(2), mockId(11), 40],
 		]);
-		expect(touched.map((invoice) => invoice.id)).toEqual([1, 2]);
+		expect(touched.map((invoice) => invoice.id)).toEqual([
+			mockId(1),
+			mockId(2),
+		]);
 	});
 
 	it('never settles a document in another currency', async () => {
 		const document = getInvoiceEntityMock({
-			id: 1,
+			id: mockId(1),
 			currency: 'EUR',
 			total_gross: 100,
 		});
@@ -184,7 +189,7 @@ describe('InvoicePaymentService.settleClient', () => {
 		});
 
 		jest.spyOn(internals, 'findOpenMovements').mockResolvedValue([
-			{ id: 10, currency: 'RON', available: 500 },
+			{ id: mockId(10), currency: 'RON', available: 500 },
 		]);
 		jest.spyOn(internals, 'getOutstanding').mockResolvedValue(100);
 
@@ -192,7 +197,7 @@ describe('InvoicePaymentService.settleClient', () => {
 			.spyOn(internals, 'allocate')
 			.mockResolvedValue(undefined);
 
-		const touched = await invoicePaymentService.settleClient(1);
+		const touched = await invoicePaymentService.settleClient(mockId(1));
 
 		expect(allocate).not.toHaveBeenCalled();
 		expect(touched).toEqual([]);
@@ -214,7 +219,7 @@ describe('InvoicePaymentService allocation by hand', () => {
 	const internals = invoicePaymentService as unknown as Internals;
 
 	const cashFlow = {
-		id: 10,
+		id: mockId(10),
 		parent_id: null,
 		status: 'completed',
 		currency: 'RON',
@@ -222,18 +227,20 @@ describe('InvoicePaymentService allocation by hand', () => {
 	} as unknown as CashFlowEntity;
 
 	const payload = {
-		id: 1,
-		cash_flow_id: 10,
+		id: mockId(1),
+		cash_flow_id: mockId(10),
 		amount: 50,
 		notes: undefined,
 	};
 
 	// Money is the client's own: a movement filed under another client never settles this one
 	it('create() refuses a movement of another client', async () => {
-		const invoice = getInvoiceEntityMock({ client_id: 1 });
+		const invoice = getInvoiceEntityMock({ client_id: mockId(1) });
 
 		jest.spyOn(cashFlowService, 'findById').mockResolvedValue(cashFlow);
-		jest.spyOn(cashFlowService, 'findClientId').mockResolvedValue(2);
+		jest.spyOn(cashFlowService, 'findClientId').mockResolvedValue(
+			mockId(2),
+		);
 		const { transaction } = setupTransactionMock();
 
 		await expect(
@@ -243,10 +250,12 @@ describe('InvoicePaymentService allocation by hand', () => {
 	});
 
 	it('create() refuses more than the invoice still asks for', async () => {
-		const invoice = getInvoiceEntityMock({ client_id: 1 });
+		const invoice = getInvoiceEntityMock({ client_id: mockId(1) });
 
 		jest.spyOn(cashFlowService, 'findById').mockResolvedValue(cashFlow);
-		jest.spyOn(cashFlowService, 'findClientId').mockResolvedValue(1);
+		jest.spyOn(cashFlowService, 'findClientId').mockResolvedValue(
+			mockId(1),
+		);
 		jest.spyOn(invoicePaymentService, 'getCeiling').mockResolvedValue({
 			max: 500,
 			allocated: 0,
@@ -264,7 +273,7 @@ describe('InvoicePaymentService allocation by hand', () => {
 	it('clear() refuses a reversal', async () => {
 		const reversal = getInvoiceEntityMock({
 			is_reversal: true,
-			parent_invoice_id: 1,
+			parent_invoice_id: mockId(1),
 		});
 
 		await expect(
@@ -272,10 +281,10 @@ describe('InvoicePaymentService allocation by hand', () => {
 				invoicePaymentService as unknown as {
 					release: (
 						invoice: InvoiceEntity,
-						ids: number[],
+						ids: EntityId[],
 					) => Promise<void>;
 				}
-			).release(reversal, [1]),
+			).release(reversal, [mockId(1)]),
 		).rejects.toThrow('invoice.error.payment_release_reversal');
 	});
 
@@ -294,10 +303,10 @@ describe('InvoicePaymentService allocation by hand', () => {
 				invoicePaymentService as unknown as {
 					release: (
 						invoice: InvoiceEntity,
-						ids: number[],
+						ids: EntityId[],
 					) => Promise<void>;
 				}
-			).release(invoice, [1]),
+			).release(invoice, [mockId(1)]),
 		).rejects.toThrow('invoice.error.payment_release_reversed');
 		expect(manager.getRepository).not.toHaveBeenCalled();
 	});
@@ -319,10 +328,10 @@ describe('InvoicePaymentService allocation by hand', () => {
 			invoicePaymentService as unknown as {
 				release: (
 					invoice: InvoiceEntity,
-					ids: number[],
+					ids: EntityId[],
 				) => Promise<void>;
 			}
-		).release(invoice, [1, 2]);
+		).release(invoice, [mockId(1), mockId(2)]);
 
 		expect(remove).toHaveBeenCalledWith(
 			expect.objectContaining({ invoice_id: invoice.id }),

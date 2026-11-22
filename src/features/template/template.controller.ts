@@ -67,12 +67,12 @@ class TemplateController extends BaseController {
 
 		/*
 		 * The id is read straight from the route: `validateParamsWhenId('id')` has already
-		 * rejected anything that is not a positive integer. It is needed before validation
+		 * rejected anything that is not a uuid. It is needed before validation
 		 * because `type` discriminates the update union and may be absent from the body, so
 		 * the stored value has to fill in for it.
 		 */
 		const existingEntry = await this.templateService.findById(
-			parseInt(getRouteParam(req, 'id') ?? '', 10),
+			getRouteParam(req, 'id') ?? '',
 			false,
 		);
 

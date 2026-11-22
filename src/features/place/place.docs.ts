@@ -81,7 +81,7 @@ export const docs: Record<keyof typeof placeController, ApiInputDocumentation> =
 					code: codeParam,
 					alpha2_code: alpha2CodeParam,
 					parent_id: {
-						type: 'number',
+						type: 'string',
 						required: false,
 						condition: 'required for a region or a city',
 					},
@@ -105,7 +105,7 @@ export const docs: Record<keyof typeof placeController, ApiInputDocumentation> =
 				notes: 'Omitting `language` returns every translation, which is what an editor needs; naming one returns that translation alone and answers 404 when the place has none in it',
 				params: {
 					id: {
-						type: 'number',
+						type: 'string',
 						required: true,
 					},
 				},
@@ -132,7 +132,7 @@ export const docs: Record<keyof typeof placeController, ApiInputDocumentation> =
 				notes: `Provide at least one body parameter. ${parentNote}, and changing the type is refused with 400 while the place still has children. Translations are upserted by language - a language left out of \`contents\` keeps what it already had`,
 				params: {
 					id: {
-						type: 'number',
+						type: 'string',
 						required: true,
 					},
 				},
@@ -141,7 +141,7 @@ export const docs: Record<keyof typeof placeController, ApiInputDocumentation> =
 					code: codeParam,
 					alpha2_code: alpha2CodeParam,
 					parent_id: {
-						type: 'number',
+						type: 'string',
 						required: false,
 						condition: 'required for a region or a city',
 					},
@@ -163,7 +163,7 @@ export const docs: Record<keyof typeof placeController, ApiInputDocumentation> =
 				notes: 'Soft delete, and refused with 400 while the place still has a child that is not deleted - a branch comes down from the leaves up',
 				params: {
 					id: {
-						type: 'number',
+						type: 'string',
 						required: true,
 					},
 				},
@@ -182,7 +182,7 @@ export const docs: Record<keyof typeof placeController, ApiInputDocumentation> =
 				notes: 'Nothing checks the parent, so a place can come back under one that is still deleted',
 				params: {
 					id: {
-						type: 'number',
+						type: 'string',
 						required: true,
 					},
 				},
@@ -243,7 +243,7 @@ export const docs: Record<keyof typeof placeController, ApiInputDocumentation> =
 						default: OrderDirectionEnum.ASC,
 					},
 					filter: {
-						id: { type: 'number', required: false },
+						id: { type: 'string', required: false },
 						term: {
 							type: 'string',
 							required: false,

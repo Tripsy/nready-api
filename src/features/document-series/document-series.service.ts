@@ -14,6 +14,7 @@ import {
 import { pickValuesFromObject } from '@/helpers/objects.helper';
 import RepositoryAbstract from '@/shared/abstracts/repository.abstract';
 import { cleanEntityCache } from '@/shared/abstracts/service.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 /**
@@ -164,7 +165,7 @@ export class DocumentSeriesService {
 	 * @description Update any data
 	 */
 	public async update(
-		data: DeepPartial<DocumentSeriesEntity> & { id: number },
+		data: DeepPartial<DocumentSeriesEntity> & { id: EntityId },
 	): Promise<DocumentSeriesEntity> {
 		const saved = await this.repository.save(data);
 
@@ -190,18 +191,18 @@ export class DocumentSeriesService {
 	 * left in place rather than removed - its counter is what the next allocation continues
 	 * from.
 	 */
-	public async delete(id: number) {
+	public async delete(id: EntityId) {
 		await this.repository.createQuery().filterById(id).delete(false);
 	}
 
-	public findById(id: number): Promise<DocumentSeriesEntity> {
+	public findById(id: EntityId): Promise<DocumentSeriesEntity> {
 		return this.repository.createQuery().filterById(id).firstOrFail();
 	}
 
 	/**
 	 * @description Used in `read` method from controller; this will return a custom shape
 	 */
-	public async getEntryData(data: { id: number }) {
+	public async getEntryData(data: { id: EntityId }) {
 		return await this.repository
 			.createQuery()
 			.select(SELECT_COLUMNS)

@@ -6,6 +6,7 @@ import {
 	isValidDate,
 	stringToDate,
 } from '@/helpers/date.helper';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export const sharedValidatorMessages = [
 	'invalid_enum',
@@ -563,40 +564,43 @@ export abstract class BaseValidator<
 	}
 
 	/**
-	 * Validate ID
+	 * Validate ID - a UUID (`EntityId`), trimmed and lowercased first so an id pasted in upper
+	 * case still matches the canonical form Postgres hands back.
 	 */
 	// Overload signatures
 	protected validateId(
 		message?: string,
 		optionsData?: { required?: true },
-	): z.ZodType<number>;
+	): z.ZodType<EntityId>;
 
 	protected validateId(
 		message?: string,
 		optionsData?: { required: false },
-	): z.ZodType<number | TEmpty>;
+	): z.ZodType<EntityId | TEmpty>;
 
 	// Implementation signature
 	protected validateId(
 		message: string = 'Invalid ID',
 		optionsData?: { required?: boolean },
-	): z.ZodType<number | TEmpty> {
+	): z.ZodType<EntityId | TEmpty> {
 		const options = {
 			required: true,
 			...optionsData,
 		};
 
+		const baseSchema = z
+			.string({ message })
+			.trim()
+			.toLowerCase()
+			.pipe(z.uuid({ message }));
+
 		if (options.required) {
-			return this.validateNumber(message, {
-				required: true,
-				onlyPositive: true,
-			});
+			return this.coerceEmpty(baseSchema) as z.ZodType<EntityId>;
 		}
 
-		return this.validateNumber(message, {
-			required: false,
-			onlyPositive: true,
-		});
+		return this.preprocessOptional(baseSchema) as z.ZodType<
+			EntityId | TEmpty
+		>;
 	}
 
 	/**
@@ -615,18 +619,18 @@ export abstract class BaseValidator<
 	protected validateIdFilter(
 		message?: string,
 		optionsData?: { required?: true },
-	): z.ZodType<number[]>;
+	): z.ZodType<EntityId[]>;
 
 	protected validateIdFilter(
 		message?: string,
 		optionsData?: { required: false },
-	): z.ZodType<number[] | undefined>;
+	): z.ZodType<EntityId[] | undefined>;
 
 	// Implementation signature
 	protected validateIdFilter(
 		message: string = 'Invalid IDs',
 		optionsData?: { required?: boolean },
-	): z.ZodType<number[] | undefined> {
+	): z.ZodType<EntityId[] | undefined> {
 		const options = {
 			required: true,
 			...optionsData,

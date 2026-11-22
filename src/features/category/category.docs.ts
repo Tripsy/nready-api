@@ -69,7 +69,7 @@ export const docs: Record<
 			body: {
 				type: { ...typeParam, required: true },
 				parent_id: {
-					type: 'number',
+					type: 'string',
 					required: false,
 					condition: 'an unknown parent answers 409',
 				},
@@ -98,7 +98,7 @@ export const docs: Record<
 			notes: 'The immediate parent always rides along. ancestors lists the chain above, nearest last and excluding the category itself; children lists only the direct ones',
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -132,12 +132,12 @@ export const docs: Record<
 			notes: `Only parent_id and contents can be changed - type is fixed at creation, and status has its own route. Sending parent_id empty detaches the category to a root; sending an id moves it, with the whole subtree, which is what has to fit. ${parentNote}. A move under a descendant of itself, under a deleted parent, or under an inactive one while the category is active, is refused. Moving resets the sort order`,
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
 			body: {
-				parent_id: { type: 'number', required: false },
+				parent_id: { type: 'string', required: false },
 				contents: {
 					type: 'array',
 					required: false,
@@ -162,7 +162,7 @@ export const docs: Record<
 			notes: 'A category with a descendant that is not already deleted answers 409 - delete the tree from the leaves up',
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -181,7 +181,7 @@ export const docs: Record<
 			notes: 'Refused while the parent is itself deleted or not active - restore the chain from the root down',
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 			},
@@ -264,7 +264,7 @@ export const docs: Record<
 						condition: `an all-digit term matches the id exactly; otherwise the label of the category and of its parent, from ${Configuration.get('filter.termMinLength')} characters`,
 					},
 					parent_id: {
-						type: 'number',
+						type: 'string',
 						required: false,
 						condition:
 							'addresses one sibling group; is_root wins when both are sent',
@@ -306,7 +306,7 @@ export const docs: Record<
 			notes: `Only these transitions are allowed: ${statusTransitionNote}. Going ${CategoryStatusEnum.INACTIVE} with active descendants is refused unless force is set, which deactivates them too. Either way the sort order is reset`,
 			params: {
 				id: {
-					type: 'number',
+					type: 'string',
 					required: true,
 				},
 				status: {
@@ -344,7 +344,7 @@ export const docs: Record<
 				type: { ...typeParam, required: true },
 			},
 			body: {
-				parent_id: { type: 'number', required: false },
+				parent_id: { type: 'string', required: false },
 				positions: {
 					type: 'array',
 					required: true,

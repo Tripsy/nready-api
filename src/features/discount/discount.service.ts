@@ -10,6 +10,7 @@ import {
 import { discountTargetService } from '@/features/discount/discount-target.service';
 import { pickValuesFromObject } from '@/helpers/objects.helper';
 import { cleanEntityCache } from '@/shared/abstracts/service.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 import type { ValidatorOutput } from '@/shared/types/mock.type';
 
 export class DiscountService {
@@ -41,7 +42,7 @@ export class DiscountService {
 	 * @description Update any data
 	 */
 	public async update(
-		data: DeepPartial<DiscountEntity> & { id: number },
+		data: DeepPartial<DiscountEntity> & { id: EntityId },
 	): Promise<DiscountEntity> {
 		const saved = await this.repository.save(data);
 
@@ -70,15 +71,18 @@ export class DiscountService {
 		return this.update(entry);
 	}
 
-	public async delete(id: number) {
+	public async delete(id: EntityId) {
 		await this.repository.createQuery().filterById(id).delete();
 	}
 
-	public async restore(id: number) {
+	public async restore(id: EntityId) {
 		await this.repository.createQuery().filterById(id).restore();
 	}
 
-	public findById(id: number, withDeleted: boolean): Promise<DiscountEntity> {
+	public findById(
+		id: EntityId,
+		withDeleted: boolean,
+	): Promise<DiscountEntity> {
 		return this.repository
 			.createQuery()
 			.filterById(id)

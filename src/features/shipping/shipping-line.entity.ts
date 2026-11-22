@@ -3,6 +3,7 @@ import type ProductVariantEntity from '@/features/product/product-variant.entity
 import type ShippingEntity from '@/features/shipping/shipping.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import { numericTransformer } from '@/shared/transformers/numeric.transformer';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * What a returned unit is fit for once the warehouse has looked at it - stated per line of a
@@ -38,8 +39,8 @@ export default class ShippingLineEntity extends EntityAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
 
-	@Column('int', { nullable: false })
-	shipping_id!: number;
+	@Column('uuid', { nullable: false })
+	shipping_id!: EntityId;
 
 	/**
 	 * What travels, named by variant rather than by order line.
@@ -57,13 +58,13 @@ export default class ShippingLineEntity extends EntityAbstract {
 	 * **composite** foreign key, so a line naming a variant of another product is refused by the
 	 * database rather than by a check somebody has to remember.
 	 */
-	@Column('int', { nullable: false })
+	@Column('uuid', { nullable: false })
 	@Index('IDX_shipping_line_variant_id')
-	variant_id!: number;
+	variant_id!: EntityId;
 
-	@Column('int', { nullable: false })
+	@Column('uuid', { nullable: false })
 	@Index('IDX_shipping_line_product_id')
-	product_id!: number;
+	product_id!: EntityId;
 
 	/*
 	 * `numeric` for the reason `order_line.quantity` is: `product.unit` allows `kg` and `litre`, so

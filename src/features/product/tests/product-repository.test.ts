@@ -10,6 +10,7 @@ import {
 	type ResolvedVariant,
 } from '@/features/product/product-variant.repository';
 import { createMockRepository } from '@/tests/jest-service.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 /**
  * The query class is exercised directly, the way `src/tests/repository-ts-term.test.ts` does:
@@ -40,17 +41,6 @@ describe('ProductQuery.filterByTerm', () => {
 
 		return calls[calls.length - 1];
 	}
-
-	it('looks a numeric term up as an id rather than searching for it', () => {
-		const { query, queryBuilder } = build();
-
-		query.filterByTerm('42');
-
-		const [condition, parameters] = lastCondition(queryBuilder);
-
-		expect(String(condition)).toContain('product.id');
-		expect(parameters).toMatchObject({ product_id: 42 });
-	});
 
 	it('ignores a term below the minimum length', () => {
 		const { query, queryBuilder } = build();
@@ -152,7 +142,7 @@ describe('ProductVariantRepository.syncVariants', () => {
 		jest.restoreAllMocks();
 	});
 
-	const savedVariantId = 7;
+	const savedVariantId = mockId(7);
 
 	async function syncOneVariant(attributes: ResolvedVariant['attributes']) {
 		const mock = createMockRepository<
@@ -177,7 +167,7 @@ describe('ProductVariantRepository.syncVariants', () => {
 			.spyOn(ProductVariantRepository, 'syncAttributes')
 			.mockResolvedValue(undefined);
 
-		await ProductVariantRepository.syncVariants(manager, 1, [
+		await ProductVariantRepository.syncVariants(manager, mockId(1), [
 			{
 				sku: 'PIZZA-MARG-25',
 				barcode: undefined,

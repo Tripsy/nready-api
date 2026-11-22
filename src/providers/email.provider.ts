@@ -16,9 +16,10 @@ import type {
 	EmailAddressType,
 	SendEmailArgs,
 } from '@/shared/types/email.type';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 export type EmailQueueData = {
-	mailQueueId: number;
+	mailQueueId: EntityId;
 	emailContent: EmailContent;
 	to: EmailAddressType;
 	from?: EmailAddressType;

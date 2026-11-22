@@ -6,11 +6,12 @@ import {
 	JoinColumn,
 	ManyToOne,
 	OneToMany,
-	PrimaryGeneratedColumn,
 	UpdateDateColumn,
 } from 'typeorm';
 import type CartItemEntity from '@/features/cart/cart-item.entity';
 import type UserEntity from '@/features/user/user.entity';
+import { EntityIdAbstract } from '@/shared/abstracts/entity-id.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 /**
  * How long an untouched cart is kept. Slid forward on every write, so this measures silence
@@ -45,12 +46,9 @@ const ENTITY_TABLE_NAME = 'cart';
 })
 // The cleanup cron's whole query.
 @Index('IDX_cart_expires_at', ['expires_at'])
-export default class CartEntity {
+export default class CartEntity extends EntityIdAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = false;
-
-	@PrimaryGeneratedColumn({ type: 'int' })
-	id!: number;
 
 	@CreateDateColumn({ type: 'timestamp', nullable: false })
 	created_at!: Date;
@@ -85,10 +83,10 @@ export default class CartEntity {
 	 * Set when the shopper is signed in, either because the cart was created that way or because
 	 * `CartService.merge` claimed a guest cart at login. Null on every cart still anonymous.
 	 */
-	@Column('int', {
+	@Column('uuid', {
 		nullable: true,
 	})
-	user_id!: number | null;
+	user_id!: EntityId | null;
 
 	/**
 	 * The market the cart is priced in, and the currency every `product_price` lookup is made

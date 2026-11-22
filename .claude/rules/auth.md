@@ -49,7 +49,7 @@ Auth tokens are a **hybrid**: a signed JWT carries the identity, but a DB row is
 
 ## 3. `res.locals.auth`
 
-Always present, shaped as `AuthContext` in `src/shared/types/express.d.ts` - read the fields there. `id` is `0` for an unauthenticated "visitor", and `role` widens the `UserRole` union with `'visitor'`.
+Always present, shaped as `AuthContext` in `src/shared/types/express.d.ts` - read the fields there. `id` is `null` for an unauthenticated "visitor" (`policy.requireId(auth)` returns the id or answers 401), and `role` widens the `UserRole` union with `'visitor'`.
 
 - Permissions are `{ entity: [operations] }` pairs (`create`/`read`/`update`/`delete`/`find`, matching `PolicyAbstract`'s `canX` methods), loaded from `user-permission` and cached per user via `cacheProvider`.
 - `operator_type` only carries meaning when `role` is `operator`; it is `null` for every other role.

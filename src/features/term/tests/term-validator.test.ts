@@ -2,6 +2,7 @@ import { jest } from '@jest/globals';
 import { termInputPayloads } from '@/features/term/term.mock';
 import { TermValidator } from '@/features/term/term.validator';
 import { withDebugValidated } from '@/tests/jest-validator.setup';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 beforeEach(() => {
 	jest.restoreAllMocks();
@@ -61,7 +62,7 @@ describe(validator, () => {
 	});
 
 	it('update() rejects a payload carrying only the id', () => {
-		const validated = termValidator.update.safeParse({ id: 1 });
+		const validated = termValidator.update.safeParse({ id: mockId(1) });
 
 		expect(validated.success).toBe(false);
 	});

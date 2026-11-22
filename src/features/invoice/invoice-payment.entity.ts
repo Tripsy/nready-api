@@ -4,6 +4,7 @@ import { toGrossAmount } from '@/features/cash-flow/cash-flow.entity';
 import type InvoiceEntity from '@/features/invoice/invoice.entity';
 import { EntityAbstract } from '@/shared/abstracts/entity.abstract';
 import { numericTransformer } from '@/shared/transformers/numeric.transformer';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 const ENTITY_TABLE_NAME = 'invoice_payment';
 
@@ -57,13 +58,13 @@ export default class InvoicePaymentEntity extends EntityAbstract {
 	static readonly NAME: string = ENTITY_TABLE_NAME;
 	static readonly HAS_CACHE: boolean = true;
 
-	@Column('int', { nullable: false })
+	@Column('uuid', { nullable: false })
 	@Index('IDX_invoice_payment_invoice_id')
-	invoice_id!: number;
+	invoice_id!: EntityId;
 
-	@Column('int', { nullable: false })
+	@Column('uuid', { nullable: false })
 	@Index('IDX_invoice_payment_cash_flow_id')
-	cash_flow_id!: number;
+	cash_flow_id!: EntityId;
 
 	/**
 	 * How much of the movement this allocation claims, **gross**, in the invoice's currency and

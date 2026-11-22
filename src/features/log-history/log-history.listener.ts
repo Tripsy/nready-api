@@ -29,7 +29,7 @@ export default function registerLogHistoryListener() {
 				const replacements: Record<string, string> = {
 					entity: payload.entity,
 					action: payload.action,
-					auth_id: ctx?.auth_id.toString() || '0',
+					auth_id: ctx?.auth_id ?? 'none',
 					performed_by: ctx?.performed_by || 'unknown',
 					request_id: ctx?.request_id || 'unknown',
 					source: ctx?.source || RequestContextSourceEnum.UNKNOWN,

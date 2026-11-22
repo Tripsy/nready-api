@@ -3,12 +3,13 @@ import { TermTypeEnum } from '@/features/term/term.entity';
 import { OrderByEnum, TermValidator } from '@/features/term/term.validator';
 import { createPastDate } from '@/helpers/date.helper';
 import { OrderDirectionEnum } from '@/shared/abstracts/entity.abstract';
+import { mockId } from '@/tests/mocks/uuid.mock';
 
 const termValidator = new TermValidator('term');
 
 export function getTermEntityMock(): TermEntity {
 	return {
-		id: 1,
+		id: mockId(1),
 		type: TermTypeEnum.TAG,
 		created_at: createPastDate(28800),
 		updated_at: null,
@@ -32,7 +33,7 @@ export const termInputPayloads = {
 		],
 	},
 	update: {
-		id: 1,
+		id: mockId(1),
 		type: TermTypeEnum.TAG,
 		contents: [
 			{

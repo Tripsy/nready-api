@@ -18,6 +18,7 @@ import asyncHandler from '@/helpers/async.handler';
 import { getRequestCountry } from '@/helpers/request.helper';
 import { type CacheProvider, cacheProvider } from '@/providers/cache.provider';
 import { BaseController } from '@/shared/abstracts/controller.abstract';
+import type { EntityId } from '@/shared/types/entity-id.type';
 
 class ArticlePublicController extends BaseController {
 	constructor(
@@ -96,7 +97,7 @@ class ArticlePublicController extends BaseController {
 	 * the loader is the only thing that decides the shape.
 	 */
 	private async loadVisibilityRule(
-		id: number,
+		id: EntityId,
 	): Promise<ArticleVisibilityRuleFields | null> {
 		const results = await this.cache.get(
 			this.cache.buildKey(
