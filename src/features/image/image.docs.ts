@@ -240,7 +240,11 @@ export const docs: Record<keyof typeof imageController, ApiInputDocumentation> =
 							required: false,
 							values: Object.values(ImageSectionEnum),
 						},
-						entity_id: { type: 'string', required: false },
+						entity_id: {
+							type: 'array',
+							required: false,
+							format: 'string[]',
+						},
 						image_type: {
 							type: 'enum',
 							required: false,

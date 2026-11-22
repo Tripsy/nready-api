@@ -165,9 +165,15 @@ export class ImageValidator extends BaseValidator<typeof validatorMessages> {
 				this.getMessage('invalid_section'),
 				{ required: false },
 			),
-			entity_id: this.validateId(this.getMessage('invalid_entity_id'), {
-				required: false,
-			}),
+			/*
+			 * A list rather than a scalar, so a view showing several targets' images (a product's
+			 * variants) reads them in one request instead of one per target. A single id still
+			 * passes - `validateIdFilter` wraps it.
+			 */
+			entity_id: this.validateIdFilter(
+				this.getMessage('invalid_entity_id'),
+				{ required: false },
+			),
 			image_type: this.validateEnum(
 				ImageTypeEnum,
 				this.getMessage('invalid_image_type'),

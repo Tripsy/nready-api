@@ -365,12 +365,16 @@ export class ImageService {
 				'content.description',
 			])
 			.filterById(data.filter.id)
-			.filterBy('image.entity_id', data.filter.entity_id)
 			.filterBy('image.section', data.filter.section)
 			.filterBy('image.image_type', data.filter.image_type)
 			.filterBy('image.status', data.filter.status)
 			.orderBy(data.order_by, data.direction)
 			.pagination(data.page, data.limit);
+
+		// A list, never empty - the validator refuses `[]`, which would reach Postgres as `IN ()`
+		if (data.filter.entity_id) {
+			query.filterBy('image.entity_id', data.filter.entity_id, 'IN');
+		}
 
 		if (data.filter.language) {
 			query.filterBy('content.language', data.filter.language);
